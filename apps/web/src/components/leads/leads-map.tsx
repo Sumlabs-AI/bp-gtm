@@ -28,6 +28,7 @@ type LeadMapFilters = {
   signals: LeadSignal[]
   newOnly: boolean
   zip: string
+  zone?: string
   status?: LeadStatus
 }
 
@@ -92,6 +93,7 @@ export function LeadsMap({ filters, backHref, className }: { filters: LeadMapFil
     filters.signals.forEach((signal) => params.append("signals", signal))
     if (filters.newOnly) params.set("new_only", "true")
     if (filters.zip) params.set("zip", filters.zip)
+    if (filters.zone) params.set("zone", filters.zone)
     if (filters.status) params.set("status", filters.status)
 
     async function load() {

@@ -51,5 +51,11 @@ def test_grid_zones_from_prices(client):
     for kwh in (25, 40, 50):
         assert 0 < m[f"battery_value_{kwh}"] <= m[f"battery_ceiling_{kwh}"]
     assert detail["series"]["battery_years"] == []  # 4 days of prices: no full year
+    # Summaries carry the same Grid Value shape as leads; without full years it falls
+    # back to the last 12 months.
+    summary = zones[0]["battery_values"]["40"]
+    assert summary["value"] == summary["recent"] == round(m["battery_value_40"])
+    assert summary["first_year"] is None and zones[0]["history_years"] == []
+    assert zones[0]["period_end"] and zones[0]["computed_at"]
     assert detail["assumptions"]["battery"]["capacity_kwh"] > 0
     assert client.get("/grid/zones/LZ_NOPE").status_code == 404

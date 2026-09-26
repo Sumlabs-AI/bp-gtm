@@ -374,3 +374,11 @@ def test_value_per_battery_size_and_priority(client):
     )
     by_value = client.get("/leads", params={"sort": "value"}).json()["items"]
     assert by_value[0]["value"] == 1000
+
+    # Leads per load zone, and the zone filter used by Grid Zones' "View leads" links.
+    total = client.get("/leads").json()["total"]
+    assert client.get("/leads/summary").json()["by_zone"] == {"LZ_HOUSTON": total}
+    assert client.get("/leads", params={"zone": "LZ_HOUSTON"}).json()["total"] == total
+    assert client.get("/leads", params={"zone": "LZ_NORTH"}).json()["total"] == 0
+    houston = {"bbox": "-96,29,-95,30.5", "zone": "LZ_NORTH"}
+    assert client.get("/leads/geo", params=houston).json()["total"] == 0

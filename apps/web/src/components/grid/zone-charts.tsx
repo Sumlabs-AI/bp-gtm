@@ -22,16 +22,16 @@ export function HourlyProfileChart({ zone }: { zone: ZoneDetail }) {
     hub: { label: "ERCOT hub avg", color: "#64748b" },
   } satisfies ChartConfig
   return (
-    <Card>
-      <CardHeader>
+    <Card className="min-w-0">
+      <CardHeader className="min-w-0">
         <CardTitle>Average price by hour of day</CardTitle>
         <CardDescription>
           Real-time $/MWh, local time. The gap between the cheap midday/overnight hours and
           the evening peak is what a battery captures.
         </CardDescription>
       </CardHeader>
-      <CardContent>
-        <ChartContainer config={config} className="aspect-auto h-64 w-full">
+      <CardContent className="min-w-0">
+        <ChartContainer config={config} className="aspect-auto h-64 min-w-0 w-full">
           <LineChart data={zone.series.hourly_profile} margin={{ left: 4, right: 12 }}>
             <CartesianGrid vertical={false} />
             <XAxis dataKey="hour" tickLine={false} axisLine={false} tickFormatter={(h) => `${h}h`} />
@@ -61,16 +61,16 @@ export function MonthlyValueChart({ zone }: { zone: ZoneDetail }) {
     arbitrage_usd: { label: "Day-ahead estimate ($)", color: "#15803d" },
   } satisfies ChartConfig
   return (
-    <Card>
-      <CardHeader>
+    <Card className="min-w-0">
+      <CardHeader className="min-w-0">
         <CardTitle>Battery value by month</CardTitle>
         <CardDescription>
           Day-ahead estimates for the reference battery ({battery.capacity_kwh} kWh,{" "}
           {battery.power_kw} kW) · $/month. Spiky months mean value depends on a few scarcity events.
         </CardDescription>
       </CardHeader>
-      <CardContent>
-        <ChartContainer config={config} className="aspect-auto h-64 w-full">
+      <CardContent className="min-w-0">
+        <ChartContainer config={config} className="aspect-auto h-64 min-w-0 w-full">
           <BarChart data={zone.series.monthly} margin={{ left: 4, right: 12 }}>
             <CartesianGrid vertical={false} />
             <XAxis dataKey="month" tickLine={false} axisLine={false} tickFormatter={monthLabel} />
@@ -93,15 +93,15 @@ export function BatteryYearsChart({ zone }: { zone: ZoneDetail }) {
     "50": { label: "50 kWh", color: "#15803d" },
   } satisfies ChartConfig
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Realistic value by year</CardTitle>
+    <Card className="min-w-0">
+      <CardHeader className="min-w-0">
+        <CardTitle>Grid Value by calendar year</CardTitle>
         <CardDescription>
           Day-ahead estimates for full calendar years · $/year.
         </CardDescription>
       </CardHeader>
-      <CardContent>
-        <ChartContainer config={config} className="aspect-auto h-56 w-full">
+      <CardContent className="min-w-0">
+        <ChartContainer config={config} className="aspect-auto h-56 min-w-0 w-full">
           <BarChart data={zone.series.battery_years ?? []} margin={{ left: 4, right: 12 }}>
             <CartesianGrid vertical={false} />
             <XAxis dataKey="year" tickLine={false} axisLine={false} />
@@ -125,16 +125,16 @@ export function MonthlyBasisChart({ zone }: { zone: ZoneDetail }) {
     avg_basis: { label: "Zone − hub ($/MWh)", color: "#15803d" },
   } satisfies ChartConfig
   return (
-    <Card>
-      <CardHeader>
+    <Card className="min-w-0">
+      <CardHeader className="min-w-0">
         <CardTitle>Price vs. the rest of the grid</CardTitle>
         <CardDescription>
           Monthly average of zone price minus ERCOT hub average. Above zero means power is
           scarcer here than elsewhere, usually from transmission congestion.
         </CardDescription>
       </CardHeader>
-      <CardContent>
-        <ChartContainer config={config} className="aspect-auto h-64 w-full">
+      <CardContent className="min-w-0">
+        <ChartContainer config={config} className="aspect-auto h-64 min-w-0 w-full">
           <BarChart data={zone.series.monthly} margin={{ left: 4, right: 12 }}>
             <CartesianGrid vertical={false} />
             <XAxis dataKey="month" tickLine={false} axisLine={false} tickFormatter={monthLabel} />

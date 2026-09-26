@@ -128,9 +128,13 @@ and West, in line with WattGap's measured 48–63% across 2019–2025.
 
 ## API and map
 
-- `GET /grid/zones` returns scored zone summaries in descending rank.
-- `GET /grid/zones/{code}` adds the analysis period, raw metrics, chart
-  series, and current assumptions; unknown codes return 404.
+- `GET /grid/zones` returns zone summaries in descending Zone Economics Score
+  rank. Each carries `battery_values` (per 25/40/50 kWh, the same Grid Value
+  shape leads use: average-year `value`/`ceiling`, `recent`, worst/best year;
+  built by `battery_values()` in `app/grid/metrics.py`), `history_years`, the
+  last-12-months `period_start`/`period_end`, and `computed_at`.
+- `GET /grid/zones/{code}` adds raw metrics, chart series, and current
+  assumptions; unknown codes return 404.
 
 The zone shapes live in `apps/api/app/grid/ercot-zones.geojson`, served at `GET /grid/zones.geojson` (web map) and used to place leads in a zone. Rebuild it from
 `apps/api` with `uv run python scripts/build_zone_geojson.py` if its source

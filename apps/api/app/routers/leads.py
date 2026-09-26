@@ -11,6 +11,7 @@ from app.leads.config import scoring
 from app.leads.pipeline import SOURCES
 from app.leads.scoring import DRIVERS
 from app.models import Lead, Property, SourceRun
+from app.routers.grid import BatteryValue
 
 router = APIRouter(tags=["leads"])
 
@@ -18,18 +19,6 @@ DB = Annotated[Session, Depends(get_db)]
 Status = Literal["new", "reviewed", "qualified", "excluded"]
 PERCENTILE_DRIVERS = {"home_size", "home_value"}
 SIGNAL_TYPES = ("solar", "ev_charger", "new_home", "new_owner", "new_meter", "pool")
-
-
-class BatteryValue(BaseModel):
-    value: float  # $/yr, battery trading on day-ahead plans, average full year
-    ceiling: float  # same average year with perfect hindsight: the most it could earn
-    first_year: int | None  # years averaged (None: fell back to the last 12 months)
-    last_year: int | None
-    recent: float  # $/yr over the last 12 months
-    low: float | None  # worst full calendar year
-    low_year: int | None
-    high: float | None  # best full calendar year
-    high_year: int | None
 
 
 class LeadItem(BaseModel):
@@ -91,6 +80,7 @@ class LeadSummary(BaseModel):
     leads: int
     new_this_week: int
     by_signal: dict[str, int]
+    by_zone: dict[str, int]  # load zone -> leads (all statuses); zones without leads omitted
     last_scored_at: datetime | None
 
 
@@ -151,6 +141,13 @@ def lead_summary(db: DB):
             k: db.scalar(select(func.count()).select_from(Lead).where(_has_signal(k)))
             for k in SIGNAL_TYPES
         },
+        "by_zone": dict(
+            db.execute(
+                select(Lead.load_zone, func.count())
+                .where(Lead.load_zone.is_not(None))
+                .group_by(Lead.load_zone)
+            ).all()
+        ),
         "last_scored_at": db.scalar(select(func.max(Lead.scored_at))),
     }
 
@@ -163,6 +160,7 @@ class LeadFilters(BaseModel):
     new_only: bool = False
     zip: str | None = None
     status: Status | None = None
+    zone: str | None = None  # ERCOT load zone code, e.g. LZ_HOUSTON
 
     def apply(self, query):
         unknown = set(self.signals) - set(SIGNAL_TYPES)
@@ -177,6 +175,8 @@ class LeadFilters(BaseModel):
             query = query.where(Property.situs_zip == self.zip)
         if self.status:
             query = query.where(Lead.status == self.status)
+        if self.zone:
+            query = query.where(Lead.load_zone == self.zone)
         return query
 
 
@@ -186,9 +186,15 @@ def _filters(
     new_only: bool = False,
     zip: str | None = None,
     status: Status | None = None,
+    zone: str | None = None,
 ) -> LeadFilters:
     return LeadFilters(
-        min_score=min_score, signals=signals, new_only=new_only, zip=zip, status=status
+        min_score=min_score,
+        signals=signals,
+        new_only=new_only,
+        zip=zip,
+        status=status,
+        zone=zone,
     )
 
 

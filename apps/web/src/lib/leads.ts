@@ -40,7 +40,7 @@ export function leadReturnHref(value: string | string[] | undefined): string {
   if (!href || (href !== "/leads" && !href.startsWith("/leads?"))) return "/leads"
   const params = new URLSearchParams(href.split("?").slice(1).join("?"))
   const filters = new URLSearchParams()
-  for (const key of ["status", "min_score", "signals", "new_only", "zip", "sort", "offset", "view"]) {
+  for (const key of ["status", "min_score", "signals", "new_only", "zip", "zone", "sort", "offset", "view"]) {
     for (const item of params.getAll(key)) filters.append(key, item)
   }
   return `/leads${filters.size ? `?${filters}` : ""}`
@@ -105,6 +105,7 @@ export type LeadSummary = {
   leads: number
   new_this_week: number
   by_signal: Record<LeadSignal, number>
+  by_zone: Record<string, number>
   last_scored_at: string | null
 }
 

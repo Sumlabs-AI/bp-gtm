@@ -5,9 +5,48 @@ from dataclasses import dataclass
 import numpy as np
 import pandas as pd
 
-from app.grid.config import BatteryConfig, PlannerConfig, ScoringConfig
+from app.grid.config import LEAD_BATTERIES_KW, BatteryConfig, PlannerConfig, ScoringConfig
 from app.grid.dispatch import INTERVAL_H, ceiling, simulate
 from app.grid.sources import ERCOT_TZ
+
+
+def battery_values(metrics: dict, series: dict) -> dict[str, dict] | None:
+    """Grid Value of each lead battery size in one zone, from its computed metrics/series:
+    {"40": {"value": 891, "ceiling": 1650, "first_year": 2019, "last_year": 2025,
+    "recent": 233, "low": 310, "low_year": 2025, "high": 1741, "high_year": 2023}, …}.
+
+    `value` is the realistic day-ahead-planner value of an average full calendar year (what
+    a battery earns over a multi-year contract, not one quiet or spiky year) and `ceiling`
+    the average perfect-hindsight one. Without full years loaded both fall back to the last
+    12 months and first/last/low/high are None. `recent` is always the last 12 months.
+    None if the zone has no battery values yet."""
+    if any(metrics.get(f"battery_value_{k}") is None for k in LEAD_BATTERIES_KW):
+        return None
+    years = series.get("battery_years") or []
+    values = {}
+    for k in LEAD_BATTERIES_KW:
+        size, ceil_key = str(k), f"ceiling_{k}"
+        hist = years if all(ceil_key in y for y in years) else []
+        if hist:
+            value = sum(y[size] for y in hist) / len(hist)
+            ceiling_value = sum(y[ceil_key] for y in hist) / len(hist)
+            low = min(hist, key=lambda y: y[size])
+            high = max(hist, key=lambda y: y[size])
+        else:
+            value = metrics[f"battery_value_{k}"]
+            ceiling_value = metrics[f"battery_ceiling_{k}"]
+        values[size] = {
+            "value": round(value),
+            "ceiling": round(ceiling_value),
+            "first_year": hist[0]["year"] if hist else None,
+            "last_year": hist[-1]["year"] if hist else None,
+            "recent": round(metrics[f"battery_value_{k}"]),
+            "low": round(low[size]) if hist else None,
+            "low_year": low["year"] if hist else None,
+            "high": round(high[size]) if hist else None,
+            "high_year": high["year"] if hist else None,
+        }
+    return values
 
 
 @dataclass(frozen=True)

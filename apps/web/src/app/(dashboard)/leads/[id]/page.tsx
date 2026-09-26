@@ -2,8 +2,9 @@ import type { Metadata } from "next"
 import Link from "next/link"
 import { notFound } from "next/navigation"
 import { connection } from "next/server"
-import { ChevronRightIcon, ExternalLinkIcon, HistoryIcon } from "lucide-react"
+import { ExternalLinkIcon, HistoryIcon } from "lucide-react"
 
+import { Disclosure } from "@/components/disclosure"
 import { LeadLocationMap } from "@/components/leads/lead-location-map"
 import { PriorityHelp } from "@/components/leads/priority-help"
 import { StatusControl } from "@/components/leads/status-control"
@@ -170,13 +171,7 @@ export default async function LeadDetailPage(props: PageProps<"/leads/[id]">) {
                     </div>
                   ))}
                 </div>
-                <details className="group rounded-lg border text-xs text-muted-foreground">
-                  <summary className="flex cursor-pointer list-none items-center gap-2 rounded-lg px-3 py-2.5 text-sm font-medium text-foreground hover:bg-muted/50 focus-visible:outline-2 focus-visible:outline-ring [&::-webkit-details-marker]:hidden">
-                    <HistoryIcon className="size-4 text-muted-foreground" aria-hidden />
-                    Past years and how this is estimated
-                    <ChevronRightIcon className="ml-auto size-4 text-muted-foreground transition-transform group-open:rotate-90" aria-hidden />
-                  </summary>
-                  <div className="flex flex-col gap-3 border-t px-3 py-3 leading-relaxed">
+                <Disclosure title="Past years and how this is estimated" icon={HistoryIcon} className="text-xs text-muted-foreground">
                     {BATTERY_SIZES.map((size) => {
                       const batteryValue = lead.battery_values?.[size]
                       return (
@@ -219,8 +214,7 @@ export default async function LeadDetailPage(props: PageProps<"/leads/[id]">) {
                       Includes energy losses, 2¢/kWh battery wear and 20% kept for backup. Excludes retail margin, fees
                       and ancillary services. Historical estimate, not forecast revenue or customer savings.
                     </p>
-                  </div>
-                </details>
+                </Disclosure>
                 {lead.load_zone && <Link href={`/grid/${encodeURIComponent(lead.load_zone)}`} className="text-sm font-medium text-primary hover:underline">
                   Why this zone? <span className="text-muted-foreground">{lead.load_zone}</span>
                 </Link>}

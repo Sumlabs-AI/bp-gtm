@@ -1,4 +1,5 @@
 // Types for the FastAPI /grid endpoints (see apps/api/app/routers/grid.py).
+import type { BatteryValues } from "@/lib/leads"
 
 export type Driver = {
   key: string
@@ -19,11 +20,14 @@ export type ZoneSummary = {
   grid_value_score: number
   primary_reason: string
   drivers: Driver[]
+  battery_values: BatteryValues | null
+  history_years: number[]
+  period_start: string
+  period_end: string
+  computed_at: string
 }
 
 export type ZoneDetail = ZoneSummary & {
-  period_start: string
-  period_end: string
   metrics: Record<string, number>
   series: {
     hourly_profile: { hour: number; zone: number; hub: number }[]
@@ -48,6 +52,13 @@ export type ZoneDetail = ZoneSummary & {
     }
     scoring: { lookback_days: number; scarcity_threshold: number; spread_hours: number }
   }
+}
+
+export function averageGridValue(zone: ZoneSummary): number | null {
+  const value = zone.battery_values?.["40"]
+  return value && value.first_year !== null && value.last_year !== null && Number.isFinite(value.value)
+    ? value.value
+    : null
 }
 
 // Sequential scale for "how much Base should want capacity here" (0 = least, 100 = most).

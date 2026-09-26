@@ -13,6 +13,7 @@ import { Input } from "@/components/ui/input"
 import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { apiFetch } from "@/lib/api"
+import type { ZoneSummary } from "@/lib/grid"
 import { BATTERY_SIZES, SIGNAL_LABELS, STATUS_LABELS, formatLeadMoney, signalLabel, valueBasis, type LeadItem, type LeadPage, type LeadSignal, type LeadStatus, type LeadSummary } from "@/lib/leads"
 import { cn } from "@/lib/utils"
 
@@ -72,6 +73,7 @@ export default async function LeadsPage(props: PageProps<"/leads">) {
   const signals = SIGNALS.filter((signal) => requestedSignals.includes(signal))
   const newOnly = first(query.new_only) === "true"
   const zip = (first(query.zip) ?? "").trim()
+  const zone = (first(query.zone) ?? "").trim()
   const requestedStatus = first(query.status)
   const status = requestedStatus === "all" ? "all" : STATUSES.find((value) => value === requestedStatus) ?? "new"
   const sort = SORTS.find((value) => value === first(query.sort)) ?? "priority"
@@ -84,16 +86,19 @@ export default async function LeadsPage(props: PageProps<"/leads">) {
   signals.forEach((signal) => filters.append("signals", signal))
   if (newOnly) filters.set("new_only", "true")
   if (zip) filters.set("zip", zip)
+  if (zone) filters.set("zone", zone)
 
   const listQuery = new URLSearchParams(filters)
   if (status === "all") listQuery.delete("status")
   listQuery.set("limit", String(view === "map" ? 1 : PAGE_SIZE))
   if (view === "list") listQuery.set("offset", String(offset))
-  const [summary, page] = await Promise.all([
+  const [summary, page, zones] = await Promise.all([
     apiFetch<LeadSummary>("/leads/summary"),
     apiFetch<LeadPage>(`/leads?${listQuery}`),
+    zone ? apiFetch<ZoneSummary[]>("/grid/zones").catch(() => []) : [],
   ])
   const firstBatteryValue = page.items.flatMap((lead) => Object.values(lead.battery_values ?? {}))[0]
+  const zoneName = zones.find((item) => item.code === zone)?.name ?? zone
 
   function listHref(nextView = view, nextOffset = offset) {
     const params = new URLSearchParams(filters)
@@ -103,7 +108,22 @@ export default async function LeadsPage(props: PageProps<"/leads">) {
   }
 
   const backHref = listHref()
-  const clearHref = `/leads?status=${status}&view=${view}`
+  const clearQuery = new URLSearchParams({ status, view })
+  const allLeadsQuery = new URLSearchParams({ status: "all", view })
+  if (zone) {
+    clearQuery.set("zone", zone)
+    allLeadsQuery.set("zone", zone)
+  }
+  const clearHref = `/leads?${clearQuery}`
+  const allLeadsHref = `/leads?${allLeadsQuery}`
+  const recentQuery = new URLSearchParams(allLeadsQuery)
+  recentQuery.set("new_only", "true")
+  const clearZoneQuery = new URLSearchParams()
+  for (const [key, value] of Object.entries(query)) {
+    if (key === "zone" || value === undefined) continue
+    for (const item of Array.isArray(value) ? value : [value]) clearZoneQuery.append(key, item)
+  }
+  const clearZoneHref = `/leads${clearZoneQuery.size ? `?${clearZoneQuery}` : ""}`
   const detailHref = (id: number) => `/leads/${id}?${new URLSearchParams({ back: backHref })}`
 
   return (
@@ -114,6 +134,13 @@ export default async function LeadsPage(props: PageProps<"/leads">) {
 
         <form key={backHref} action="/leads" method="get" className="flex flex-col gap-3">
           <input type="hidden" name="view" value={view} />
+          {zone && <>
+            <input type="hidden" name="zone" value={zone} />
+            <Badge variant="secondary" className="max-w-full">
+              <span className="truncate">Load Zone: {zoneName}</span>
+              <Link href={clearZoneHref} aria-label="Clear Load Zone filter" className="shrink-0 underline underline-offset-2">Clear</Link>
+            </Badge>
+          </>}
           <FieldGroup className="grid gap-3 sm:grid-cols-2 xl:grid-cols-[7rem_7rem_10rem_1fr_auto] xl:items-end">
             <Field>
               <FieldLabel htmlFor="zip">ZIP</FieldLabel>
@@ -170,8 +197,8 @@ export default async function LeadsPage(props: PageProps<"/leads">) {
           <div className="flex flex-col gap-2">
             <p className="text-sm"><strong>{page.total.toLocaleString("en-US")} leads match</strong> <span className="text-muted-foreground">· Scores updated {summary.last_scored_at ? new Date(summary.last_scored_at).toLocaleDateString("en-US", { timeZone: "America/Chicago" }) : "not yet"}</span></p>
             <div className="flex flex-wrap items-center gap-2">
-              <Link href={`/leads?status=all&new_only=true&view=${view}`} className={buttonVariants({ variant: "outline", size: "sm", className: "rounded-full" })}>Recent signals · 7 days ({summary.new_this_week.toLocaleString("en-US")})</Link>
-              <span className="text-xs text-muted-foreground">All Harris County · all statuses</span>
+              <Link href={`/leads?${recentQuery}`} className={buttonVariants({ variant: "outline", size: "sm", className: "rounded-full" })}>Recent signals · 7 days{!zone && ` (${summary.new_this_week.toLocaleString("en-US")})`}</Link>
+              <span className="text-xs text-muted-foreground">{zone ? zoneName : "All Harris County"} · all statuses</span>
             </div>
           </div>
           <nav aria-label="Lead view" className="flex gap-2">
@@ -184,9 +211,9 @@ export default async function LeadsPage(props: PageProps<"/leads">) {
         {summary.leads === 0 ? (
           <Empty><EmptyHeader><EmptyTitle>No lead data yet</EmptyTitle><EmptyDescription>Leads will appear after source data has been refreshed and scored.</EmptyDescription></EmptyHeader><EmptyContent><Link href="/data" className={buttonVariants({ variant: "outline" })}>View data sources</Link></EmptyContent></Empty>
         ) : page.total === 0 ? (
-          <Empty><EmptyHeader><EmptyTitle>No leads match these filters</EmptyTitle><EmptyDescription>Try a lower minimum fit or fewer signals. All leads includes homes already reviewed.</EmptyDescription></EmptyHeader><EmptyContent><Link href={clearHref} className={buttonVariants({ variant: "outline" })}>Clear filters</Link><Link href={`/leads?status=all&view=${view}`} className={buttonVariants({ variant: "ghost" })}>View all leads</Link></EmptyContent></Empty>
+          <Empty><EmptyHeader><EmptyTitle>No leads match these filters</EmptyTitle><EmptyDescription>Try a lower minimum fit or fewer signals. All leads includes homes already reviewed.</EmptyDescription></EmptyHeader><EmptyContent><Link href={clearHref} className={buttonVariants({ variant: "outline" })}>Clear filters</Link><Link href={allLeadsHref} className={buttonVariants({ variant: "ghost" })}>View all leads</Link></EmptyContent></Empty>
         ) : view === "map" ? (
-          <LeadsMap key={filters.toString()} filters={{ minScore, signals, newOnly, zip, status: status === "all" ? undefined : status }} backHref={backHref} className="h-[min(65vh,600px)] min-h-96" />
+          <LeadsMap key={filters.toString()} filters={{ minScore, signals, newOnly, zip, zone: zone || undefined, status: status === "all" ? undefined : status }} backHref={backHref} className="h-[min(65vh,600px)] min-h-96" />
         ) : (
           <>
             <p className="text-xs text-muted-foreground">Historical grid value to Base · $/year · {valueBasis(firstBatteryValue)}. Suggested size is highlighted. Only recorded signals are shown; — = none found in available records.</p>

@@ -61,7 +61,7 @@ The `worker` compose service runs the weekly job every Sunday 03:00 Central: ERC
 
 ## API
 
-`GET /leads/geo?bbox=w,s,e,n&zoom=` (same filters as the list) returns GeoJSON: lead points, or grid cells with `count` and average `score` when more than `MAX_MAP_POINTS` (5,000) leads are in view; the county-wide view takes <1 s. `GET /leads/summary`, `GET /leads` (filters: `min_score`, `signals` (repeatable), `new_only`, `zip`, `status`, `sort`, `limit`, `offset`), `GET /leads/{id}`, `PATCH /leads/{id}` (`{"status": …}`), `GET /sources` (last run per source, for the data-health page).
+`GET /leads/geo?bbox=w,s,e,n&zoom=` (same filters as the list) returns GeoJSON: lead points, or grid cells with `count` and average `score` when more than `MAX_MAP_POINTS` (5,000) leads are in view; the county-wide view takes <1 s. `GET /leads/summary` (includes `by_zone`: leads per load zone, all statuses), `GET /leads` (filters: `min_score`, `signals` (repeatable), `new_only`, `zip`, `status`, `zone` (load zone code, e.g. `LZ_HOUSTON`), `sort`, `limit`, `offset`), `GET /leads/{id}`, `PATCH /leads/{id}` (`{"status": …}`), `GET /sources` (last run per source, for the data-health page).
 
 ## Tests
 

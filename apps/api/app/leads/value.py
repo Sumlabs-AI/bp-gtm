@@ -11,7 +11,7 @@ import pandas as pd
 from sqlalchemy import text
 
 from app.db import engine
-from app.grid.config import LEAD_BATTERIES_KW
+from app.grid.metrics import battery_values
 from app.grid.zones import ZONES_GEOJSON
 from app.leads.config import TDSP_ZONES, LeadScoringConfig
 
@@ -30,44 +30,14 @@ def assign_zones(homes: pd.DataFrame) -> pd.Series:
 
 
 def zone_battery_values() -> dict[str, dict[str, dict]]:
-    """Per zone and battery size, from the latest grid compute:
-    {"LZ_HOUSTON": {"40": {"value": 891, "ceiling": 1650, "first_year": 2019,
-    "last_year": 2025, "recent": 233, "low": 310, "low_year": 2025, "high": 1741,
-    "high_year": 2023}, …}, …}.
-
-    `value` is the realistic day-ahead-planner value of an average full calendar year (what
-    a battery earns over a multi-year contract, not one quiet or spiky year) and `ceiling`
-    the average perfect-hindsight one. Without full years loaded both fall back to the last
-    12 months and first/last/low/high are None. `recent` is always the last 12 months."""
+    """Per zone, `battery_values` (app/grid/metrics.py) from the latest grid compute."""
     with engine.connect() as conn:
         rows = conn.execute(text("SELECT settlement_point, metrics, series FROM grid_zone_metrics"))
         values = {}
         for zone, metrics, series in rows:
-            if any(metrics.get(f"battery_value_{k}") is None for k in LEAD_BATTERIES_KW):
-                continue
-            years = series.get("battery_years") or []
-            values[zone] = {}
-            for k in LEAD_BATTERIES_KW:
-                size, ceil_key = str(k), f"ceiling_{k}"
-                hist = years if all(ceil_key in y for y in years) else []
-                if hist:
-                    value = sum(y[size] for y in hist) / len(hist)
-                    ceiling = sum(y[ceil_key] for y in hist) / len(hist)
-                    low = min(hist, key=lambda y: y[size])
-                    high = max(hist, key=lambda y: y[size])
-                else:
-                    value, ceiling = metrics[f"battery_value_{k}"], metrics[f"battery_ceiling_{k}"]
-                values[zone][size] = {
-                    "value": round(value),
-                    "ceiling": round(ceiling),
-                    "first_year": hist[0]["year"] if hist else None,
-                    "last_year": hist[-1]["year"] if hist else None,
-                    "recent": round(metrics[f"battery_value_{k}"]),
-                    "low": round(low[size]) if hist else None,
-                    "low_year": low["year"] if hist else None,
-                    "high": round(high[size]) if hist else None,
-                    "high_year": high["year"] if hist else None,
-                }
+            sizes = battery_values(metrics, series)
+            if sizes is not None:
+                values[zone] = sizes
         return values
 
 
