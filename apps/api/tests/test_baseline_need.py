@@ -28,6 +28,8 @@ def test_dominant_driver_names_the_input_that_explains_most():
     assert dominant_driver(20.0, 60.0) == "weather"
     assert dominant_driver(50.0, 58.0) == "both"  # within 10 points
     assert dominant_driver(None, 40.0) == "weather"
+    assert dominant_driver(40.0, None) == "outage"
+    assert dominant_driver(50.0, 60.0) == "both"  # exactly 10 apart: still "both"
     assert dominant_driver(None, None) is None
 
 

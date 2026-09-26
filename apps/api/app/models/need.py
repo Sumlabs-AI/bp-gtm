@@ -277,7 +277,7 @@ class BaselineNeedReference(Base):
     """The statewide Reference Population for Baseline Need: one row per Texas res-6 cell,
     with exactly the inputs a Cell uses. Rebuilt by `python -m app.need baseline compute`."""
 
-    __tablename__ = "baseline_need_reference"
+    __tablename__ = "baseline_need_references"
 
     h3_index: Mapped[str] = mapped_column(String(15), primary_key=True)  # res-6 cell
     county_fips: Mapped[str | None] = mapped_column(String(5))
@@ -290,13 +290,13 @@ class BaselineNeedReference(Base):
 class CellBaselineNeed(Base):
     """Baseline Need per product Cell: raw combination ranked against the Texas reference."""
 
-    __tablename__ = "cell_baseline_need"
+    __tablename__ = "cell_baseline_needs"
 
     h3_index: Mapped[str] = mapped_column(String(15), primary_key=True)  # res-8 Cell
     outage_input: Mapped[float | None] = mapped_column(Float)
     weather_input: Mapped[float | None] = mapped_column(Float)
     raw: Mapped[float | None] = mapped_column(Float)
     baseline_need: Mapped[float | None] = mapped_column(Float)  # Texas res-6 percentile
-    dominant_driver: Mapped[str | None] = mapped_column(String(10))
+    dominant_driver: Mapped[str | None] = mapped_column(String(10))  # outage|weather|both
     notes: Mapped[list[str]] = mapped_column(JSONB)
     computed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))

@@ -1,5 +1,5 @@
 from datetime import UTC, datetime
-from typing import Annotated, Any
+from typing import Annotated, Any, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
@@ -158,7 +158,7 @@ class BaselineOut(BaseModel):
 
     baselineNeed: float | None  # noqa: N815  (Texas res-6 percentile)
     raw: float | None
-    dominantDriver: str | None  # noqa: N815
+    dominantDriver: Literal["outage", "weather", "both"] | None  # noqa: N815
     inputs: BaselineInputs
     context: BaselineContext
     method: str

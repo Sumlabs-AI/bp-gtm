@@ -9,15 +9,16 @@ It's deterministic and not a probability: "at least one strong structural reason
 inputs are complementary across Texas (rank correlation −0.38; most counties are high on
 one, low on the other), so a mean would push one-sided places to the middle. raw is then
 ranked against a statewide Reference Population, every Texas res-6 cell with the same
-inputs computed the same way, so Baseline Need is a Texas percentile.
+inputs computed the same way, so Baseline Need is a Texas percentile (of land area).
 
 Utility Reliability Need is not an input (no defensible statewide Cell → utility mapping);
-it's returned as context.
+it's returned as context. Baseline Need is not Live Need and not the Propensity Score.
 """
 
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime
+from typing import Literal
 
 import numpy as np
 import pandas as pd
@@ -34,8 +35,9 @@ from app.models import (
     StormFeatures,
 )
 from app.need.components import mean_of_present, replace_rows
+from app.need.config import baseline as config
 
-DRIVER_MARGIN = 10.0  # inputs within this many points: "both"
+Driver = Literal["outage", "weather", "both"]
 METHOD = (
     "union-style soft-OR of Observed Outage Exposure and Weather Need, "
     "ranked against Texas res-6 reference"
@@ -48,6 +50,7 @@ LIMITATIONS = [
 ]
 NO_OUTAGE = "No Observed Outage Exposure for this county: Baseline Need uses Weather Need only"
 NO_WEATHER = "No Weather Need here: Baseline Need uses Observed Outage Exposure only"
+NO_STORM = "No Storm Exposure here: Weather Need uses Temperature Extremes only"
 
 
 def soft_or(o: float | None, w: float | None) -> float | None:
@@ -57,18 +60,19 @@ def soft_or(o: float | None, w: float | None) -> float | None:
     return round(100 * (1 - (1 - (o or 0) / 100) * (1 - (w or 0) / 100)), 2)
 
 
-def dominant_driver(o: float | None, w: float | None) -> str | None:
+def dominant_driver(o: float | None, w: float | None) -> Driver | None:
     if o is None and w is None:
         return None
-    if o is None or (w is not None and w - o > DRIVER_MARGIN):
+    if o is None or (w is not None and w - o > config.driver_margin):
         return "weather"
-    if w is None or o - w > DRIVER_MARGIN:
+    if w is None or o - w > config.driver_margin:
         return "outage"
     return "both"
 
 
 def reference_percentile(value: float | None, reference: np.ndarray) -> float | None:
-    """Midrank percentile of `value` within the sorted reference distribution."""
+    """Midrank percentile of `value` within the sorted reference distribution: the same
+    midrank rule as app.need.percentile, for a value that is not itself in the reference."""
     if value is None or len(reference) == 0:
         return None
     below = np.searchsorted(reference, value, side="left")
@@ -76,16 +80,22 @@ def reference_percentile(value: float | None, reference: np.ndarray) -> float | 
     return round(float((below + ties / 2) / len(reference) * 100), 2)
 
 
-def _inputs(storm: float | None, county: str | None, outage: dict, temperature: dict) -> tuple:
-    o = outage.get(county)
-    w = mean_of_present(storm, temperature.get(county))
-    return o, w
+def _inputs(
+    storm: float | None,
+    county: str | None,
+    outage: dict[str, float | None],
+    temperature: dict[str, float | None],
+) -> tuple[float | None, float | None]:
+    """(O, W) for a place: the same definitions for Cells and the reference."""
+    return outage.get(county), mean_of_present(storm, temperature.get(county))
 
 
 @dataclass
 class BaselineReport:
     reference_cells: int
-    reference_without_county: int
+    reference_ranked: int
+    reference_without_county: int  # offshore / edge: excluded, not scored differently
+    reference_without_outage: int  # county outside the outage Reference Population
     cells: int
     cells_scored: int
 
@@ -100,51 +110,68 @@ def compute_baseline(
     temperature = {
         t.county_fips: t.temperature_exposure for t in db.scalars(select(CountyTemperatureFeatures))
     }
-    storms = {s.h3_index: s.storm_exposure for s in db.scalars(select(StormFeatures))}
+    storms = dict(db.execute(select(StormFeatures.h3_index, StormFeatures.storm_exposure)).all())
     counties = county_of(list(storms))
 
     reference = []
     for h6, storm in storms.items():
-        o, w = _inputs(storm, counties.get(h6), outage, temperature)
+        county = counties.get(h6)
+        o, w = _inputs(storm, county, outage, temperature)
+        # A cell in no county has no temperature, so its W would be storm-only: a different
+        # definition. It's recorded and counted but not ranked.
+        raw = soft_or(o, w) if county else None
         reference.append(
             {
                 "h3_index": h6,
-                "county_fips": counties.get(h6),
+                "county_fips": county,
                 "outage_input": o,
                 "weather_input": w,
-                "raw": soft_or(o, w),
+                "raw": raw,
             }
         )
     replace_rows(db, BaselineNeedReference, pd.DataFrame(reference), now)
-    distribution = np.sort(np.array([r["raw"] for r in reference if r["raw"] is not None]))
+    distribution = np.sort([r["raw"] for r in reference if r["raw"] is not None])
 
+    cells = db.execute(select(Cell.h3_index, Cell.county_fips)).all()
     rows = []
-    for cell in db.scalars(select(Cell)):
-        storm = storms.get(geo.cell_to_parent(cell.h3_index, 6))
-        o, w = _inputs(storm, cell.county_fips, outage, temperature)
+    for h3_index, county in cells:
+        storm = storms.get(geo.cell_to_parent(h3_index, 6))
+        o, w = _inputs(storm, county, outage, temperature)
         raw = soft_or(o, w)
         notes = []
+        if storm is None and w is not None:
+            notes.append(NO_STORM)
         if o is None and w is not None:
             notes.append(NO_OUTAGE)
         if w is None and o is not None:
             notes.append(NO_WEATHER)
         rows.append(
             {
-                "h3_index": cell.h3_index,
+                "h3_index": h3_index,
                 "outage_input": o,
                 "weather_input": w,
                 "raw": raw,
-                "baseline_need": reference_percentile(raw, distribution),
                 "dominant_driver": dominant_driver(o, w),
                 "notes": notes,
             }
         )
-    replace_rows(db, CellBaselineNeed, pd.DataFrame(rows), now)
+    frame = pd.DataFrame(rows)
+    if not frame.empty:  # vectorized midrank percentile against the reference
+        raw = frame["raw"].astype(float).to_numpy()
+        below = np.searchsorted(distribution, raw, side="left")
+        ties = np.searchsorted(distribution, raw, side="right") - below
+        pct = np.round((below + ties / 2) / max(len(distribution), 1) * 100, 2)
+        frame["baseline_need"] = np.where(np.isnan(raw) | (len(distribution) == 0), np.nan, pct)
+    replace_rows(db, CellBaselineNeed, frame, now)
     return BaselineReport(
         reference_cells=len(reference),
+        reference_ranked=len(distribution),
         reference_without_county=sum(1 for r in reference if r["county_fips"] is None),
+        reference_without_outage=sum(
+            1 for r in reference if r["county_fips"] and r["outage_input"] is None
+        ),
         cells=len(rows),
-        cells_scored=sum(1 for r in rows if r["baseline_need"] is not None),
+        cells_scored=int(frame["baseline_need"].notna().sum()) if not frame.empty else 0,
     )
 
 

@@ -25,7 +25,13 @@ Per-Cell measure of how useful/necessary battery backup is in that geography. Co
 _Avoid_: score (unqualified), risk score
 
 **Baseline Need**:
-How much structural reason a place has to benefit from backup power, independent of what is happening today: a union-style combination of Observed Outage Exposure and Weather Need, ranked as a Texas percentile. Historical events explain it; they never answer "why now". Not a probability, not a purchase likelihood, not the GTM score.
+How much structural reason a place has to benefit from backup power, independent of what is happening today: a union-style combination of Observed Outage Exposure and Weather Need, ranked as a Texas percentile. Historical events explain it; they never answer "why now".
+
+It is kept apart from two other concepts:
+- **Live Need** says whether something is happening now.
+- **Propensity Score** says how likely the area is to buy.
+
+Opportunity combines these three later. Baseline Need is not a probability and not the GTM score.
 _Avoid_: need score (reserved until Live Need exists), opportunity, risk score
 
 **Dominant Driver**:

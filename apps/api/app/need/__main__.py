@@ -251,56 +251,36 @@ def grid_refresh(action: str) -> None:
     )
 
 
-def texas_county_lookup():
-    """res-6 cells -> Census county GEOID of their center (statewide; cached download)."""
-    import geopandas as gpd
-
-    from app import geo
-    from app.need.weather.pipeline import COUNTIES_URL, RAW_CENSUS
-
-    path = RAW_CENSUS / "tx-counties.geojson"
-    if not path.exists():
-        counties = gpd.read_file(COUNTIES_URL)
-        counties = counties[counties["STATEFP"] == "48"].to_crs(4326)[["GEOID", "geometry"]]
-        RAW_CENSUS.mkdir(parents=True, exist_ok=True)
-        counties.to_file(path, driver="GeoJSON")
-    counties = gpd.read_file(path)
-
-    def county_of(cells: list[str]) -> dict[str, str | None]:
-        centers = [geo.cell_to_center(h) for h in cells]
-        points = gpd.GeoDataFrame(
-            {"h3": cells},
-            geometry=gpd.points_from_xy([c[1] for c in centers], [c[0] for c in centers]),
-            crs=4326,
-        )
-        hits = gpd.sjoin(points, counties, predicate="within").drop_duplicates("h3")
-        found = dict(zip(hits["h3"], hits["GEOID"], strict=True))
-        return {h: found.get(h) for h in cells}
-
-    return county_of
-
-
 def baseline() -> None:
     import pandas as pd
 
     from app.db import engine
     from app.need.baseline import compute_baseline
+    from app.need.weather.pipeline import county_of_cells
 
     started = time.perf_counter()
     with SessionLocal() as db:
-        report = compute_baseline(db, texas_county_lookup())
+        report = compute_baseline(db, county_of_cells)
         db.commit()
     cells = pd.read_sql(
         "SELECT c.county_fips, b.baseline_need, b.raw, b.outage_input, b.weather_input, "
-        "b.dominant_driver FROM cell_baseline_need b JOIN cells c USING (h3_index)",
+        "b.dominant_driver FROM cell_baseline_needs b JOIN cells c USING (h3_index)",
         engine,
     )
     print(
         f"Baseline Need\n{'─' * 30}\n"
-        f"{'Reference res-6 cells:':<26}{report.reference_cells:>10,}"
-        f" ({report.reference_without_county} outside any county)\n"
+        f"{'Reference res-6 cells:':<26}{report.reference_cells:>10,}\n"
+        f"{'  ranked:':<26}{report.reference_ranked:>10,}\n"
+        f"{'  outside any county:':<26}{report.reference_without_county:>10,} (not ranked)\n"
+        f"{'  weather only (no O):':<26}{report.reference_without_outage:>10,}\n"
         f"{'Cells scored:':<26}{report.cells_scored:>10,} of {report.cells:,}\n"
         f"{'Duration:':<26}{time.perf_counter() - started:>9.1f}s\n"
+    )
+    raw = pd.read_sql("SELECT raw FROM baseline_need_references WHERE raw IS NOT NULL", engine)
+    quantiles = raw["raw"].quantile([0.1, 0.25, 0.5, 0.75, 0.9]).round(1)
+    print(
+        "Reference raw quantiles: "
+        + ", ".join(f"p{int(q * 100)} {v}" for q, v in quantiles.items())
     )
     summary = cells.groupby("county_fips").agg(
         cells=("baseline_need", "size"),

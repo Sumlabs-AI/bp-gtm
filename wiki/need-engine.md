@@ -236,15 +236,17 @@ Baseline Need = midrank percentile of raw within the statewide Texas res-6 refer
 - **Inputs are identical for Cells and the reference**:
   - O is **Observed Outage Exposure**. Utility Reliability Need is **context only**: there's no defensible statewide Cell→utility mapping.
   - W is the Weather Need Component.
-  - The reference is every Texas res-6 cell (16,697), each with its center's Census county O and W (`baseline_need_reference`).
-  - A product Cell uses its own county and its res-6 parent's storms (`cell_baseline_need`), so Cells near county lines keep their own county.
+  - The reference is every Texas res-6 cell (16,697), each with its center's Census county O and W (`baseline_need_references`). Counties come from `weather download` (`data/raw/census/tx-counties.geojson`).
+  - A reference cell in no county would have a storm-only W (a different definition), so it's **counted and not ranked**. A county outside the outage Reference Population uses W alone, the same rule as for Cells. `baseline compute` prints all these counts and the raw quantiles.
+  - A product Cell uses its own county and its res-6 parent's storms (`cell_baseline_needs`), so Cells near county lines keep their own county.
+  - Cells whose res-6 parent has no storm data (66 in Harris) carry a note.
 - **Dominant Driver**: outage / weather / both (inputs within 10 points).
 - **Area weighting**: the reference counts each ~36 km² equally, so Baseline Need reads "more structural need than X% of Texas **land**". Weighting by customers ("of Texans") is a possible follow-up.
 - **Limitations shown on the score**:
   - dry-bulb temperature (Houston's humid heat under-rated; backlog #21 gridMET heat index)
   - county-level outage
   - utility reliability not combined
-- Real run: 2 s; all 8,715 Cells scored. Harris 36–59 (median 50, driven by outage history); Travis 21–30 (median 25). Dominant driver: outage 7,848 Cells, both 867.
+- Real run: 0.4 s (vectorised percentile); all 8,715 Cells scored. Reference raw quantiles: p10 57, p50 83.5, p90 97. The union lifts values, which is why the result is ranked. Harris 36–59 (median 50, driven by outage history); Travis 21–30 (median 25). Dominant driver: outage 7,848 Cells, both 867.
 - `python -m app.need baseline compute`, after `outage compute` and `weather compute`. `/need` colours by **Baseline Need** by default, and the sheet opens with the Baseline Need block.
 
 ## Live grid (M5, issue #18)

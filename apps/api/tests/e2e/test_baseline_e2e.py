@@ -4,10 +4,11 @@ from datetime import UTC, date, datetime
 
 import pandas as pd
 import pytest
+from sqlalchemy import select, update
 
 from app import geo
 from app.db import SessionLocal
-from app.models import BaselineNeedReference, CellBaselineNeed
+from app.models import BaselineNeedReference, Cell, CellBaselineNeed
 from app.need.baseline import compute_baseline
 from app.need.enrich import enrich_counties, enrich_load_zones
 from app.need.outage.store import save_county_features, save_utility_reliability
@@ -19,6 +20,7 @@ AUSTIN = (30.2672, -97.7431)
 H8, A8 = geo.latlng_to_cell(*HOUSTON), geo.latlng_to_cell(*AUSTIN)
 H6, A6 = geo.cell_to_parent(H8, 6), geo.cell_to_parent(A8, 6)
 FAR = [geo.latlng_to_cell(32.0 + i * 0.3, -101.0, 6) for i in range(3)]  # reference-only
+GULF6 = geo.latlng_to_cell(27.0, -94.0, 6)  # offshore: in no county
 
 
 def square(lat: float, lng: float, d: float = 0.004) -> dict:
@@ -83,7 +85,14 @@ def temperature(fips: str, exposure: float) -> dict:
 
 
 # Reference res-6 cells -> county (injected: no Census download in tests).
-COUNTY_OF = {H6: "48201", A6: "48453", FAR[0]: "48303", FAR[1]: "48303", FAR[2]: "48111"}
+COUNTY_OF = {
+    H6: "48201",
+    A6: "48453",
+    FAR[0]: "48303",
+    FAR[1]: "48303",
+    FAR[2]: "48111",
+    GULF6: None,
+}
 
 
 @pytest.fixture
@@ -130,7 +139,10 @@ def world():
         )
         save_storm_features(
             db,
-            pd.DataFrame([storm(H6, 54.0), storm(A6, 34.0)] + [storm(f, 90.0) for f in FAR]),
+            pd.DataFrame(
+                [storm(H6, 54.0), storm(A6, 34.0), storm(GULF6, 99.0)]
+                + [storm(f, 90.0) for f in FAR]
+            ),
             now,
         )
         save_county_temperature(
@@ -151,10 +163,15 @@ def world():
 
 
 def test_reference_and_cells_use_the_same_inputs(world):
-    assert world.reference_cells == 5  # every res-6 cell with Storm features
+    # Every res-6 cell with Storm features, minus the one in no county, which is counted
+    # and left out of the ranking rather than scored on a different (storm-only) definition.
+    assert (world.reference_cells, world.reference_without_county) == (6, 1)
+    assert world.reference_ranked == 5
+    assert world.reference_without_outage == 1  # 48111: weather alone, same rule as Cells
     with SessionLocal() as db:
-        ref = {r.h3_index: r for r in db.query(BaselineNeedReference)}
+        ref = {r.h3_index: r for r in db.scalars(select(BaselineNeedReference))}
         cell = db.get(CellBaselineNeed, H8)
+    assert ref[GULF6].raw is None
     # Houston Cell and its res-6 parent: same county, same storm -> identical inputs and raw.
     assert (cell.outage_input, cell.weather_input, cell.raw) == (
         ref[H6].outage_input,
@@ -169,7 +186,7 @@ def test_reference_and_cells_use_the_same_inputs(world):
 
 def test_baseline_need_is_a_percentile_of_the_reference(world):
     with SessionLocal() as db:
-        raws = sorted(r.raw for r in db.query(BaselineNeedReference))
+        raws = sorted(r for r in db.scalars(select(BaselineNeedReference.raw)) if r is not None)
         houston = db.get(CellBaselineNeed, H8)
     below = sum(r < houston.raw for r in raws)
     ties = sum(r == houston.raw for r in raws)
@@ -191,3 +208,26 @@ def test_api_exposes_baseline_without_touching_need_score(client, world):
     props = {f["id"]: f["properties"] for f in body["features"]}
     assert props[H8]["baselineNeed"] == b["baselineNeed"]
     assert props[A8]["baselineNeed"] is not None
+
+
+def test_a_cell_keeps_its_own_county_near_a_county_line(world):
+    # Pretend the Houston Cell sits across the line in Travis while its res-6 parent's center
+    # stays in Harris: the Cell must use Travis's outage input, not its parent's county.
+    with SessionLocal() as db:
+        db.execute(update(Cell).where(Cell.h3_index == H8).values(county_fips="48453"))
+        compute_baseline(db, county_of=lambda cells: {h: COUNTY_OF[h] for h in cells})
+        db.commit()
+        cell = db.get(CellBaselineNeed, H8)
+    assert cell.outage_input == 52.0  # Travis
+    assert cell.weather_input == pytest.approx((54.0 + 47.0) / 2)  # parent storm, Travis temp
+
+
+def test_cells_without_storm_data_say_so(world):
+    with SessionLocal() as db:
+        seed_polygon(db, square(35.0, -106.0))  # no storm feature for its res-6 parent
+        db.execute(update(Cell).where(Cell.county_fips.is_(None)).values(county_fips="48201"))
+        compute_baseline(db, county_of=lambda cells: {h: COUNTY_OF[h] for h in cells})
+        db.commit()
+        lonely = db.get(CellBaselineNeed, geo.latlng_to_cell(35.0, -106.0))
+    assert lonely.weather_input == 8.0  # temperature only
+    assert "No Storm Exposure here: Weather Need uses Temperature Extremes only" in lonely.notes
