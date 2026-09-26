@@ -88,3 +88,51 @@ class NwsAlertConfig(BaseModel):
 
 
 nws_alerts = NwsAlertConfig()
+
+
+class ForecastCondition(BaseModel):
+    variable: str  # NWS gridpoint layer
+    direction: str  # "ge": at or above is dangerous; "le": at or below
+    elevated: float  # in `unit`
+    high: float
+    unit: str
+    per_interval: bool = False  # judge each forecast interval (accumulations), not hours
+
+
+class ForecastConfig(BaseModel):
+    """Forecast Signals (M4B-2): our reading of NWS grid forecasts and SPC outlooks.
+    Fixed Texas-wide thresholds (not office-relative). No score yet."""
+
+    horizon_hours: int = 48
+    refresh_minutes: int = 60
+    stale_after_hours: int = 3
+    resolution: int = 6  # one forecast point per res-6 cell covering the Markets
+    conditions: dict[str, ForecastCondition] = {
+        "wind": ForecastCondition(
+            variable="windGust", direction="ge", elevated=46, high=58, unit="mph"
+        ),
+        "heat": ForecastCondition(
+            variable="heatIndex", direction="ge", elevated=105, high=110, unit="°F"
+        ),
+        "cold": ForecastCondition(
+            variable="temperature", direction="le", elevated=28, high=20, unit="°F"
+        ),
+        "ice": ForecastCondition(
+            variable="iceAccumulation",
+            direction="ge",
+            elevated=0.1,
+            high=0.25,
+            unit="in",
+            per_interval=True,
+        ),
+    }
+    spc_urls: list[str] = [
+        "https://www.spc.noaa.gov/products/outlook/day1otlk_cat.lyr.geojson",
+        "https://www.spc.noaa.gov/products/outlook/day2otlk_cat.lyr.geojson",
+    ]
+    # SPC categorical risk -> level; Marginal and general thunder are not signals.
+    spc_levels: dict[str, str] = {"SLGT": "elevated", "ENH": "high", "MDT": "high", "HIGH": "high"}
+    spc_rank: list[str] = ["SLGT", "ENH", "MDT", "HIGH"]
+
+
+forecast = ForecastConfig()
