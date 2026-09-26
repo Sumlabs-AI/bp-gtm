@@ -271,3 +271,32 @@ class GridCondition(Base):
     demand_mw: Mapped[int | None] = mapped_column(Integer)
     margin_forecast_min_mw: Mapped[int | None] = mapped_column(Integer)
     margin_forecast_min_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class BaselineNeedReference(Base):
+    """The statewide Reference Population for Baseline Need: one row per Texas res-6 cell,
+    with exactly the inputs a Cell uses. Rebuilt by `python -m app.need baseline compute`."""
+
+    __tablename__ = "baseline_need_reference"
+
+    h3_index: Mapped[str] = mapped_column(String(15), primary_key=True)  # res-6 cell
+    county_fips: Mapped[str | None] = mapped_column(String(5))
+    outage_input: Mapped[float | None] = mapped_column(Float)  # Observed Outage Exposure
+    weather_input: Mapped[float | None] = mapped_column(Float)  # Weather Need Component
+    raw: Mapped[float | None] = mapped_column(Float)  # union-style combination
+    computed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+
+
+class CellBaselineNeed(Base):
+    """Baseline Need per product Cell: raw combination ranked against the Texas reference."""
+
+    __tablename__ = "cell_baseline_need"
+
+    h3_index: Mapped[str] = mapped_column(String(15), primary_key=True)  # res-8 Cell
+    outage_input: Mapped[float | None] = mapped_column(Float)
+    weather_input: Mapped[float | None] = mapped_column(Float)
+    raw: Mapped[float | None] = mapped_column(Float)
+    baseline_need: Mapped[float | None] = mapped_column(Float)  # Texas res-6 percentile
+    dominant_driver: Mapped[str | None] = mapped_column(String(10))
+    notes: Mapped[list[str]] = mapped_column(JSONB)
+    computed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))

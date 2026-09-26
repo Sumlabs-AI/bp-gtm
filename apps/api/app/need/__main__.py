@@ -14,6 +14,7 @@ uv run python -m app.need live forecast           # Forecast Signals for all poi
 uv run python -m app.need live grid               # ERCOT condition + reserves (worker: 5 min)
 uv run python -m app.need live grid-prices        # RT zone prices from MIS (worker: 15 min)
 uv run python -m app.need live grid-dam           # day-ahead zone prices from MIS (worker: hourly)
+uv run python -m app.need baseline compute        # Baseline Need (after outage + weather)
 uv run python -m app.need export --out cells.csv        # h3_index, resolution, center (for ML)
 """
 
@@ -250,6 +251,69 @@ def grid_refresh(action: str) -> None:
     )
 
 
+def texas_county_lookup():
+    """res-6 cells -> Census county GEOID of their center (statewide; cached download)."""
+    import geopandas as gpd
+
+    from app import geo
+    from app.need.weather.pipeline import COUNTIES_URL, RAW_CENSUS
+
+    path = RAW_CENSUS / "tx-counties.geojson"
+    if not path.exists():
+        counties = gpd.read_file(COUNTIES_URL)
+        counties = counties[counties["STATEFP"] == "48"].to_crs(4326)[["GEOID", "geometry"]]
+        RAW_CENSUS.mkdir(parents=True, exist_ok=True)
+        counties.to_file(path, driver="GeoJSON")
+    counties = gpd.read_file(path)
+
+    def county_of(cells: list[str]) -> dict[str, str | None]:
+        centers = [geo.cell_to_center(h) for h in cells]
+        points = gpd.GeoDataFrame(
+            {"h3": cells},
+            geometry=gpd.points_from_xy([c[1] for c in centers], [c[0] for c in centers]),
+            crs=4326,
+        )
+        hits = gpd.sjoin(points, counties, predicate="within").drop_duplicates("h3")
+        found = dict(zip(hits["h3"], hits["GEOID"], strict=True))
+        return {h: found.get(h) for h in cells}
+
+    return county_of
+
+
+def baseline() -> None:
+    import pandas as pd
+
+    from app.db import engine
+    from app.need.baseline import compute_baseline
+
+    started = time.perf_counter()
+    with SessionLocal() as db:
+        report = compute_baseline(db, texas_county_lookup())
+        db.commit()
+    cells = pd.read_sql(
+        "SELECT c.county_fips, b.baseline_need, b.raw, b.outage_input, b.weather_input, "
+        "b.dominant_driver FROM cell_baseline_need b JOIN cells c USING (h3_index)",
+        engine,
+    )
+    print(
+        f"Baseline Need\n{'─' * 30}\n"
+        f"{'Reference res-6 cells:':<26}{report.reference_cells:>10,}"
+        f" ({report.reference_without_county} outside any county)\n"
+        f"{'Cells scored:':<26}{report.cells_scored:>10,} of {report.cells:,}\n"
+        f"{'Duration:':<26}{time.perf_counter() - started:>9.1f}s\n"
+    )
+    summary = cells.groupby("county_fips").agg(
+        cells=("baseline_need", "size"),
+        baseline_min=("baseline_need", "min"),
+        baseline_median=("baseline_need", "median"),
+        baseline_max=("baseline_need", "max"),
+        outage=("outage_input", "first"),
+        weather_median=("weather_input", "median"),
+    )
+    print(summary.round(1).to_string())
+    print("\nDominant driver:", cells["dominant_driver"].value_counts().to_dict())
+
+
 def export(out: Path) -> None:
     columns = ("h3_index", "resolution", "center_lat", "center_lng")
     with SessionLocal() as db, out.open("w", newline="") as f:
@@ -278,6 +342,8 @@ def main() -> None:
     p.add_argument("action", choices=["download", "compute", "validate"])
     p = sub.add_parser("live", help="live signals: NWS alerts (and forecast signals)")
     p.add_argument("action", choices=["refresh", "forecast", "grid", "grid-prices", "grid-dam"])
+    p = sub.add_parser("baseline", help="Baseline Need (after outage + weather compute)")
+    p.add_argument("action", choices=["compute"])
     p = sub.add_parser("export", help="write all Cells to CSV")
     p.add_argument("--out", type=Path, required=True)
     args = parser.parse_args()
@@ -292,6 +358,8 @@ def main() -> None:
         weather(args.action)
     elif args.cmd == "live":
         live(args.action)
+    elif args.cmd == "baseline":
+        baseline()
     else:
         export(args.out)
 

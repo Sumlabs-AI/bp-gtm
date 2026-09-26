@@ -8,6 +8,9 @@ from sqlalchemy.orm import Session
 from app import geo
 from app.db import get_db
 from app.models import ForecastSignal, NwsAlert
+from app.need.baseline import LIMITATIONS as BASELINE_LIMITATIONS
+from app.need.baseline import METHOD as BASELINE_METHOD
+from app.need.baseline import baseline_components
 from app.need.config import forecast as forecast_config
 from app.need.config import need
 from app.need.live.forecast import COMPARISON
@@ -140,12 +143,36 @@ class Live(BaseModel):
     grid: LiveGrid
 
 
+class BaselineInputs(BaseModel):
+    observedOutageExposure: float | None  # noqa: N815
+    weatherNeed: float | None  # noqa: N815
+
+
+class BaselineContext(BaseModel):
+    utilityReliabilityNeed: float | None  # noqa: N815  (shown, not combined)
+
+
+class BaselineOut(BaseModel):
+    """Baseline Need: structural reason for backup power. Not Live Need, not Propensity,
+    not the GTM score."""
+
+    baselineNeed: float | None  # noqa: N815  (Texas res-6 percentile)
+    raw: float | None
+    dominantDriver: str | None  # noqa: N815
+    inputs: BaselineInputs
+    context: BaselineContext
+    method: str
+    limitations: list[str]
+    notes: list[str]
+
+
 class CellDetail(BaseModel):
     h3: str
     resolution: int
     center: LatLng
     loadZone: str | None  # noqa: N815
     needScore: float | None  # noqa: N815  (camelCase is the API contract)
+    baseline: BaselineOut | None
     components: dict[str, Any]
     live: Live
 
@@ -208,6 +235,7 @@ def list_cells(db: DB, bbox: Annotated[str, Query(description="west,south,east,n
     alerts = active_alerts(db, cells, now)
     forecasts = active_forecast(db, cells, now)
     grid = grid_live(db, cells, now)
+    baseline = baseline_components(db, cells)
     return {
         "type": "FeatureCollection",
         # ERCOT-wide, so given once (also when no Cell is in view) for the map's status chip.
@@ -220,6 +248,7 @@ def list_cells(db: DB, bbox: Annotated[str, Query(description="west,south,east,n
                 "properties": {
                     "h3": c.h3_index,
                     "needScore": None,
+                    "baselineNeed": b.baseline_need if (b := baseline[c.h3_index]) else None,
                     "outageNeed": (outage[c.h3_index] or {}).get("score"),
                     "weatherNeed": (weather[c.h3_index] or {}).get("score"),
                     "activeAlerts": len(alerts[c.h3_index]),
@@ -245,6 +274,8 @@ def cell_detail(db: DB, h3_index: str):
     weather = weather_components(db, [cell])[cell.h3_index]
     components = {name: c for name, c in (("outage", outage), ("weather", weather)) if c}
     fetched_at, stale = alert_status(db, now)
+    b = baseline_components(db, [cell])[cell.h3_index]
+    reliability = ((outage or {}).get("utilityReliabilityNeed") or {}).get("score")
     point = geo.cell_to_parent(cell.h3_index, forecast_config.resolution)
     status = forecast_status(db, [point], now)
     grid = status["grid"].get(point, {"fetched_at": None, "source_updated_at": None, "stale": True})
@@ -254,6 +285,20 @@ def cell_detail(db: DB, h3_index: str):
         center=LatLng(lat=cell.center_lat, lng=cell.center_lng),
         loadZone=cell.load_zone,
         needScore=None,
+        baseline=BaselineOut(
+            baselineNeed=b.baseline_need,
+            raw=b.raw,
+            dominantDriver=b.dominant_driver,
+            inputs=BaselineInputs(
+                observedOutageExposure=b.outage_input, weatherNeed=b.weather_input
+            ),
+            context=BaselineContext(utilityReliabilityNeed=reliability),
+            method=BASELINE_METHOD,
+            limitations=BASELINE_LIMITATIONS,
+            notes=b.notes,
+        )
+        if b
+        else None,
         components=components,
         live=Live(
             weather=LiveWeather(

@@ -17,6 +17,7 @@ export type CellFeature = {
   properties: {
     h3: string
     needScore: number | null
+    baselineNeed: number | null
     outageNeed: number | null
     weatherNeed: number | null
     activeAlerts: number
@@ -45,6 +46,7 @@ export type CellDetail = {
   center: { lat: number; lng: number }
   loadZone: string | null
   needScore: number | null
+  baseline: BaselineNeed | null
   components: { outage?: OutageComponent; weather?: WeatherComponent }
   live: { weather: { alerts: AlertFeed; forecast: ForecastFeed }; grid: LiveGrid }
 }
@@ -115,8 +117,9 @@ export type OutageComponent = {
 }
 
 // Map colouring: which Need Component shades the Cells.
-export type ColorBy = "outageNeed" | "weatherNeed"
+export type ColorBy = "baselineNeed" | "outageNeed" | "weatherNeed"
 export const COLOR_BY: { key: ColorBy; label: string }[] = [
+  { key: "baselineNeed", label: "Baseline Need" },
   { key: "outageNeed", label: "Outage Need" },
   { key: "weatherNeed", label: "Weather Need" },
 ]
@@ -216,5 +219,19 @@ export type LiveGrid = {
     message: string
     hours: number | null
   }[]
+  notes: string[]
+}
+
+// Baseline Need: structural reason for backup power (union-style combination of Observed
+// Outage Exposure and Weather Need, Texas percentile). Not Live Need, not Propensity, not
+// the GTM score.
+export type BaselineNeed = {
+  baselineNeed: number | null
+  raw: number | null
+  dominantDriver: "outage" | "weather" | "both" | null
+  inputs: { observedOutageExposure: number | null; weatherNeed: number | null }
+  context: { utilityReliabilityNeed: number | null }
+  method: string
+  limitations: string[]
   notes: string[]
 }

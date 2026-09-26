@@ -29,6 +29,7 @@ docker compose exec api python -m app.need outage download      # outage history
 docker compose exec api python -m app.need outage compute       # Outage Need on /need
 docker compose exec api python -m app.need weather download     # NWS warnings + measured temperature
 docker compose exec api python -m app.need weather compute      # Weather Need on /need
+docker compose exec api python -m app.need baseline compute     # Baseline Need (default on /need)
 ```
 
 Then open http://localhost:3000 (redirects to `/grid`).

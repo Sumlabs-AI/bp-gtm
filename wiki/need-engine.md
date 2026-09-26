@@ -2,11 +2,10 @@
 
 Scores **how useful backup power is** in a place, per **Cell** (H3 resolution-8 hexagon, ~0.74 km²). It is separate from lead scoring and from the ML Propensity Score, which join onto the same Cells by `h3_index`. Terms: [`CONTEXT.md`](../CONTEXT.md). Why PostGIS: [ADR 0001](../docs/adr/0001-postgis.md).
 
-Status: **Milestones 1–5 (no scores for Live yet)**. Cells exist for Harris and Travis counties, each with its ERCOT Load Zone and county. Baseline: **Outage** and **Weather Need Components**. Live, all observed and not scored, drawn on `/need`:
-- weather: official **NWS Alerts** vs derived **Forecast Signals**
-- grid: official **ERCOT Grid Condition** vs derived **Grid Stress Signals**
-
-There's no combined Need Score yet (`needScore: null`); Live Need scoring comes after, from the collected data.
+Status: **Milestones 1–6**. Cells exist for Harris and Travis counties, each with its ERCOT Load Zone and county.
+- **Baseline Need** (M6) combines the Baseline Outage and Weather Need Components.
+- **Live** signals are observed, not scored: weather (official NWS Alerts vs derived Forecast Signals) and grid (official ERCOT Grid Condition vs derived Grid Stress Signals).
+- `needScore` stays null until Live Need scoring exists. Baseline Need is **not** Propensity and **not** the GTM Opportunity.
 
 ## The Cell contract (shared with ML)
 
@@ -223,6 +222,31 @@ Cell (res 8) ─┬─ res-6 parent ── IEM SV/TO/EW warning-days 5y ── T
 - **Worker**: hourly forecast run, alongside the 5-minute alert Snapshot and the weekly job. A run over 234 points takes ~7 s, or ~17 s when it also looks up new points.
 - First real run (2026-09-26, no NWS alert in Texas): 12 points with heat index ≥ 105°F (peak 108°F) forecast for the next afternoon.
 
+## Baseline Need (M6, issue #20)
+
+"How much structural reason does this place have to benefit from backup power?"
+
+```text
+raw = 100 × (1 − (1 − O/100) × (1 − W/100))     # union-style, deterministic, NOT a probability
+O = Observed Outage Exposure (county)            W = Weather Need Component (res-6 storm + county temp)
+Baseline Need = midrank percentile of raw within the statewide Texas res-6 reference
+```
+
+- **Why this combination**: across 253 Texas counties the two inputs are complementary, not redundant. Their rank correlation is −0.38 (hurricanes drive outages but are deliberately outside Baseline Weather). 169 counties are high on one and low on the other: the coast (Harris, Aransas) vs the Panhandle (Lubbock, Hale). A mean would push those one-sided places to the middle; the union keeps one strong reason strong.
+- **Inputs are identical for Cells and the reference**:
+  - O is **Observed Outage Exposure**. Utility Reliability Need is **context only**: there's no defensible statewide Cell→utility mapping.
+  - W is the Weather Need Component.
+  - The reference is every Texas res-6 cell (16,697), each with its center's Census county O and W (`baseline_need_reference`).
+  - A product Cell uses its own county and its res-6 parent's storms (`cell_baseline_need`), so Cells near county lines keep their own county.
+- **Dominant Driver**: outage / weather / both (inputs within 10 points).
+- **Area weighting**: the reference counts each ~36 km² equally, so Baseline Need reads "more structural need than X% of Texas **land**". Weighting by customers ("of Texans") is a possible follow-up.
+- **Limitations shown on the score**:
+  - dry-bulb temperature (Houston's humid heat under-rated; backlog #21 gridMET heat index)
+  - county-level outage
+  - utility reliability not combined
+- Real run: 2 s; all 8,715 Cells scored. Harris 36–59 (median 50, driven by outage history); Travis 21–30 (median 25). Dominant driver: outage 7,848 Cells, both 867.
+- `python -m app.need baseline compute`, after `outage compute` and `weather compute`. `/need` colours by **Baseline Need** by default, and the sheet opens with the Baseline Need block.
+
 ## Live grid (M5, issue #18)
 
 "Is the ERCOT grid stressed now, or about to be?" **Grid is live-only**: there's no Baseline Grid score, because six Load Zones can't make a meaningful percentile and long-term reliability is already in Outage history. Zone economics (Grid Zones page) stays a separate economics view. **No score here.**
@@ -259,6 +283,7 @@ docker compose exec api python -m app.need outage validate         # Major Outag
 docker compose exec api python -m app.need weather download        # IEM warning polygons + nClimGrid county Parquet (cached)
 docker compose exec api python -m app.need weather compute         # res-6 Storm Exposure + county Temperature Extremes
 docker compose exec api python -m app.need weather validate        # warning-days by year, Derecho/Beryl, top storm cells
+docker compose exec api python -m app.need baseline compute        # Baseline Need (after outage + weather compute)
 docker compose exec api python -m app.need live refresh            # one NWS alert Snapshot (the worker does this every 5 min)
 docker compose exec api python -m app.need live forecast           # Forecast Signals for all points (the worker does this hourly)
 docker compose exec api python -m app.need live grid               # ERCOT condition + reserves (worker: every 5 min)
