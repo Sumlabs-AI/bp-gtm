@@ -80,12 +80,12 @@ class UtilityReliability(Base):
     computed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
 
 
-class StormExposure(Base):
+class StormFeatures(Base):
     """Storm Exposure inputs for one statewide H3 res-6 cell (~36 km², the Reference
     Population), from IEM SV/TO/EW warning polygons. A res-8 Cell reads its res-6 parent.
     Rebuilt by `python -m app.need weather compute`."""
 
-    __tablename__ = "storm_exposure"
+    __tablename__ = "storm_features"
 
     h3_index: Mapped[str] = mapped_column(String(15), primary_key=True)  # res-6 cell
     resolution: Mapped[int] = mapped_column(SmallInteger)
@@ -95,6 +95,8 @@ class StormExposure(Base):
     severe_thunderstorm_warnings_5y: Mapped[int] = mapped_column(Integer)
     tornado_warnings_5y: Mapped[int] = mapped_column(Integer)
     extreme_wind_warnings_5y: Mapped[int] = mapped_column(Integer)
+    # NWS office that issued most of the cell's warnings (issuance-practice notes).
+    issuing_office: Mapped[str | None] = mapped_column(String(3))
     storm_exposure: Mapped[float | None] = mapped_column(Float)  # Texas res-6 percentile
     computed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
 
@@ -106,6 +108,7 @@ class CountyTemperatureFeatures(Base):
     __tablename__ = "county_temperature_features"
 
     county_fips: Mapped[str] = mapped_column(String(5), primary_key=True)
+    county_name: Mapped[str | None] = mapped_column(String(60))
     data_through: Mapped[date] = mapped_column(Date)
     heat_days_100f_5y: Mapped[int] = mapped_column(Integer)  # scored
     heat_days_95f_5y: Mapped[int] = mapped_column(Integer)  # context

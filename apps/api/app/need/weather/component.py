@@ -9,21 +9,20 @@ and, later, Live Weather.
 from sqlalchemy.orm import Session
 
 from app import geo
-from app.models import Cell, CountyTemperatureFeatures, StormExposure
+from app.models import Cell, CountyTemperatureFeatures, StormFeatures
 from app.need.components import mean_of_present
+from app.need.config import weather as config
 from app.need.weather.store import load_features
 from app.need.weather.storms import RESOLUTION
-from app.need.weather.temperature import LIMITATION
 
+LIMITATION = "Dry-bulb temperature only: no humidity or heat index."
 NO_STORM = "No Storm Exposure for this area: score uses Temperature Extremes Exposure only"
 NO_TEMPERATURE = "No temperature data for this county: score uses Storm Exposure only"
-OFFICE_CAVEAT = (
-    "Warning issuance varies by NWS office; Houston (HGX) issues ~25% more warning-days per "
-    "severe report than the Texas median."
-)
+# Sub-score histories ending further apart than this are called out.
+MAX_THROUGH_GAP_DAYS = 31
 
 
-def _storm(s: StormExposure) -> dict:
+def _storm(s: StormFeatures) -> dict:
     return {
         "score": s.storm_exposure,
         # Provenance: the ~36 km² res-6 cell this value belongs to, not the res-8 Cell.
@@ -38,15 +37,16 @@ def _storm(s: StormExposure) -> dict:
             "tornadoWarnings5y": s.tornado_warnings_5y,
             "extremeWindWarnings5y": s.extreme_wind_warnings_5y,
         },
-        "percentile": s.storm_exposure,
-        "caveats": [OFFICE_CAVEAT],
+        "percentiles": {"warningDays5y": s.storm_exposure},
+        "issuingOffice": s.issuing_office,
+        "officeNote": config.office_notes.get(s.issuing_office or ""),
     }
 
 
 def _temperature(t: CountyTemperatureFeatures) -> dict:
     return {
         "score": t.temperature_exposure,
-        "county": {"fips": t.county_fips},
+        "county": {"fips": t.county_fips, "name": t.county_name},
         "source": "NOAA nClimGrid-daily, county averages (public domain)",
         "dataThrough": t.data_through.isoformat(),
         "metrics": {
@@ -55,7 +55,9 @@ def _temperature(t: CountyTemperatureFeatures) -> dict:
             "coldDays28F5y": t.cold_days_28f_5y,
             "coldDays32F5y": t.cold_days_32f_5y,
             "heatDays100F365d": t.heat_days_100f_365d,
+            "heatDays95F365d": t.heat_days_95f_365d,
             "coldDays28F365d": t.cold_days_28f_365d,
+            "coldDays32F365d": t.cold_days_32f_365d,
         },
         # Scored: >= 100°F and <= 28°F days. The 95°F / 32°F counts are context.
         "percentiles": {"heatDays100F5y": t.heat_100f_pctl, "coldDays28F5y": t.cold_28f_pctl},
@@ -86,6 +88,11 @@ def weather_components(db: Session, cells: list[Cell]) -> dict[str, dict | None]
             notes.append(NO_STORM)
         if temperature_score is None:
             notes.append(NO_TEMPERATURE)
+        if s and t and abs((s.data_through - t.data_through).days) > MAX_THROUGH_GAP_DAYS:
+            notes.append(
+                f"Storm history runs through {s.data_through}, "
+                f"temperature history through {t.data_through}"
+            )
         result[cell.h3_index] = {
             "score": mean_of_present(storm_score, temperature_score),
             "stormExposure": storm,

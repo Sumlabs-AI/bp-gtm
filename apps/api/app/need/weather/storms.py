@@ -28,9 +28,16 @@ def _cells(geometry: BaseGeometry) -> list[str]:
     return [geo.latlng_to_cell(c.y, c.x, RESOLUTION)]
 
 
+def _local_days(issued: pd.Timestamp, expired: pd.Timestamp | None) -> list:
+    """Every local date the warning was in effect (a warning spanning midnight covers both)."""
+    start = issued.tz_convert(LOCAL_TZ)
+    end = expired.tz_convert(LOCAL_TZ) - pd.Timedelta(minutes=1) if pd.notna(expired) else start
+    return [d.date() for d in pd.date_range(start.normalize(), max(start, end).normalize())]
+
+
 def warning_cells(warnings: pd.DataFrame) -> pd.DataFrame:
-    """One row per (warning, res-6 cell): h3_index, day (local issuance date), phenom, and
-    the warning's identity (wfo, etn, year). Only SV/TO/EW polygon warnings count."""
+    """One row per (warning, res-6 cell, local day in effect): h3_index, day, phenom, wfo and
+    the warning's identity (wfo, phenom, etn, year). Only SV/TO/EW polygon warnings count."""
     kept = warnings[
         warnings["phenom"].isin(PHENOMENA.keys())
         & (warnings["sig"] == "W")
@@ -39,14 +46,16 @@ def warning_cells(warnings: pd.DataFrame) -> pd.DataFrame:
     rows = [
         {
             "h3_index": cell,
-            "day": w.issued.tz_convert(LOCAL_TZ).date(),
+            "day": day,
             "phenom": w.phenom,
+            "wfo": w.wfo,
             "warning": (w.wfo, w.phenom, w.etn, w.issued.year),
         }
         for w in kept.itertuples()
+        for day in _local_days(w.issued, w.expired)
         for cell in _cells(w.geometry)
     ]
-    return pd.DataFrame(rows, columns=["h3_index", "day", "phenom", "warning"])
+    return pd.DataFrame(rows, columns=["h3_index", "day", "phenom", "wfo", "warning"])
 
 
 def storm_features(
@@ -68,6 +77,13 @@ def storm_features(
         of_type = in_window[in_window["phenom"] == code]
         features[f"{name}_warnings_5y"] = of_type.groupby("h3_index")["warning"].nunique()
     features = features.fillna(0).astype(int)
+    # The office that issued most of the cell's warnings (for issuance-practice notes).
+    warnings = in_window.drop_duplicates(["h3_index", "warning"])
+    office = warnings.groupby("h3_index")["wfo"].agg(lambda s: s.value_counts().index[0])
+    features["issuing_office"] = office.reindex(features.index).astype(object)
+    features["issuing_office"] = features["issuing_office"].where(
+        features["issuing_office"].notna(), None
+    )
     features["storm_exposure"] = percentile_rank(features["warning_days_5y"].astype(float))
     features["resolution"] = RESOLUTION
     features["data_through"] = data_through

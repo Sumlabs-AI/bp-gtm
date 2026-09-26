@@ -115,7 +115,7 @@ export function CellMap({ className }: { className?: string }) {
                   minzoom={H3_MAP_MIN_ZOOM}
                   type="fill"
                   paint={{
-                    // Outage Need Component when known, else the neutral substrate tint.
+                    // The selected Need Component when known, else the neutral substrate tint.
                     "fill-color": [
                       "case",
                       ["==", ["get", colorBy], null],

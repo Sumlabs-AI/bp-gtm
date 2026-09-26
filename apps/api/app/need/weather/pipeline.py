@@ -14,8 +14,8 @@ import pandas as pd
 
 from app import geo
 from app.db import SessionLocal
-from app.need.config import outage_exposure as window
-from app.need.weather.store import save_county_temperature, save_storm_exposure
+from app.need.config import weather as config
+from app.need.weather.store import save_county_temperature, save_storm_features
 from app.need.weather.storms import RESOLUTION, storm_features, warning_cells
 from app.need.weather.temperature import county_temperature_features
 
@@ -36,10 +36,11 @@ COUNTIES_URL = "https://www2.census.gov/geo/tiger/GENZ2024/shp/cb_2024_us_county
 
 def _years() -> range:
     this_year = date.today().year
-    return range(this_year - window.window_years, this_year + 1)
+    return range(this_year - config.window_years, this_year + 1)
 
 
 def _get(client: httpx.Client, url: str, path: Path) -> bool:
+    """Download to `path`; False (nothing written) when the file doesn't exist upstream."""
     response = client.get(url)
     if response.status_code == 404:
         return False
@@ -58,8 +59,13 @@ def download() -> None:
             if path.exists() and year < date.today().year:
                 print(f"IEM warnings {year}: cached")
                 continue
-            _get(client, IEM_URL.format(year=year, next=year + 1), path)
-            print(f"IEM warnings {year}: downloaded")
+            try:
+                found = _get(client, IEM_URL.format(year=year, next=year + 1), path)
+            except httpx.HTTPError as exc:
+                found = False
+                print(f"IEM warnings {year}: FAILED ({exc}); keeping the previous file")
+            else:
+                print(f"IEM warnings {year}: {'downloaded' if found else 'not available'}")
 
         for year in _years():
             for month in range(1, 13):
@@ -77,6 +83,8 @@ def download() -> None:
                             (RAW_NCLIM / f"{stem}-prelim.parquet").unlink(missing_ok=True)
                         print(f"nClimGrid {stem}: {status}")
                         break
+                else:
+                    print(f"nClimGrid {stem}: not published yet")
 
     if not TEXAS.exists():
         counties = gpd.read_file(COUNTIES_URL)
@@ -89,7 +97,9 @@ def download() -> None:
 def load_warnings() -> pd.DataFrame:
     frames = []
     for path in sorted(RAW_IEM.glob("sbw*.zip")):
-        g = gpd.read_file(path, columns=["WFO", "PHENOM", "SIG", "GTYPE", "ETN", "ISSUED"])
+        g = gpd.read_file(
+            path, columns=["WFO", "PHENOM", "SIG", "GTYPE", "ETN", "ISSUED", "EXPIRED"]
+        )
         frames.append(g.to_crs(4326))
     w = pd.concat(frames, ignore_index=True)
     return pd.DataFrame(
@@ -100,6 +110,7 @@ def load_warnings() -> pd.DataFrame:
             "gtype": w["GTYPE"],
             "etn": w["ETN"],
             "issued": pd.to_datetime(w["ISSUED"], format="%Y%m%d%H%M", utc=True),
+            "expired": pd.to_datetime(w["EXPIRED"], format="%Y%m%d%H%M", utc=True),
             "geometry": w.geometry,
         }
     )
@@ -112,7 +123,8 @@ def texas_grid() -> list[str]:
 
 def storm_data_through() -> date:
     """Last full day the warning archive covers: the day before the current-year file was
-    fetched (or Dec 31 of the latest year downloaded)."""
+    fetched (or Dec 31 of the latest year downloaded). Not the last warning's date: days
+    without warnings are still covered, and a quiet week mustn't look like missing data."""
     latest = max(RAW_IEM.glob("sbw*.zip"))
     year = int(latest.stem[3:])
     fetched = datetime.fromtimestamp(latest.stat().st_mtime, UTC).date() - timedelta(days=1)
@@ -128,21 +140,30 @@ class ComputeReport:
     temperature_data_through: date
 
 
-def build() -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
-    """Storm hits, res-6 storm features and county temperature features (no database)."""
+def _require_files() -> None:
     if not any(RAW_IEM.glob("sbw*.zip")) or not any(RAW_NCLIM.glob("*.parquet")):
         raise SystemExit("No weather files: run `python -m app.need weather download`.")
+
+
+def build_storms() -> tuple[pd.DataFrame, pd.DataFrame]:
+    """Storm hits and res-6 Storm features (no database)."""
+    _require_files()
     hits = warning_cells(load_warnings())
-    storms = storm_features(hits, texas_grid(), storm_data_through(), window.window_years)
-    temps = county_temperature_features(sorted(RAW_NCLIM.glob("*.parquet")), window.window_years)
-    return hits, storms, temps
+    return hits, storm_features(hits, texas_grid(), storm_data_through(), config.window_years)
+
+
+def build_temperature() -> pd.DataFrame:
+    """County Temperature Extremes features (no database)."""
+    _require_files()
+    return county_temperature_features(sorted(RAW_NCLIM.glob("*.parquet")), config)
 
 
 def compute() -> ComputeReport:
-    hits, storms, temps = build()
+    hits, storms = build_storms()
+    temps = build_temperature()
     with SessionLocal() as db:
         now = datetime.now(UTC)
-        save_storm_exposure(db, storms, now)
+        save_storm_features(db, storms, now)
         save_county_temperature(db, temps, now)
         db.commit()
     report = ComputeReport(

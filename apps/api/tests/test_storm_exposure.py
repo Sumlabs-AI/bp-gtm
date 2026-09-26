@@ -15,14 +15,18 @@ H6 = geo.latlng_to_cell(*HOUSTON, resolution=6)
 A6 = geo.latlng_to_cell(*AUSTIN, resolution=6)
 
 
-def warning(lat, lng, issued, phenom="SV", sig="W", gtype="P", etn=1, size=0.2, wfo="HGX"):
+def warning(
+    lat, lng, issued, phenom="SV", sig="W", gtype="P", etn=1, size=0.2, wfo="HGX", minutes=45
+):
+    start = pd.Timestamp(issued, tz="UTC")
     return {
         "wfo": wfo,
         "phenom": phenom,
         "sig": sig,
         "gtype": gtype,
         "etn": etn,
-        "issued": pd.Timestamp(issued, tz="UTC"),
+        "issued": start,
+        "expired": start + pd.Timedelta(minutes=minutes),
         "geometry": box(lng - size, lat - size, lng + size, lat + size),
     }
 
@@ -94,3 +98,24 @@ def test_windows_end_at_data_through():
 def test_res8_cell_resolves_its_res6_parent():
     cell = geo.latlng_to_cell(*HOUSTON)
     assert geo.cell_to_parent(cell, 6) == H6
+
+
+def test_a_warning_spanning_local_midnight_covers_both_days():
+    # 23:30 CDT May 16 -> 00:30 CDT May 17: the place was under a warning on both dates.
+    hits = cells_of([warning(*HOUSTON, "2024-05-17 04:30", minutes=60)])
+    assert set(hits[hits["h3_index"] == H6]["day"]) == {date(2024, 5, 16), date(2024, 5, 17)}
+
+
+def test_each_cell_records_its_main_issuing_office():
+    rows = [
+        warning(*HOUSTON, "2025-05-16 20:00", etn=1, wfo="HGX"),
+        warning(*HOUSTON, "2025-06-16 20:00", etn=2, wfo="HGX"),
+        warning(*HOUSTON, "2025-07-16 20:00", etn=3, wfo="LCH"),
+        warning(*AUSTIN, "2025-05-16 20:00", etn=4, wfo="EWX"),
+    ]
+    quiet = geo.latlng_to_cell(32.0, -102.0, resolution=6)
+    features = storm_features(cells_of(rows), [H6, A6, quiet], date(2025, 12, 31))
+    features = features.set_index("h3_index")
+    assert features.loc[H6, "issuing_office"] == "HGX"
+    assert features.loc[A6, "issuing_office"] == "EWX"
+    assert features.loc[quiet, "issuing_office"] is None

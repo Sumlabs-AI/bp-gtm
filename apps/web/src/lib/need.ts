@@ -96,12 +96,13 @@ export type WeatherComponent = {
       tornadoWarnings5y: number
       extremeWindWarnings5y: number
     }
-    percentile: number | null
-    caveats: string[]
+    percentiles: { warningDays5y: number | null }
+    issuingOffice: string | null
+    officeNote: string | null
   } | null
   temperatureExtremesExposure: {
     score: number | null
-    county: { fips: string }
+    county: { fips: string; name: string | null }
     source: string
     dataThrough: string
     metrics: {
@@ -110,7 +111,9 @@ export type WeatherComponent = {
       coldDays28F5y: number
       coldDays32F5y: number
       heatDays100F365d: number
+      heatDays95F365d: number
       coldDays28F365d: number
+      coldDays32F365d: number
     }
     percentiles: { heatDays100F5y: number | null; coldDays28F5y: number | null }
     limitations: string[]

@@ -30,3 +30,22 @@ outage_exposure = ExposureConfig()
 # Austin Energy's territory is LZ_AEN; Harris County is CenterPoint. Anything else: unknown.
 UTILITY_BY_LOAD_ZONE = {"LZ_AEN": 1015}  # Austin Energy
 UTILITY_BY_COUNTY = {"48201": 8901}  # CenterPoint Energy (Harris)
+
+
+class WeatherConfig(BaseModel):
+    """Baseline Weather Need. Re-run `python -m app.need weather compute` after changing."""
+
+    window_years: int = 5
+    # Measured temperature thresholds (°F): scored, and context-only.
+    heat_f: float = 100
+    cold_f: float = 28
+    heat_context_f: float = 95
+    cold_context_f: float = 32
+    # Known issuance practice by NWS office (from the 2021-2025 warning vs SPC report check).
+    office_notes: dict[str, str] = {
+        "HGX": "Houston (HGX) issues ~25% more warning-days per severe report than the Texas "
+        "median, so this Storm Exposure may read high."
+    }
+
+
+weather = WeatherConfig()

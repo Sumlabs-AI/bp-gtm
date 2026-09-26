@@ -6,7 +6,7 @@ from app.models.need import (
     Cell,
     CountyOutageFeatures,
     CountyTemperatureFeatures,
-    StormExposure,
+    StormFeatures,
     UtilityReliability,
 )
 
@@ -22,6 +22,6 @@ __all__ = [
     "Permit",
     "Property",
     "SourceRun",
-    "StormExposure",
+    "StormFeatures",
     "UtilityReliability",
 ]

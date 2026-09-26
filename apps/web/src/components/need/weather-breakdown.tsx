@@ -1,26 +1,5 @@
-import { scoreColor } from "@/lib/grid"
+import { historyThrough, Row, Score } from "@/components/need/score-parts"
 import type { WeatherComponent } from "@/lib/need"
-
-const through = (iso: string) =>
-  new Date(`${iso}T00:00:00`).toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" })
-
-function Score({ value }: { value: number | null }) {
-  if (value === null) return <span className="text-muted-foreground">—</span>
-  return (
-    <span className="rounded-md px-2 py-0.5 font-semibold tabular-nums" style={{ background: scoreColor(value) }}>
-      {value.toFixed(0)}
-    </span>
-  )
-}
-
-function Row({ label, value }: { label: string; value: number }) {
-  return (
-    <>
-      <dt className="text-muted-foreground">{label}</dt>
-      <dd className="text-right tabular-nums">{value.toLocaleString("en-US")}</dd>
-    </>
-  )
-}
 
 export function WeatherBreakdown({ weather }: { weather: WeatherComponent }) {
   const storm = weather.stormExposure
@@ -43,17 +22,16 @@ export function WeatherBreakdown({ weather }: { weather: WeatherComponent }) {
             area <span className="font-mono">{storm.sourceCell}</span> (H3 res {storm.resolution}) containing this Cell.
           </p>
           <dl className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
-            <Row label="Warning-days (5 y)" value={storm.metrics.warningDays5y} />
-            <Row label="Warning-days (365 d)" value={storm.metrics.warningDays365d} />
-            <Row label="Severe thunderstorm warnings" value={storm.metrics.severeThunderstormWarnings5y} />
-            <Row label="Tornado warnings" value={storm.metrics.tornadoWarnings5y} />
+            <Row label="Warning-days (5 y)" value={storm.metrics.warningDays5y.toLocaleString("en-US")} />
+            <Row label="Warning-days (365 d)" value={storm.metrics.warningDays365d.toLocaleString("en-US")} />
+            <Row label="Severe thunderstorm warnings" value={storm.metrics.severeThunderstormWarnings5y.toLocaleString("en-US")} />
+            <Row label="Tornado warnings" value={storm.metrics.tornadoWarnings5y.toLocaleString("en-US")} />
+            <Row label="Extreme wind warnings" value={storm.metrics.extremeWindWarnings5y.toLocaleString("en-US")} />
           </dl>
           <p className="text-[11px] text-muted-foreground">
-            {storm.source} · history through {through(storm.dataThrough)}
+            {storm.source} · history through {historyThrough(storm.dataThrough)}
           </p>
-          {storm.caveats.map((c) => (
-            <p key={c} className="text-[11px] text-muted-foreground">{c}</p>
-          ))}
+          {storm.officeNote && <p className="text-[11px] text-muted-foreground">{storm.officeNote}</p>}
         </div>
       )}
 
@@ -64,16 +42,17 @@ export function WeatherBreakdown({ weather }: { weather: WeatherComponent }) {
             <Score value={temperature.score} />
           </div>
           <p className="text-xs text-muted-foreground">
-            Measured days of dangerous heat or cold during an outage, county-level Texas percentile.
+            Measured days of dangerous heat or cold during an outage in{" "}
+            {temperature.county.name ?? temperature.county.fips} County, Texas percentile.
           </p>
           <dl className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
-            <Row label="Days ≥ 100°F (5 y)" value={temperature.metrics.heatDays100F5y} />
-            <Row label="Days ≤ 28°F (5 y)" value={temperature.metrics.coldDays28F5y} />
-            <Row label="Days ≥ 95°F (context)" value={temperature.metrics.heatDays95F5y} />
-            <Row label="Days ≤ 32°F (context)" value={temperature.metrics.coldDays32F5y} />
+            <Row label="Days ≥ 100°F (5 y)" value={temperature.metrics.heatDays100F5y.toLocaleString("en-US")} />
+            <Row label="Days ≤ 28°F (5 y)" value={temperature.metrics.coldDays28F5y.toLocaleString("en-US")} />
+            <Row label="Days ≥ 95°F (context)" value={temperature.metrics.heatDays95F5y.toLocaleString("en-US")} />
+            <Row label="Days ≤ 32°F (context)" value={temperature.metrics.coldDays32F5y.toLocaleString("en-US")} />
           </dl>
           <p className="text-[11px] text-muted-foreground">
-            {temperature.source} · history through {through(temperature.dataThrough)}
+            {temperature.source} · history through {historyThrough(temperature.dataThrough)}
           </p>
           {temperature.limitations.map((l) => (
             <p key={l} className="text-[11px] text-muted-foreground">{l}</p>

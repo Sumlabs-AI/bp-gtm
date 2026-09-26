@@ -17,7 +17,6 @@ import csv
 import time
 from pathlib import Path
 
-import pandas as pd
 from sqlalchemy import func, select
 
 from app.db import SessionLocal
@@ -123,10 +122,13 @@ def weather(action: str) -> None:
             f"\n{'Duration:':<24}{time.perf_counter() - started:>11.1f}s"
         )
         return
+    import pandas as pd
+
     from app import geo
     from app.need.markets import county_for_points
 
-    hits, storms, _ = pipeline.build()
+    hits, storms = pipeline.build_storms()
+    temperature = pipeline.build_temperature().set_index("county_fips")
     centers = pd.DataFrame(
         [(h, *geo.cell_to_center(h)) for h in storms["h3_index"]], columns=["h3", "lat", "lng"]
     )
@@ -144,6 +146,12 @@ def weather(action: str) -> None:
         print(
             f"  Storm Exposure across its cells: min {s.storm_exposure.min():.0f}, "
             f"median {s.storm_exposure.median():.0f}, max {s.storm_exposure.max():.0f}"
+        )
+        t = temperature.loc[market.geoid]
+        print(
+            f"  Temperature (5 y through {t.data_through}): {t.heat_days_100f_5y} days >= 100F, "
+            f"{t.heat_days_95f_5y} >= 95F, {t.cold_days_28f_5y} <= 28F, "
+            f"{t.cold_days_32f_5y} <= 32F -> exposure {t.temperature_exposure:.1f}"
         )
     top = storms.nlargest(10, "warning_days_5y").merge(centers, left_on="h3_index", right_on="h3")
     print("\nTop 10 Texas res-6 cells by warning-days (5 y):")
