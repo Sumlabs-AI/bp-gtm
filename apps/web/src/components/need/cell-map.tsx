@@ -8,7 +8,7 @@ import "maplibre-gl/dist/maplibre-gl.css"
 import { Button } from "@/components/ui/button"
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet"
 import { OutageBreakdown } from "@/components/need/outage-breakdown"
-import { LiveWeatherSignals } from "@/components/need/live-weather"
+import { NwsAlerts } from "@/components/need/nws-alerts"
 import { WeatherBreakdown } from "@/components/need/weather-breakdown"
 import { apiFetch } from "@/lib/api"
 import { scoreColor } from "@/lib/grid"
@@ -87,7 +87,7 @@ export function CellMap({ className }: { className?: string }) {
             y: e.point.y,
             flip: e.point.x > e.target.getContainer().clientWidth - 220,
             h3: properties.h3,
-            liveCategory: properties.activeWeatherCategory ?? null,
+            liveCategory: properties.activeAlertCategory ?? null,
           }
         : null
     )
@@ -142,12 +142,12 @@ export function CellMap({ className }: { className?: string }) {
                   paint={{ "line-color": "#6366f1", "line-width": 0.5, "line-opacity": 0.5 }}
                 />,
                 <Layer
-                  key="cells-live"
-                  id="cells-live"
+                  key="cells-alert"
+                  id="cells-alert"
                   minzoom={H3_MAP_MIN_ZOOM}
                   type="line"
                   // Cells under an active NWS alert: outlined, not coloured (no live score yet).
-                  filter={[">", ["get", "activeWeatherSignals"], 0]}
+                  filter={[">", ["get", "activeAlerts"], 0]}
                   paint={{ "line-color": "#dc2626", "line-width": 1.5 }}
                 />,
                 <Layer
@@ -194,7 +194,7 @@ export function CellMap({ className }: { className?: string }) {
           >
             {hover.h3}
             {hover.liveCategory && (
-              <div className="mt-1 font-sans text-red-600">Active NWS alert: {hover.liveCategory.replace("_", " ")}</div>
+              <div className="mt-1 font-sans text-red-600">Official NWS alert: {hover.liveCategory.replace("_", " ")}</div>
             )}
           </div>
         )}
@@ -222,7 +222,7 @@ export function CellMap({ className }: { className?: string }) {
           )}
           {shownDetail && (
             <div className="flex flex-col gap-6 overflow-y-auto pb-4">
-              <LiveWeatherSignals live={shownDetail.live.weather} />
+              <NwsAlerts feed={shownDetail.live.weather.alerts} />
               {shownDetail.components.outage && <OutageBreakdown outage={shownDetail.components.outage} />}
               {shownDetail.components.weather && <WeatherBreakdown weather={shownDetail.components.weather} />}
             </div>

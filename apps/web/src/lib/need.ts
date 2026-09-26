@@ -19,8 +19,8 @@ export type CellFeature = {
     needScore: number | null
     outageNeed: number | null
     weatherNeed: number | null
-    activeWeatherSignals: number
-    activeWeatherCategory: LiveCategory | null
+    activeAlerts: number
+    activeAlertCategory: AlertCategory | null
   }
 }
 
@@ -33,16 +33,17 @@ export type CellDetail = {
   loadZone: string | null
   needScore: number | null
   components: { outage?: OutageComponent; weather?: WeatherComponent }
-  live: { weather: LiveWeather }
+  live: { weather: { alerts: AlertFeed } }
 }
 
-// Live Weather Signals: official NWS alerts active for the Cell now. Observed, not scored.
-export type LiveCategory = "tornado" | "tropical" | "severe_storm" | "winter" | "cold" | "heat"
+// NWS Alerts: official alerts active for the Cell now. Observed, not scored; never shown
+// as equivalent to our derived Forecast Signals.
+export type AlertCategory = "tornado" | "tropical" | "severe_storm" | "winter" | "cold" | "heat"
 
-export type LiveSignal = {
+export type NwsAlert = {
   id: string
   event: string
-  category: LiveCategory
+  category: AlertCategory
   severity: string | null
   certainty: string | null
   urgency: string | null
@@ -54,7 +55,7 @@ export type LiveSignal = {
   lastSeenAt: string
 }
 
-export type LiveWeather = { fetchedAt: string | null; stale: boolean; signals: LiveSignal[] }
+export type AlertFeed = { fetchedAt: string | null; stale: boolean; signals: NwsAlert[] }
 
 // Outage Need Component: county-level Observed Outage Exposure (EAGLE-I) and Utility
 // Reliability Need (EIA-861), each a Texas percentile (0-100, higher = more need).

@@ -1,4 +1,4 @@
-"""Live Weather Signals from NWS alert Snapshots.
+"""NWS Alerts from alert Snapshots.
 
 A Snapshot is one complete fetch of all active NWS alerts for Texas. Only a successful,
 complete Snapshot changes signals: allowlisted alerts are upserted, and signals missing from
@@ -18,8 +18,8 @@ from sqlalchemy import update
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
 
-from app.models import LiveWeatherSignal, LiveWeatherSnapshot
-from app.need.config import live_weather as config
+from app.models import NwsAlert, NwsAlertSnapshot
+from app.need.config import nws_alerts as config
 
 Fetch = Callable[[], dict]
 ResolveZones = Callable[[list[str]], list[dict]]  # zone URLs -> GeoJSON geometries
@@ -86,11 +86,11 @@ def parse(payload: dict, resolve_zones: ResolveZones) -> list[dict]:
 
 def take_snapshot(
     db: Session, fetch: Fetch, resolve_zones: ResolveZones, now: datetime
-) -> LiveWeatherSnapshot:
+) -> NwsAlertSnapshot:
     """Take one Snapshot at `now` and apply it if complete. Any failure (fetch, parse,
     zones, or the writes themselves) is logged as a failed Snapshot and changes no signal.
     The caller commits."""
-    snapshot = LiveWeatherSnapshot(fetched_at=now, succeeded=False)
+    snapshot = NwsAlertSnapshot(fetched_at=now, succeeded=False)
     try:
         payload = fetch()
         signals = parse(payload, resolve_zones)
@@ -114,7 +114,7 @@ def take_snapshot(
 def _apply(db: Session, signals: list[dict], now: datetime) -> int:
     """Upsert the Snapshot's signals and supersede those it no longer lists."""
     if signals:
-        stmt = insert(LiveWeatherSignal).values(
+        stmt = insert(NwsAlert).values(
             [{**s, "first_seen_at": now, "last_seen_at": now} for s in signals]
         )
         kept = {c: stmt.excluded[c] for c in signals[0] if c != "id"}
@@ -125,10 +125,10 @@ def _apply(db: Session, signals: list[dict], now: datetime) -> int:
             )
         )
     return db.execute(
-        update(LiveWeatherSignal)
+        update(NwsAlert)
         .where(
-            LiveWeatherSignal.superseded_at.is_(None),
-            LiveWeatherSignal.id.not_in([s["id"] for s in signals]),
+            NwsAlert.superseded_at.is_(None),
+            NwsAlert.id.not_in([s["id"] for s in signals]),
         )
         .values(superseded_at=now)
     ).rowcount

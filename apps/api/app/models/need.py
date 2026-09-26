@@ -125,12 +125,12 @@ class CountyTemperatureFeatures(Base):
     computed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
 
 
-class LiveWeatherSignal(Base):
-    """One NWS alert kept as a Live Weather Signal. NWS event time (effective/ends) is kept
-    apart from our ingestion state (first/last seen, superseded). Rows are never deleted.
+class NwsAlert(Base):
+    """One official NWS Alert (not a derived Forecast Signal). NWS event time (effective/ends)
+    is kept apart from our ingestion state (first/last seen, superseded). Rows are never deleted.
     Active-ness is decided at read time (app/need/live/store.py)."""
 
-    __tablename__ = "live_weather_signals"
+    __tablename__ = "nws_alerts"
 
     id: Mapped[str] = mapped_column(String(200), primary_key=True)  # NWS alert id
     event: Mapped[str] = mapped_column(String(60))
@@ -168,11 +168,11 @@ class LiveWeatherSignal(Base):
     superseded_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
 
-class LiveWeatherSnapshot(Base):
+class NwsAlertSnapshot(Base):
     """One attempt to fetch all active NWS alerts for Texas. Only a successful Snapshot may
     supersede signals; failed ones are logged and change nothing."""
 
-    __tablename__ = "live_weather_snapshots"
+    __tablename__ = "nws_alert_snapshots"
 
     id: Mapped[int] = mapped_column(primary_key=True)
     fetched_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)

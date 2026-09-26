@@ -1,4 +1,4 @@
-"""Live Weather Signals: NWS alert snapshots -> signals -> Active for Cells at a given `now`."""
+"""NWS Alerts: alert Snapshots -> alerts -> Active for Cells at a given `now`."""
 
 import copy
 import json
@@ -10,9 +10,9 @@ from sqlalchemy import func, select
 
 from app import geo
 from app.db import SessionLocal
-from app.models import Cell, LiveWeatherSignal
-from app.need.live.refresh import take_snapshot
-from app.need.live.store import active_signals, live_status
+from app.models import Cell, NwsAlert
+from app.need.live.alerts import take_snapshot
+from app.need.live.store import active_alerts, alert_status
 from app.need.store import seed_polygon
 
 HOUSTON = (29.7604, -95.3698)
@@ -115,7 +115,7 @@ def run(payload, at: datetime, zones=resolve):
 def active(at: datetime, h3: str = H8) -> list[str]:
     with SessionLocal() as db:
         cells = [db.get(Cell, h3)]
-        return [s.id for s in active_signals(db, cells, at)[h3]]
+        return [s.id for s in active_alerts(db, cells, at)[h3]]
 
 
 @pytest.fixture(autouse=True)
@@ -143,9 +143,9 @@ def test_successful_snapshot_supersedes_missing_alerts():
     run(snapshot(HEAT), t("14:20"))  # NWS cancelled the tornado warning early
     assert active(t("14:25")) == ["heat-1"]
     with SessionLocal() as db:
-        from app.models import LiveWeatherSignal
+        from app.models import NwsAlert
 
-        tor = db.get(LiveWeatherSignal, "tor-1")
+        tor = db.get(NwsAlert, "tor-1")
         assert tor.superseded_at == t("14:20")
         assert tor.ends_at == t("15:30")  # NWS event time is kept as issued
 
@@ -159,14 +159,14 @@ def test_failed_snapshot_changes_nothing_and_goes_stale():
     assert not result.succeeded
     assert active(t("14:15")) == ["tor-1"]
     with SessionLocal() as db:
-        from app.models import LiveWeatherSignal, LiveWeatherSnapshot
+        from app.models import NwsAlert, NwsAlertSnapshot
 
-        tor = db.get(LiveWeatherSignal, "tor-1")
+        tor = db.get(NwsAlert, "tor-1")
         assert (tor.last_seen_at, tor.superseded_at) == (t("14:00"), None)  # untouched
-        attempts = db.query(LiveWeatherSnapshot).order_by(LiveWeatherSnapshot.fetched_at).all()
+        attempts = db.query(NwsAlertSnapshot).order_by(NwsAlertSnapshot.fetched_at).all()
         assert [a.succeeded for a in attempts] == [True, False, False]
-        assert live_status(db, t("14:25")) == (t("14:00"), False)
-        assert live_status(db, t("14:31")) == (t("14:00"), True)  # > 30 min since success
+        assert alert_status(db, t("14:25")) == (t("14:00"), False)
+        assert alert_status(db, t("14:31")) == (t("14:00"), True)  # > 30 min since success
     # Stale doesn't hide signals: still active until they end, flagged as possibly outdated.
     assert active(t("14:31")) == ["tor-1"]
 
@@ -174,7 +174,7 @@ def test_failed_snapshot_changes_nothing_and_goes_stale():
 def test_zone_based_alerts_keep_their_geometry_source():
     run(snapshot(TORNADO, HEAT), t("14:05"))
     with SessionLocal() as db:
-        signals = {s.id: s for s in active_signals(db, [db.get(Cell, H8)], t("14:10"))[H8]}
+        signals = {s.id: s for s in active_alerts(db, [db.get(Cell, H8)], t("14:10"))[H8]}
     assert signals["tor-1"].geometry_source == "alert"
     assert signals["heat-1"].geometry_source == "zones"
     assert signals["heat-1"].zones == ["TXZ213"]
@@ -199,9 +199,9 @@ def test_reappearing_alert_is_active_again_and_keeps_first_seen():
     run(snapshot(HEAT), t("11:10"))
     assert active(t("11:15")) == ["heat-1"]
     with SessionLocal() as db:
-        from app.models import LiveWeatherSignal
+        from app.models import NwsAlert
 
-        heat = db.get(LiveWeatherSignal, "heat-1")
+        heat = db.get(NwsAlert, "heat-1")
         assert (heat.first_seen_at, heat.last_seen_at, heat.superseded_at) == (
             t("11:00"),
             t("11:10"),
@@ -241,7 +241,7 @@ def test_api_lists_active_signals_and_staleness(client):
     )
     run(snapshot(heat, tornado), now - timedelta(minutes=2))
 
-    live = client.get(f"/need/cells/{H8}").json()["live"]["weather"]
+    live = client.get(f"/need/cells/{H8}").json()["live"]["weather"]["alerts"]
     assert live["stale"] is False
     assert live["fetchedAt"] is not None
     by_id = {s["id"]: s for s in live["signals"]}
@@ -263,14 +263,14 @@ def test_api_lists_active_signals_and_staleness(client):
 
     features = client.get("/need/cells", params={"bbox": "-98.1,29.6,-95.2,30.5"}).json()
     props = {f["id"]: f["properties"] for f in features["features"]}
-    assert props[H8]["activeWeatherSignals"] == 2
-    assert props[H8]["activeWeatherCategory"] == "tornado"  # most severe of tornado + heat
-    assert props[A8]["activeWeatherSignals"] == 0
-    assert props[A8]["activeWeatherCategory"] is None
+    assert props[H8]["activeAlerts"] == 2
+    assert props[H8]["activeAlertCategory"] == "tornado"  # most severe of tornado + heat
+    assert props[A8]["activeAlerts"] == 0
+    assert props[A8]["activeAlertCategory"] is None
 
 
 def test_api_reports_stale_when_no_snapshot_succeeded(client):
-    live = client.get(f"/need/cells/{H8}").json()["live"]["weather"]
+    live = client.get(f"/need/cells/{H8}").json()["live"]["weather"]["alerts"]
     assert live == {"fetchedAt": None, "stale": True, "signals": []}
 
 
@@ -304,7 +304,7 @@ def test_real_zone_geometry_collection_becomes_a_valid_area():
     assert active(t("12:00")) == [feature["properties"]["id"]]  # downtown Houston
     assert active(t("12:00"), A8) == []
     with SessionLocal() as db:
-        valid = db.scalar(select(func.ST_IsValid(LiveWeatherSignal.geometry)))
+        valid = db.scalar(select(func.ST_IsValid(NwsAlert.geometry)))
     assert valid
 
 
@@ -332,7 +332,7 @@ def test_membership_uses_the_cell_center_not_any_overlap():
     )
     run(snapshot(clipped), t("14:01"))
     with SessionLocal() as db:
-        area = select(LiveWeatherSignal.geometry).where(LiveWeatherSignal.id == "tor-edge")
+        area = select(NwsAlert.geometry).where(NwsAlert.id == "tor-edge")
         overlaps = db.scalar(
             select(func.ST_Intersects(area.scalar_subquery(), Cell.geometry)).where(
                 Cell.h3_index == H8

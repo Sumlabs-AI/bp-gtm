@@ -164,7 +164,7 @@ def live(action: str) -> None:
     from datetime import UTC, datetime
 
     from app.need.live import nws
-    from app.need.live.refresh import take_snapshot
+    from app.need.live.alerts import take_snapshot
 
     with nws.client() as http, SessionLocal() as db:
         snapshot = take_snapshot(
@@ -176,13 +176,13 @@ def live(action: str) -> None:
         db.commit()
     if snapshot.succeeded:
         print(
-            f"Live weather Snapshot {snapshot.fetched_at:%Y-%m-%d %H:%M}Z: "
+            f"NWS alert Snapshot {snapshot.fetched_at:%Y-%m-%d %H:%M}Z: "
             f"{snapshot.alerts_total} NWS alerts, {snapshot.signals_kept} kept as signals, "
             f"{snapshot.superseded} superseded",
             flush=True,
         )
     else:
-        print(f"Live weather Snapshot FAILED (signals unchanged): {snapshot.error}", flush=True)
+        print(f"NWS alert Snapshot FAILED (signals unchanged): {snapshot.error}", flush=True)
 
 
 def export(out: Path) -> None:
@@ -211,7 +211,7 @@ def main() -> None:
     p.add_argument("action", choices=["download", "compute", "validate"])
     p = sub.add_parser("weather", help="Baseline Weather Need pipeline")
     p.add_argument("action", choices=["download", "compute", "validate"])
-    p = sub.add_parser("live", help="Live Weather Signals (NWS alerts)")
+    p = sub.add_parser("live", help="live signals: NWS alerts (and forecast signals)")
     p.add_argument("action", choices=["refresh"])
     p = sub.add_parser("export", help="write all Cells to CSV")
     p.add_argument("--out", type=Path, required=True)

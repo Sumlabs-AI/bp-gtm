@@ -51,8 +51,8 @@ class WeatherConfig(BaseModel):
 weather = WeatherConfig()
 
 
-class LiveWeatherConfig(BaseModel):
-    """Live Weather Signals from NWS alerts (M4B-1). No score yet."""
+class NwsAlertConfig(BaseModel):
+    """NWS Alerts (M4B-1): official alerts, observed and not scored."""
 
     alerts_url: str = "https://api.weather.gov/alerts/active?area=TX"
     user_agent: str = "base-power-gtm need engine (github.com/mamalovesyou/bp-gtm)"
@@ -87,4 +87,4 @@ class LiveWeatherConfig(BaseModel):
     category_order: list[str] = ["tornado", "tropical", "severe_storm", "winter", "cold", "heat"]
 
 
-live_weather = LiveWeatherConfig()
+nws_alerts = NwsAlertConfig()

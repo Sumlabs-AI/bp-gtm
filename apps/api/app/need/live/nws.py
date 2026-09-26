@@ -1,4 +1,4 @@
-"""api.weather.gov access for Live Weather Signals (public domain; a User-Agent is required).
+"""api.weather.gov access for NWS Alerts (public domain; a User-Agent is required).
 
 Zone geometries (forecast `TXZ…` / county `TXC…`) rarely change, so they're cached on disk
 under data/cache/nws-zones/ (gitignored) and fetched once.
@@ -11,7 +11,7 @@ from pathlib import Path
 
 import httpx
 
-from app.need.config import live_weather as config
+from app.need.config import nws_alerts as config
 
 ZONE_CACHE = Path(__file__).resolve().parents[3] / "data/cache/nws-zones"
 

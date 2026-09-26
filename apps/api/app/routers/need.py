@@ -7,9 +7,9 @@ from sqlalchemy.orm import Session
 
 from app import geo
 from app.db import get_db
-from app.models import LiveWeatherSignal
+from app.models import NwsAlert
 from app.need.config import need
-from app.need.live.store import active_signals, live_status, most_severe_category
+from app.need.live.store import active_alerts, alert_status, most_severe_category
 from app.need.outage.component import outage_components
 from app.need.store import cells_in_viewport, get_cell
 from app.need.weather.component import weather_components
@@ -24,7 +24,9 @@ class LatLng(BaseModel):
     lng: float
 
 
-class LiveSignal(BaseModel):
+class AlertOut(BaseModel):
+    """An official NWS alert (never to be confused with our derived Forecast Signals)."""
+
     id: str
     event: str
     category: str
@@ -39,10 +41,14 @@ class LiveSignal(BaseModel):
     lastSeenAt: datetime  # noqa: N815
 
 
-class LiveWeather(BaseModel):
-    fetchedAt: datetime | None  # noqa: N815  (last successful Snapshot)
+class AlertFeed(BaseModel):
+    fetchedAt: datetime | None  # noqa: N815  (last successful NWS alert Snapshot)
     stale: bool
-    signals: list[LiveSignal]
+    signals: list[AlertOut]
+
+
+class LiveWeather(BaseModel):
+    alerts: AlertFeed
 
 
 class Live(BaseModel):
@@ -59,8 +65,8 @@ class CellDetail(BaseModel):
     live: Live
 
 
-def _live_signal(s: LiveWeatherSignal) -> LiveSignal:
-    return LiveSignal(
+def _alert_out(s: NwsAlert) -> AlertOut:
+    return AlertOut(
         id=s.id,
         event=s.event,
         category=s.category,
@@ -95,7 +101,7 @@ def list_cells(db: DB, bbox: Annotated[str, Query(description="west,south,east,n
     now = datetime.now(UTC)
     outage = outage_components(db, cells, now.date())
     weather = weather_components(db, cells)
-    live = active_signals(db, cells, now)
+    alerts = active_alerts(db, cells, now)
     return {
         "type": "FeatureCollection",
         "features": [
@@ -108,8 +114,8 @@ def list_cells(db: DB, bbox: Annotated[str, Query(description="west,south,east,n
                     "needScore": None,
                     "outageNeed": (outage[c.h3_index] or {}).get("score"),
                     "weatherNeed": (weather[c.h3_index] or {}).get("score"),
-                    "activeWeatherSignals": len(live[c.h3_index]),
-                    "activeWeatherCategory": most_severe_category(live[c.h3_index]),
+                    "activeAlerts": len(alerts[c.h3_index]),
+                    "activeAlertCategory": most_severe_category(alerts[c.h3_index]),
                 },
             }
             for c in cells
@@ -126,7 +132,7 @@ def cell_detail(db: DB, h3_index: str):
     outage = outage_components(db, [cell], now.date())[cell.h3_index]
     weather = weather_components(db, [cell])[cell.h3_index]
     components = {name: c for name, c in (("outage", outage), ("weather", weather)) if c}
-    fetched_at, stale = live_status(db, now)
+    fetched_at, stale = alert_status(db, now)
     return CellDetail(
         h3=cell.h3_index,
         resolution=cell.resolution,
@@ -136,9 +142,11 @@ def cell_detail(db: DB, h3_index: str):
         components=components,
         live=Live(
             weather=LiveWeather(
-                fetchedAt=fetched_at,
-                stale=stale,
-                signals=[_live_signal(s) for s in active_signals(db, [cell], now)[cell.h3_index]],
+                alerts=AlertFeed(
+                    fetchedAt=fetched_at,
+                    stale=stale,
+                    signals=[_alert_out(s) for s in active_alerts(db, [cell], now)[cell.h3_index]],
+                )
             )
         ),
     )

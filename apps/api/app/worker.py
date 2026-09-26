@@ -5,8 +5,8 @@
 
 Each week: ERCOT prices (current-year files) -> grid scores, then every lead source ->
 lead scores. Every source run is logged in source_runs (see /sources).
-Every few minutes: one NWS alert Snapshot for Live Weather Signals (logged in
-live_weather_snapshots; a failure changes no signal).
+Every few minutes: one NWS alert Snapshot (NWS Alerts) (logged in
+nws_alert_snapshots; a failure changes no signal).
 """
 
 import argparse
@@ -20,7 +20,7 @@ from app.grid.__main__ import backfill, compute
 from app.leads.__main__ import refresh, score
 from app.leads.pipeline import SOURCES
 from app.need.__main__ import live
-from app.need.config import live_weather
+from app.need.config import nws_alerts
 
 TZ = ZoneInfo("America/Chicago")
 RUN_WEEKDAY = 6  # Sunday
@@ -80,7 +80,7 @@ def main() -> None:
         due, wake = plan(datetime.now(UTC), next_weekly, next_live)
         if "live" in due:
             run_live()
-            next_live = datetime.now(UTC) + timedelta(minutes=live_weather.refresh_minutes)
+            next_live = datetime.now(UTC) + timedelta(minutes=nws_alerts.refresh_minutes)
         if "weekly" in due:
             # In its own thread: the weekly job can take hours, and live Snapshots must keep
             # coming meanwhile (or live data goes stale).

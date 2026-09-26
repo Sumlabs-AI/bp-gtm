@@ -2,7 +2,7 @@
 
 Scores **how useful backup power is** in a place, per **Cell** (H3 resolution-8 hexagon, ~0.74 km²). It is separate from lead scoring and from the ML Propensity Score, which join onto the same Cells by `h3_index`. Terms: [`CONTEXT.md`](../CONTEXT.md). Why PostGIS: [ADR 0001](../docs/adr/0001-postgis.md).
 
-Status: **Milestones 1–4A + 4B-1**. Cells exist for Harris and Travis counties, each with its ERCOT Load Zone and county. Baseline: an **Outage Need Component** and a **Weather Need Component**. Live: **Live Weather Signals** (official NWS alerts, observed and not scored). All are drawn on `/need`. There's no combined Need Score yet (`needScore: null`, see M6). Static geography is closed: a new geography is added only when a Need signal needs it.
+Status: **Milestones 1–4A + 4B-1**. Cells exist for Harris and Travis counties, each with its ERCOT Load Zone and county. Baseline: an **Outage Need Component** and a **Weather Need Component**. Live: **NWS Alerts** (official, observed and not scored). All are drawn on `/need`. There's no combined Need Score yet (`needScore: null`, see M6). Static geography is closed: a new geography is added only when a Need signal needs it.
 
 ## The Cell contract (shared with ML)
 
@@ -139,12 +139,12 @@ Cell (res 8) ─┬─ res-6 parent ── IEM SV/TO/EW warning-days 5y ── T
   - Top Texas storm cells are around Amarillo (75 warning-days in 5 y).
   - Temperature over the 5 years through 2026-02-28, days ≥100°F / ≥95°F / ≤28°F / ≤32°F: Harris 37/261/26/43 (exposure 8), Travis 133/347/52/93 (exposure 47).
 
-## Live Weather Signals (M4B-1, issue #14)
+## NWS Alerts (M4B-1, issue #14)
 
-"Is this place threatened right now?" Official NWS alerts, recorded as **Live Weather Signals**. **No score yet** (M4B-3 decides scoring, once signals are proven).
+"Is this place threatened right now?" Official NWS alerts, recorded as **NWS Alerts**, one of the two kinds of **Live Weather Signal**. The other kind, derived **Forecast Signals**, arrives in M4B-2 and is kept strictly separate. **No score yet** (M4B-3).
 
-- **Source**: `api.weather.gov/alerts/active?area=TX`. It's public domain with no key, but a User-Agent is required (`LiveWeatherConfig.user_agent`). One request per **Snapshot**; the `worker` takes one every 5 min.
-- **Allowlist** (`LiveWeatherConfig.categories`), NWS event → category:
+- **Source**: `api.weather.gov/alerts/active?area=TX`. It's public domain with no key, but a User-Agent is required (`NwsAlertConfig.user_agent`). One request per **Snapshot**; the `worker` takes one every 5 min.
+- **Allowlist** (`NwsAlertConfig.categories`), NWS event → category:
   - tornado
   - severe_storm
   - tropical (incl. hurricane/tropical watches, storm surge)
@@ -154,10 +154,10 @@ Cell (res 8) ─┬─ res-6 parent ── IEM SV/TO/EW warning-days 5y ── T
 
   Flood, fire, air quality and marine are ignored. Tropical and ice *are* live signals even though they're excluded from Baseline Weather: Baseline asks how often, Live asks is it happening now.
 - **Area**: the alert's own polygon (`geometry_source = "alert"`), or the union of its NWS zones (`"zones"`, forecast `TXZ…`/county `TXC…`). Zones are fetched once and cached atomically in `data/cache/nws-zones/`. Zones come back as a `GeometryCollection` (e.g. Inland Harris = Polygon + MultiPolygon). Every area is repaired (`make_valid`), flattened and merged into one valid MultiPolygon.
-- **Two clocks, kept apart** (`live_weather_signals`, never deleted):
+- **Two clocks, kept apart** (`nws_alerts`, never deleted):
   - NWS event time: `effective_at`, `onset_at`, `expires_at`, `ends_at`
   - Our ingestion state: `first_seen_at`, `last_seen_at`, `superseded_at`
-  - `live_weather_snapshots` logs every attempt: `fetched_at`, `succeeded`, counts, `error`
+  - `nws_alert_snapshots` logs every attempt: `fetched_at`, `succeeded`, counts, `error`
 - **Snapshots**:
   - A **successful, complete** Snapshot upserts allowlisted alerts and supersedes signals missing from it (NWS cancelled, replaced or ended them).
   - **Any failure** (fetch, parse, one zone geometry, or the database writes, which run in a savepoint) logs a failed Snapshot and changes no signal.
@@ -169,11 +169,11 @@ Cell (res 8) ─┬─ res-6 parent ── IEM SV/TO/EW warning-days 5y ── T
   No clean-up job: an alert ending at 15:30 simply stops matching at 15:30.
 - **Stale**: if no Snapshot has succeeded within 30 min (`stale_after_minutes`), the API says `stale: true`. Active signals are still shown, marked as possibly out of date.
 - **API**:
-  - `GET /need/cells/{h3}` → `live.weather = {fetchedAt, stale, signals[]}`. Each signal has event, category, severity, certainty, urgency, headline, effectiveAt, endsAt, geometrySource, firstSeenAt, lastSeenAt.
-  - `GET /need/cells` features → `activeWeatherSignals` (count) and `activeWeatherCategory` (most severe, `category_order`).
+  - `GET /need/cells/{h3}` → `live.weather.alerts = {fetchedAt, stale, signals[]}`. Each signal has event, category, severity, certainty, urgency, headline, effectiveAt, endsAt, geometrySource, firstSeenAt, lastSeenAt.
+  - `GET /need/cells` features → `activeAlerts` (count) and `activeAlertCategory` (most severe, `category_order`).
 - **Map**: red outline on Cells with an active signal; the sheet lists them with end times and the stale flag.
 - **Worker**: the weekly job runs in its own thread, so live Snapshots keep coming while it works (hours for the lead sources).
-- **Tests** (`tests/e2e/test_live_weather.py`): NWS payloads are injected, plus recorded real fixtures in `tests/fixtures/nws/` (a Texas alert feed and the Inland Harris zone). Covered:
+- **Tests** (`tests/e2e/test_nws_alerts.py`): NWS payloads are injected, plus recorded real fixtures in `tests/fixtures/nws/` (a Texas alert feed and the Inland Harris zone). Covered:
   - time expiry with no refresh
   - successful-Snapshot cancellation
   - failed-Snapshot staleness

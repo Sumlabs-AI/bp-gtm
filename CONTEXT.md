@@ -77,15 +77,23 @@ A local calendar day on which a place was inside at least one qualifying NWS war
 _Avoid_: warning count (when meaning days)
 
 **Live Weather Signal**:
-One official NWS alert (e.g. a Tornado Warning) that may make backup power urgent: its event, category, severity, certainty, urgency, event time window (effective to ends) and area. Recorded as observed; not a score.
-_Avoid_: live alert score, weather event (when meaning the alert)
+Umbrella for evidence that weather makes backup power urgent now. It has exactly two kinds, NWS Alerts and Forecast Signals, which must never be presented as equivalent. Not a score.
+_Avoid_: live alert (for both kinds), weather event
+
+**NWS Alert**:
+An official NWS warning, watch or advisory (e.g. a Tornado Warning), issued by NWS with its own area and event time window. High-confidence, actionable.
+_Avoid_: alert signal, warning (for watches/advisories too)
+
+**Forecast Signal**:
+Our deterministic reading of NWS gridded forecast or SPC outlook data: a continuous period in which a forecast value crosses one of our thresholds (e.g. wind gusts ≥ 58 mph from 14:00 to 20:00 tomorrow), or an SPC risk area. Derived by us, not issued by NWS.
+_Avoid_: forecast alert, warning, prediction
 
 **Active** (signal):
-A Live Weather Signal whose event window contains now (effective ≤ now < ends) and which was still present in the latest successful NWS snapshot. A Cell is affected when its center is inside the signal's area.
+A Live Weather Signal whose time window contains now and which came from the latest successful fetch of its source (for NWS Alerts, the latest successful Snapshot). A Cell is affected when its center is inside the signal's area.
 _Avoid_: current, open
 
 **Snapshot**:
-One complete fetch of all active NWS alerts for Texas. Only a successful, complete Snapshot can end signals that disappeared; a failed one changes nothing, and live data becomes stale when no Snapshot has succeeded recently.
+One complete fetch of all active NWS Alerts for Texas. Only a successful, complete Snapshot can end alerts that disappeared; a failed one changes nothing, and alert data becomes stale when no Snapshot has succeeded recently.
 _Avoid_: poll (when meaning the stored result), sync
 
 **Grid Need Component**:
