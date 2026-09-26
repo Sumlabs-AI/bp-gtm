@@ -1,7 +1,7 @@
 "use client"
 
 import * as React from "react"
-import { setWorkerUrl } from "maplibre-gl"
+import { setWorkerUrl, type ExpressionSpecification } from "maplibre-gl"
 import Map, { Layer, NavigationControl, Source, type MapLayerMouseEvent, type MapRef } from "react-map-gl/maplibre"
 import "maplibre-gl/dist/maplibre-gl.css"
 
@@ -16,7 +16,7 @@ import { PropensityBlock } from "@/components/need/propensity"
 import { WeatherBreakdown } from "@/components/need/weather-breakdown"
 import { apiFetch } from "@/lib/api"
 import { scoreColor } from "@/lib/grid"
-import { COLOR_BY, H3_MAP_MIN_ZOOM, MARKETS, type CellCollection, type CellDetail, type ColorBy } from "@/lib/need"
+import { COLOR_BY, H3_MAP_MIN_ZOOM, MARKETS, NEED_BANDS, type CellCollection, type CellDetail, type ColorBy } from "@/lib/need"
 
 const BASEMAP = "https://tiles.openfreemap.org/styles/positron"
 
@@ -33,7 +33,39 @@ type Hover = {
   forecastLevel: string | null
 }
 
-export function CellMap({ className }: { className?: string }) {
+export type LeadPoint = {
+  type: "Feature"
+  geometry: { type: "Point"; coordinates: [number, number] }
+  properties: { id: number; address?: string | null }
+}
+
+/**
+ * The Need map. On its own it explains Cells in a sheet. In controlled mode (the GTM page)
+ * it is a filter: it reports the viewport, toggles Cells and bands, dims what's filtered
+ * out, and shows the leads inside the filter as points once zoomed in.
+ */
+export function CellMap({
+  className,
+  selectedCells,
+  onToggleCell,
+  bands,
+  onToggleBand,
+  onViewport,
+  points,
+  onPointClick,
+  pointsMinZoom = 13,
+}: {
+  className?: string
+  selectedCells?: string[]
+  onToggleCell?: (h3: string, additive: boolean) => void
+  bands?: string[] // active Baseline Need bands; empty = all
+  onToggleBand?: (band: string) => void
+  onViewport?: (bbox: string, zoom: number) => void
+  points?: { type: "FeatureCollection"; features: LeadPoint[] } | null
+  onPointClick?: (id: number) => void
+  pointsMinZoom?: number
+}) {
+  const controlled = Boolean(onToggleCell)
   const mapRef = React.useRef<MapRef>(null)
   const timer = React.useRef<ReturnType<typeof setTimeout> | null>(null)
   const [bbox, setBbox] = React.useState<string | null>(null)
@@ -59,7 +91,9 @@ export function CellMap({ className }: { className?: string }) {
     }
     const b = map.getBounds()
     setStatus("loading")
-    setBbox([b.getWest(), b.getSouth(), b.getEast(), b.getNorth()].map((v) => v.toFixed(5)).join(","))
+    const box = [b.getWest(), b.getSouth(), b.getEast(), b.getNorth()].map((v) => v.toFixed(5)).join(",")
+    setBbox(box)
+    onViewport?.(box, map.getZoom())
   }
 
   React.useEffect(() => {
@@ -107,7 +141,20 @@ export function CellMap({ className }: { className?: string }) {
     )
   }
 
-  const highlighted = [selected ?? "", hover?.h3 ?? ""]
+  const highlighted = [...(controlled ? (selectedCells ?? []) : [selected ?? ""]), hover?.h3 ?? ""]
+  // MapLibre expression: is this Cell's Baseline Need inside one of the active bands?
+  const activeBands = bands && bands.length ? NEED_BANDS.filter((b) => bands.includes(b.key)) : []
+  const bandFilter: ExpressionSpecification | null =
+    colorBy === "baselineNeed" && activeBands.length
+      ? ([
+          "any",
+          ...activeBands.map((b) => [
+            "all",
+            [">=", ["get", "baselineNeed"], b.low],
+            ["<", ["get", "baselineNeed"], b.high],
+          ]),
+        ] as ExpressionSpecification)
+      : null
 
   return (
     <div className={className}>
@@ -116,7 +163,7 @@ export function CellMap({ className }: { className?: string }) {
           ref={mapRef}
           initialViewState={{ longitude: MARKETS[0].center[0], latitude: MARKETS[0].center[1], zoom: 10 }}
           mapStyle={BASEMAP}
-          interactiveLayerIds={data ? ["cells-fill"] : []}
+          interactiveLayerIds={[...(data ? ["cells-fill"] : []), ...(points ? ["lead-points"] : [])]}
           onLoad={readViewport}
           onMoveEnd={() => {
             if (timer.current) clearTimeout(timer.current)
@@ -124,7 +171,19 @@ export function CellMap({ className }: { className?: string }) {
           }}
           onMouseMove={onMove}
           onMouseLeave={() => setHover(null)}
-          onClick={(e) => setSelected(e.features?.[0]?.properties?.h3 ?? null)}
+          onClick={(e) => {
+            const feature = e.features?.[0]
+            if (feature?.layer?.id === "lead-points" && onPointClick) {
+              onPointClick(Number(feature.properties?.id))
+              return
+            }
+            const h3 = feature?.properties?.h3 ?? null
+            if (controlled) {
+              if (h3) onToggleCell?.(h3, e.originalEvent.shiftKey || e.originalEvent.metaKey)
+            } else {
+              setSelected(h3)
+            }
+          }}
           cursor={hover ? "pointer" : "grab"}
           attributionControl={{ compact: true }}
         >
@@ -145,7 +204,13 @@ export function CellMap({ className }: { className?: string }) {
                       "#6366f1",
                       ["interpolate", ["linear"], ["get", colorBy], 0, scoreColor(0), 50, scoreColor(50), 100, scoreColor(100)],
                     ],
-                    "fill-opacity": ["case", ["==", ["get", colorBy], null], 0.08, 0.45],
+                    // Filtered out (band not active): dimmed so the filter is visible.
+                    "fill-opacity": [
+                      "case",
+                      ["==", ["get", colorBy], null],
+                      0.08,
+                      bandFilter ? ["case", bandFilter, 0.45, 0.06] : 0.45,
+                    ],
                   }}
                 />,
                 <Layer
@@ -183,6 +248,22 @@ export function CellMap({ className }: { className?: string }) {
                   paint={{ "line-color": "#312e81", "line-width": 2.5 }}
                 />,
               ]}
+            </Source>
+          )}
+          {points && (
+            <Source id="leads" type="geojson" data={points}>
+              <Layer
+                id="lead-points"
+                source="leads"
+                type="circle"
+                minzoom={pointsMinZoom}
+                paint={{
+                  "circle-color": "#0f172a",
+                  "circle-radius": 4,
+                  "circle-stroke-color": "#ffffff",
+                  "circle-stroke-width": 1,
+                }}
+              />
             </Source>
           )}
           <NavigationControl position="top-right" showCompass={false} />
@@ -226,6 +307,28 @@ export function CellMap({ className }: { className?: string }) {
           ))}
         </div>
 
+        {onToggleBand && colorBy === "baselineNeed" && (
+          <div className="absolute bottom-3 left-3 flex items-center gap-1 rounded-md border bg-background/90 px-2 py-1.5 text-xs shadow-sm">
+            <span className="pr-1 text-muted-foreground">Baseline Need</span>
+            {NEED_BANDS.map((b) => {
+              const active = !bands?.length || bands.includes(b.key)
+              return (
+                <button
+                  key={b.key}
+                  type="button"
+                  onClick={() => onToggleBand(b.key)}
+                  title={`Show leads in Cells scored ${b.label}`}
+                  className={`flex items-center gap-1 rounded px-1.5 py-0.5 tabular-nums ${bands?.includes(b.key) ? "ring-2 ring-slate-900" : ""} ${active ? "" : "opacity-40"}`}
+                >
+                  <span className="inline-block h-3 w-3 rounded-sm" style={{ background: scoreColor((b.low + Math.min(b.high, 100)) / 2) }} />
+                  {b.label}
+                </button>
+              )
+            })}
+            <span className="pl-1 text-muted-foreground">click to filter</span>
+          </div>
+        )}
+
         {hover && (
           <div
             className="pointer-events-none absolute z-10 rounded-lg border bg-background p-2 font-mono text-xs shadow-md"
@@ -242,6 +345,7 @@ export function CellMap({ className }: { className?: string }) {
         )}
       </div>
 
+      {!controlled && (
       <Sheet open={selected !== null} onOpenChange={(open) => !open && setSelected(null)}>
         <SheetContent>
           <SheetHeader>
@@ -275,6 +379,7 @@ export function CellMap({ className }: { className?: string }) {
           )}
         </SheetContent>
       </Sheet>
+      )}
     </div>
   )
 }

@@ -2,7 +2,7 @@
 
 import * as React from "react"
 import Link from "next/link"
-import { DatabaseIcon, HexagonIcon, MapIcon, RadarIcon, UsersIcon } from "lucide-react"
+import { DatabaseIcon, MapIcon, RadarIcon, UsersIcon } from "lucide-react"
 
 import { NavMain } from "@/components/nav-main"
 import { NavSecondary } from "@/components/nav-secondary"
@@ -17,8 +17,8 @@ import {
 } from "@/components/ui/sidebar"
 
 const mainItems = [
-  { title: "Leads", url: "/leads", icon: UsersIcon },
-  { title: "Need", url: "/need", icon: HexagonIcon },
+  { title: "GTM", url: "/gtm", icon: RadarIcon },
+  { title: "Leads (all)", url: "/leads", icon: UsersIcon },
   { title: "Grid Zones", url: "/grid", icon: MapIcon },
 ]
 const operationItems = [
@@ -35,7 +35,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
           <SidebarMenuItem>
             <SidebarMenuButton
               size="lg"
-              render={<Link href="/leads" />}
+              render={<Link href="/gtm" />}
               onClick={() => setOpenMobile(false)}
             >
               <RadarIcon />

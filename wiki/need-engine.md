@@ -274,6 +274,17 @@ Baseline Need = midrank percentile of raw within the statewide Texas res-6 refer
   - day-ahead hourly
 - First real run (2026-09-26 15:35 CDT): Normal, PRC 18,497 MW, tightest forecast margin 13,825 MW. No stress.
 
+## Leads and Cells (M8, issue #27)
+
+A home joins the Need Engine through **`properties.h3_index`** (its H3 res-8 Cell from the parcel point, set by the parcel loader and once by `python -m app.leads cells`). It is the master key: Cell scores are never copied onto leads. `GET /leads` joins them at request time:
+
+- ranking `sort=need`: the Cell's Baseline Need, then the home's estimated consumption, then Expected Value (the Lead Score is no longer a sort or a UI column; it's still computed by the pipeline);
+- each item carries `h3_index` and a `cell` block (`baseline_need`, `propensity_score`, `active_alerts`, `forecast_level`, `grid_stress_signals`), read from the Need tables per page (`app/need/for_leads.py`);
+- Cell filters: `cells` (res-8 ids), `need_band` (`NEED_BANDS` in `app/need/config.py`, lower edge inclusive), `alert`, `forecast`, `grid_stress` (Cells with an active signal at request time), `bbox`. Any Cell filter drops homes outside every seeded Cell (~2,600 at the county edge);
+- `summary`: leads in the filtered set, their average Baseline Need, how many sit under an active alert / forecast risk / grid stress, and the ERCOT condition.
+
+Only Harris has leads (the pipeline is built on HCAD and CenterPoint); Travis Cells show Need with an empty list. Timing on real data: an unfiltered list is ~1.7 s (the count over 772k rows), a viewport ~0.8 s, a Cell ~0.25 s.
+
 ## Commands
 
 ```bash
@@ -289,6 +300,7 @@ docker compose exec api python -m app.need weather download        # IEM warning
 docker compose exec api python -m app.need weather compute         # res-6 Storm Exposure + county Temperature Extremes
 docker compose exec api python -m app.need weather validate        # warning-days by year, Derecho/Beryl, top storm cells
 docker compose exec api python -m app.need baseline compute        # Baseline Need (after outage + weather compute)
+docker compose exec api python -m app.leads cells                  # backfill each home's H3 Cell (once; the parcel loader keeps it current)
 docker compose exec api python -m app.need export-ml --out-dir data/ml           # need_features + res-6 reference Parquet for ML
 docker compose exec api python -m app.need import-propensity data/ml/propensity.parquet  # load the ML workstream's predictions
 docker compose exec api python -m app.need live refresh            # one NWS alert Snapshot (the worker does this every 5 min)

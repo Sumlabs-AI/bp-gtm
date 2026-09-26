@@ -29,6 +29,8 @@ fingerprint → fetch → parse  →   upsert + change tracking → eligibility 
 
 ## Eligibility and score
 
+> **Ranking changed (M8):** the GTM page ranks leads by their Cell's Baseline Need, then the home's estimated consumption; the Lead Score below is still computed and served (`score`, `drivers`, `reasons`) but no longer shown or used for ranking. See [need-engine.md](need-engine.md#leads-and-cells-m8-issue-27).
+
 A property becomes a lead only if it is single-family (state class A1), has a homestead exemption (owner-occupied), is not a confidential record (Tax Code 25.025), and its address matches an **active residential meter on a TDSP Base serves** (`BASE_TDSPS` in `app/leads/config.py`).
 
 Drivers (0–100, weights in `app/leads/config.py`): home size and home value are percentiles among eligible homes; solar (appraisal record **or** permit), EV charger, pool/spa (a large, steady electric load), new owner (owner changed on the appraisal roll within the lookback) and new home (recent year built, new-home permit or new meter) are yes/no. Score = weighted average. `reasons` names the two strongest drivers.

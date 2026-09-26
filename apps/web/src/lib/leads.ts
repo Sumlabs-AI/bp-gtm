@@ -59,8 +59,19 @@ export function leadReturnHref(value: string | string[] | undefined): string {
   return `/leads${filters.size ? `?${filters}` : ""}`
 }
 
+// What a lead's H3 Cell says about it, read from the Need Engine at request time.
+export type CellBlock = {
+  baseline_need: number | null
+  propensity_score: number | null
+  active_alerts: number
+  forecast_level: "elevated" | "high" | null
+  grid_stress_signals: number
+}
+
 export type LeadItem = {
   id: number
+  h3_index: string | null
+  cell: CellBlock | null // null when the home is outside every seeded Cell
   address: string | null
   city: string | null
   zip: string | null
@@ -79,9 +90,19 @@ export type LeadItem = {
   annual_kwh: number | null
 }
 
+export type LeadListSummary = {
+  leads: number
+  avg_baseline_need: number | null
+  alert: number
+  forecast: number
+  grid_stress: number
+  grid_state: string | null
+}
+
 export type LeadPage = {
   total: number
   items: LeadItem[]
+  summary: LeadListSummary
 }
 
 export type LeadDriver = {
