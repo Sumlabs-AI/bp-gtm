@@ -13,7 +13,7 @@ import { Input } from "@/components/ui/input"
 import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { apiFetch } from "@/lib/api"
-import { BATTERY_SIZES, SIGNAL_LABELS, STATUS_LABELS, formatLeadMoney, signalLabel, type LeadItem, type LeadPage, type LeadSignal, type LeadStatus, type LeadSummary } from "@/lib/leads"
+import { BATTERY_SIZES, SIGNAL_LABELS, STATUS_LABELS, formatLeadMoney, signalLabel, valueBasis, type LeadItem, type LeadPage, type LeadSignal, type LeadStatus, type LeadSummary } from "@/lib/leads"
 import { cn } from "@/lib/utils"
 
 export const metadata = { title: "Leads" }
@@ -93,6 +93,7 @@ export default async function LeadsPage(props: PageProps<"/leads">) {
     apiFetch<LeadSummary>("/leads/summary"),
     apiFetch<LeadPage>(`/leads?${listQuery}`),
   ])
+  const firstBatteryValue = page.items.flatMap((lead) => Object.values(lead.battery_values ?? {}))[0]
 
   function listHref(nextView = view, nextOffset = offset) {
     const params = new URLSearchParams(filters)
@@ -188,7 +189,7 @@ export default async function LeadsPage(props: PageProps<"/leads">) {
           <LeadsMap key={filters.toString()} filters={{ minScore, signals, newOnly, zip, status: status === "all" ? undefined : status }} backHref={backHref} className="h-[min(65vh,600px)] min-h-96" />
         ) : (
           <>
-            <p className="text-xs text-muted-foreground">Historical grid value to Base · $/year · Last 12 months. Suggested size is highlighted. Only recorded signals are shown; — = none found in available records.</p>
+            <p className="text-xs text-muted-foreground">Historical grid value to Base · $/year · {valueBasis(firstBatteryValue)}. Suggested size is highlighted. Only recorded signals are shown; — = none found in available records.</p>
             <div className="hidden rounded-xl border xl:block">
               <Table>
                 <TableHeader><TableRow><TableHead>Address</TableHead><TableHead>Priority value / Fit</TableHead><TableHead>Historical grid value to Base</TableHead><TableHead>Recorded signals</TableHead><TableHead>Recent signal</TableHead><TableHead>Review status</TableHead></TableRow></TableHeader>
@@ -220,7 +221,7 @@ export default async function LeadsPage(props: PageProps<"/leads">) {
                   </CardHeader>
                   <CardContent className="flex flex-col gap-3">
                     <div className="flex flex-wrap justify-between gap-2 text-sm tabular-nums"><span>Priority value <strong>{lead.expected_value === null ? "Unavailable" : formatLeadMoney(lead.expected_value)}</strong></span><span>Fit {lead.score.toFixed(0)} / 100</span></div>
-                    <div><p className="mb-1 text-xs text-muted-foreground">Historical grid value to Base · $/year · Last 12 months. Suggested size is highlighted.</p><BatteryValues lead={lead} /></div>
+                    <div><p className="mb-1 text-xs text-muted-foreground">Historical grid value to Base · $/year · {valueBasis(Object.values(lead.battery_values ?? {})[0])}. Suggested size is highlighted.</p><BatteryValues lead={lead} /></div>
                     <RecordedSignals lead={lead} />
                     <p className="text-xs text-muted-foreground">Recent signal: {recentTrigger(lead.triggered_at, lead.trigger)}</p>
                   </CardContent>

@@ -14,7 +14,7 @@ import { Separator } from "@/components/ui/separator"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { apiFetch } from "@/lib/api"
 import type { ZoneDetail } from "@/lib/grid"
-import { BATTERY_SIZES, STATUS_LABELS, formatLeadDriverValue, formatLeadMoney, leadReturnHref, signalLabel, type LeadDetail } from "@/lib/leads"
+import { BATTERY_SIZES, STATUS_LABELS, formatLeadDriverValue, formatLeadMoney, leadReturnHref, signalLabel, valueBasis, type LeadDetail } from "@/lib/leads"
 import { cn } from "@/lib/utils"
 
 const formatNumber = (value: number | null) => value === null ? "—" : Math.round(value).toLocaleString("en-US")
@@ -75,6 +75,7 @@ export default async function LeadDetailPage(props: PageProps<"/leads/[id]">) {
   const returnHref = leadReturnHref(back)
   const batteryYears = [...(zone?.series.battery_years ?? [])].sort((a, b) => b.year - a.year)
   const suggestedValue = lead.recommended_kwh === null ? null : lead.battery_values?.[lead.recommended_kwh]
+  const basisValue = suggestedValue ?? Object.values(lead.battery_values ?? {})[0]
 
   const flagDrivers = lead.drivers.filter((driver) => driver.kind === "flag")
   const percentileDrivers = lead.drivers.filter((driver) => driver.kind === "percentile")
@@ -135,7 +136,7 @@ export default async function LeadDetailPage(props: PageProps<"/leads/[id]">) {
                 ? "Suggested size unavailable"
                 : `Suggested size: ${lead.recommended_kwh} kWh`}</p>
               {lead.sizing_reason && <p className="text-sm text-muted-foreground">{lead.sizing_reason}</p>}
-              {lead.value !== null && <p className="text-xs text-muted-foreground">Historical grid value to Base: {formatLeadMoney(lead.value)}/yr · Last 12 months, based on this Load Zone.</p>}
+              {lead.value !== null && <p className="text-xs text-muted-foreground">Historical grid value to Base: {formatLeadMoney(lead.value)}/yr · {valueBasis(basisValue).toLowerCase()}, based on this Load Zone.</p>}
             </CardContent>
           </Card>
           <Card>
@@ -164,7 +165,7 @@ export default async function LeadDetailPage(props: PageProps<"/leads/[id]">) {
                       <p className="text-sm font-semibold tabular-nums sm:text-xl">
                         {lead.battery_values === null ? <span aria-label="Value unavailable">—</span> : <>{formatLeadMoney(lead.battery_values[size].value)}<span className="text-xs font-normal text-muted-foreground">/yr</span></>}
                       </p>
-                      <p className="text-xs text-muted-foreground">Last 12 months</p>
+                      <p className="text-xs text-muted-foreground">{valueBasis(lead.battery_values?.[size])}</p>
                       {lead.recommended_kwh === size && <Badge variant="secondary">Suggested</Badge>}
                     </div>
                   ))}
@@ -182,13 +183,14 @@ export default async function LeadDetailPage(props: PageProps<"/leads/[id]">) {
                           <p>{batteryValue && batteryValue.low !== null && batteryValue.low_year !== null && batteryValue.high !== null && batteryValue.high_year !== null
                             ? `Full calendar years · Lowest: ${formatLeadMoney(batteryValue.low)} (${batteryValue.low_year}); highest: ${formatLeadMoney(batteryValue.high)} (${batteryValue.high_year}).`
                             : "Full-year history unavailable."}</p>
-                          <p>Perfect-hindsight ceiling · Same last 12 months: {batteryValue ? `${formatLeadMoney(batteryValue.ceiling)}/yr.` : "Unavailable."}</p>
+                          <p>Last 12 months: {batteryValue ? `${formatLeadMoney(batteryValue.recent)}/yr.` : "Unavailable."}</p>
+                          <p>Perfect-hindsight ceiling · {batteryValue && batteryValue.first_year !== null && batteryValue.last_year !== null ? "Average year" : valueBasis(batteryValue)}: {batteryValue ? `${formatLeadMoney(batteryValue.ceiling)}/yr.` : "Unavailable."}</p>
                         </div>
                       )
                     })}
                     <p>The perfect-hindsight ceiling is a benchmark assuming every future price was known.</p>
-                    {suggestedValue && suggestedValue.low !== null && suggestedValue.value < suggestedValue.low && <p>
-                      The last 12 months were below every full calendar year shown. These cover different periods.
+                    {suggestedValue && suggestedValue.low !== null && suggestedValue.recent < suggestedValue.low && <p>
+                      The last 12 months were below every full calendar year shown.
                     </p>}
                     {batteryYears.length > 0 && <Table aria-label="Historical grid value to Base by full calendar year, dollars per year">
                       <TableHeader><TableRow>
@@ -207,6 +209,10 @@ export default async function LeadDetailPage(props: PageProps<"/leads/[id]">) {
                       </TableBody>
                     </Table>}
                     <p>
+                      {basisValue && basisValue.first_year !== null && basisValue.last_year !== null && <>
+                        Average of full calendar years {basisValue.first_year}–{basisValue.last_year}, so one unusually
+                        quiet or spiky year doesn&apos;t drive the ranking.{" "}
+                      </>}
                       Simulated energy-trading value using ERCOT day-ahead plans and real-time prices, without hindsight.
                       Includes energy losses, 2¢/kWh battery wear and 20% kept for backup. Excludes retail margin, fees
                       and ancillary services. Historical estimate, not forecast revenue or customer savings.

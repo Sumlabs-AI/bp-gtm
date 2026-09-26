@@ -6,11 +6,12 @@ import { setWorkerUrl } from "maplibre-gl"
 import Map, { Layer, NavigationControl, Source, type MapLayerMouseEvent, type MapRef } from "react-map-gl/maplibre"
 import "maplibre-gl/dist/maplibre-gl.css"
 
+import { Badge } from "@/components/ui/badge"
 import { Button, buttonVariants } from "@/components/ui/button"
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
 import { apiFetch } from "@/lib/api"
 import { scoreColor } from "@/lib/grid"
-import { formatLeadMoney, signalLabel, type LeadDetail, type LeadSignal, type LeadStatus } from "@/lib/leads"
+import { formatLeadMoney, signalLabel, valueBasis, type LeadDetail, type LeadSignal, type LeadStatus } from "@/lib/leads"
 import { cn } from "@/lib/utils"
 
 const BASEMAP = "https://tiles.openfreemap.org/styles/positron"
@@ -264,11 +265,14 @@ export function LeadsMap({ filters, backHref, className }: { filters: LeadMapFil
           <CardHeader><CardTitle>{preview?.lead?.address ?? selected.address ?? `Lead ${selected.id}`}</CardTitle></CardHeader>
           <CardContent aria-live="polite">
             {preview?.id !== selected.id ? <p className="text-sm text-muted-foreground">Loading lead preview…</p> : preview.lead ? (
-              <dl className="grid grid-cols-3 gap-3 text-sm">
-                <div><dt className="text-xs text-muted-foreground">Priority value</dt><dd className="font-medium tabular-nums">{preview.lead.expected_value === null ? "Unavailable" : formatLeadMoney(preview.lead.expected_value)}</dd><span className="text-xs text-muted-foreground">Ranking metric</span></div>
-                <div><dt className="text-xs text-muted-foreground">Fit</dt><dd className="font-medium tabular-nums">{preview.lead.score.toFixed(0)} / 100</dd></div>
-                <div><dt className="text-xs text-muted-foreground">Suggested size</dt><dd className="font-medium">{preview.lead.recommended_kwh ? `${preview.lead.recommended_kwh} kWh` : "Unavailable"}</dd></div>
-              </dl>
+              <div className="flex flex-col gap-3">
+                <dl className="grid grid-cols-3 gap-3 text-sm">
+                  <div><dt className="text-xs text-muted-foreground">Priority value</dt><dd className="font-medium tabular-nums">{preview.lead.expected_value === null ? "Unavailable" : formatLeadMoney(preview.lead.expected_value)}</dd><span className="text-xs text-muted-foreground">Ranking metric</span></div>
+                  <div><dt className="text-xs text-muted-foreground">Fit</dt><dd className="font-medium tabular-nums">{preview.lead.score.toFixed(0)} / 100</dd></div>
+                  <div><dt className="text-xs text-muted-foreground">Suggested size</dt><dd className="font-medium">{preview.lead.recommended_kwh ? <Badge variant="secondary">{preview.lead.recommended_kwh} kWh</Badge> : "Unavailable"}</dd></div>
+                </dl>
+                <p className="text-xs text-muted-foreground">Historical grid value to Base · $/year · {valueBasis(Object.values(preview.lead.battery_values ?? {})[0])}. Suggested size is highlighted.</p>
+              </div>
             ) : <div className="flex flex-wrap items-center gap-2"><p className="text-sm">Could not load this preview.</p><Button variant="outline" size="sm" onClick={() => { setPreview(null); setPreviewRetry((value) => value + 1) }}>Retry</Button></div>}
           </CardContent>
           <CardFooter className="flex gap-2">

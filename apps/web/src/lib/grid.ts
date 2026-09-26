@@ -28,7 +28,15 @@ export type ZoneDetail = ZoneSummary & {
   series: {
     hourly_profile: { hour: number; zone: number; hub: number }[]
     monthly: { month: string; arbitrage_usd: number; avg_basis: number }[]
-    battery_years?: { year: number; "25": number; "40": number; "50": number }[]
+    battery_years?: {
+      year: number
+      "25": number
+      "40": number
+      "50": number
+      ceiling_25: number
+      ceiling_40: number
+      ceiling_50: number
+    }[]
   }
   assumptions: {
     battery: {

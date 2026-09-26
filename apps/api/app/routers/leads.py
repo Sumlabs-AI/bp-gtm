@@ -21,8 +21,11 @@ SIGNAL_TYPES = ("solar", "ev_charger", "new_home", "new_owner", "new_meter", "po
 
 
 class BatteryValue(BaseModel):
-    value: float  # $/yr, battery trading on day-ahead plans over the last year
-    ceiling: float  # $/yr with perfect hindsight: the most it could have earned
+    value: float  # $/yr, battery trading on day-ahead plans, average full year
+    ceiling: float  # same average year with perfect hindsight: the most it could earn
+    first_year: int | None  # years averaged (None: fell back to the last 12 months)
+    last_year: int | None
+    recent: float  # $/yr over the last 12 months
     low: float | None  # worst full calendar year
     low_year: int | None
     high: float | None  # best full calendar year

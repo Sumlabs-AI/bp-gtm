@@ -6,6 +6,9 @@ export type BatteryKwh = 25 | 40 | 50
 export type BatteryValue = {
   value: number
   ceiling: number
+  first_year: number | null
+  last_year: number | null
+  recent: number
   low: number | null
   low_year: number | null
   high: number | null
@@ -20,7 +23,13 @@ export const STATUS_LABELS: Record<LeadStatus, string> = {
   qualified: "Qualified",
   excluded: "Excluded",
 }
-export const PRIORITY_HELP = "Fit ÷ 100 × historical grid value for the suggested battery over the last 12 months, using day-ahead plans without hindsight. Fit is not a purchase probability. Priority value is a ranking metric, not forecast revenue or customer savings."
+export const PRIORITY_HELP = "Fit ÷ 100 × historical grid value for the suggested battery in an average past year (day-ahead plans, no hindsight). Fit is not a purchase probability. Priority value is a ranking metric, not forecast revenue or customer savings."
+
+export function valueBasis(value: BatteryValue | null | undefined): string {
+  return value && value.first_year !== null && value.last_year !== null
+    ? `Average year ${value.first_year}–${value.last_year}`
+    : "Last 12 months"
+}
 
 export function formatLeadMoney(value: number): string {
   return `$${Math.round(value).toLocaleString("en-US")}`

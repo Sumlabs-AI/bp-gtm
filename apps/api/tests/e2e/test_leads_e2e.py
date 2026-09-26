@@ -306,7 +306,11 @@ def test_map_points_and_cells(client, monkeypatch):
 
 
 def test_value_per_battery_size_and_priority(client):
-    VALUES = {25: 560, 40: 900, 50: 1120}
+    VALUES = {25: 560, 40: 900, 50: 1120}  # last 12 months
+    YEARS = {
+        2024: {"25": 700, "40": 1100, "50": 1400},
+        2025: {"25": 300, "40": 480, "50": 600},
+    }
     with SessionLocal() as db:  # grid compute output for the Houston zone
         db.execute(
             text(
@@ -323,8 +327,8 @@ def test_value_per_battery_size_and_priority(client):
                 "s": json.dumps(
                     {
                         "battery_years": [
-                            {"year": 2024, "25": 700, "40": 1100, "50": 1400},
-                            {"year": 2025, "25": 300, "40": 480, "50": 600},
+                            {"year": y} | v | {f"ceiling_{k}": 2 * x for k, x in v.items()}
+                            for y, v in YEARS.items()
                         ]
                     }
                 ),
@@ -340,23 +344,27 @@ def test_value_per_battery_size_and_priority(client):
     a = by_account(client, "A").json()  # point inside LZ_HOUSTON
     b = by_account(client, "B").json()  # no point: zone from its CenterPoint meter
     assert a["load_zone"] == b["load_zone"] == "LZ_HOUSTON"
+    # Valued on the average full year, not the last 12 months.
     assert a["battery_values"]["50"] == {
-        "value": 1120,
-        "ceiling": 2240,
+        "value": 1000,
+        "ceiling": 2000,
+        "first_year": 2024,
+        "last_year": 2025,
+        "recent": 1120,
         "low": 600,
         "low_year": 2025,
         "high": 1400,
         "high_year": 2024,
     }
     assert {k: v["value"] for k, v in a["battery_values"].items()} == {
-        "25": 560,
-        "40": 900,
-        "50": 1120,
+        "25": 500,
+        "40": 790,
+        "50": 1000,
     }
-    assert (a["recommended_kwh"], a["value"]) == (50, 1120)  # 4,000 sqft
+    assert (a["recommended_kwh"], a["value"]) == (50, 1000)  # 4,000 sqft
     assert a["sizing_reason"] == "4,000 sqft home → 50 kWh"
-    assert (b["recommended_kwh"], b["value"]) == (40, 900)  # 1,500 sqft + pool
-    assert a["expected_value"] == round(a["score"] / 100 * 1120)
+    assert (b["recommended_kwh"], b["value"]) == (40, 790)  # 1,500 sqft + pool
+    assert a["expected_value"] == round(a["score"] / 100 * 1000)
     kinds = {d["key"]: d["kind"] for d in a["drivers"]}
     assert kinds["home_size"] == "percentile" and kinds["solar"] == "flag"
 
@@ -365,4 +373,4 @@ def test_value_per_battery_size_and_priority(client):
         (i["expected_value"] for i in by_priority), reverse=True
     )
     by_value = client.get("/leads", params={"sort": "value"}).json()["items"]
-    assert by_value[0]["value"] == 1120
+    assert by_value[0]["value"] == 1000

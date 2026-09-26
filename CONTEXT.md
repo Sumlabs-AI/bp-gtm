@@ -77,11 +77,11 @@ The latest Lead Evidence that makes a Lead worth a fresh look this week (new per
 _Avoid_: alert, event
 
 **Grid Value**:
-Estimated annual energy-trading value ($/yr) for a battery size in a Lead's Load Zone, modeled over the last 12 months using day-ahead plans without hindsight, after losses, wear and backup reserve (Zone Economics backtest). Shown alongside its **Grid Value Ceiling** (the same battery with perfect hindsight) and the lowest/highest full calendar year.
+Estimated annual energy-trading value ($/yr) for a battery size in a Lead's Load Zone in an average full calendar year (2019 onward, matching multi-year contracts), modeled using day-ahead plans without hindsight, after losses, wear and backup reserve (Zone Economics backtest). Shown alongside the last 12 months, the lowest/highest full year and its **Grid Value Ceiling**. Falls back to the last 12 months when no full-year history is loaded.
 _Avoid_: value (unqualified), savings, revenue
 
 **Grid Value Ceiling**:
-The most a battery size could have earned in the Load Zone over the same 12 months with perfect knowledge of every price. A benchmark for Grid Value, never a sales figure.
+The most a battery size could have earned in the Load Zone over the same period (an average full year) with perfect knowledge of every price. A benchmark for Grid Value, never a sales figure.
 _Avoid_: potential, max revenue
 
 **Expected Value**:

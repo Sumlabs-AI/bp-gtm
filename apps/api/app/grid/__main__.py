@@ -55,23 +55,19 @@ def full_years(rt: pd.Series) -> list[int]:
 
 
 def battery_years(rt: pd.Series, da: pd.Series, sized: dict) -> list[dict]:
-    """Realistic value of each battery size in each full past calendar year, so leads can
-    show how much a year's value swings."""
+    """Realistic value ("25", …) and perfect-hindsight ceiling ("ceiling_25", …) of each
+    battery size in each full past calendar year. Leads are valued on the average year."""
     rt_year = rt.index.tz_convert(ERCOT_TZ).year
     da_year = da.index.tz_convert(ERCOT_TZ).year
-    return [
-        {
-            "year": year,
-            **{
-                str(kwh): round(
-                    float(simulate(rt[rt_year == year], da[da_year == year], b, planner).sum()),
-                    2,
-                )
-                for kwh, b in sized.items()
-            },
-        }
-        for year in full_years(rt)
-    ]
+    rows = []
+    for year in full_years(rt):
+        year_rt, year_da = rt[rt_year == year], da[da_year == year]
+        row = {"year": year}
+        for kwh, b in sized.items():
+            row[str(kwh)] = round(float(simulate(year_rt, year_da, b, planner).sum()), 2)
+            row[f"ceiling_{kwh}"] = round(ceiling(year_rt, b), 2)
+        rows.append(row)
+    return rows
 
 
 def compute() -> None:

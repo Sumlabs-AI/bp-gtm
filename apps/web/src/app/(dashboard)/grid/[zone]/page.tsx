@@ -29,6 +29,9 @@ export default async function ZonePage(props: PageProps<"/grid/[zone]">) {
   if (!zones.some((z) => z.code === code)) notFound()
   const zone = await apiFetch<ZoneDetail>(`/grid/zones/${code}`)
   const { battery } = zone.assumptions
+  const batteryYears = zone.series.battery_years ?? []
+  const years = batteryYears.map((year) => year.year)
+  const yearRange = years.length > 0 ? `${Math.min(...years)}–${Math.max(...years)}` : null
 
   return (
     <>
@@ -141,6 +144,7 @@ export default async function ZonePage(props: PageProps<"/grid/[zone]">) {
           <CardHeader>
             <CardTitle>Historical grid value to Base</CardTitle>
             <CardDescription>
+              {yearRange && <>Average year: available full calendar years ({yearRange}), weighted equally. </>}
               Last 12 months · {fmtDate(zone.period_start)} – {fmtDate(zone.period_end)} · $/year
             </CardDescription>
           </CardHeader>
@@ -149,17 +153,26 @@ export default async function ZonePage(props: PageProps<"/grid/[zone]">) {
               <TableHeader>
                 <TableRow>
                   <TableHead>Battery size</TableHead>
-                  <TableHead className="text-right whitespace-normal">Day-ahead estimate</TableHead>
-                  <TableHead className="text-right whitespace-normal">Perfect-hindsight ceiling</TableHead>
+                  {yearRange && <TableHead className="text-right whitespace-normal">Average year ({yearRange})</TableHead>}
+                  <TableHead className="text-right whitespace-normal">Last 12 months</TableHead>
+                  <TableHead className="text-right whitespace-normal">
+                    Perfect-hindsight ceiling, {yearRange ? "average year" : "Last 12 months"}
+                  </TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {BATTERY_SIZES.map((kwh) => {
                   const value = zone.metrics[`battery_value_${kwh}`]
-                  const ceiling = zone.metrics[`battery_ceiling_${kwh}`]
+                  const average = batteryYears.reduce((sum, year) => sum + year[kwh], 0) / batteryYears.length
+                  const ceiling = batteryYears.length > 0
+                    ? batteryYears.reduce((sum, year) => sum + year[`ceiling_${kwh}`], 0) / batteryYears.length
+                    : zone.metrics[`battery_ceiling_${kwh}`]
                   return (
                     <TableRow key={kwh}>
                       <TableCell>{kwh} kWh</TableCell>
+                      {yearRange && <TableCell className="text-right tabular-nums">
+                        {Number.isFinite(average) ? formatLeadMoney(average) : "Unavailable"}
+                      </TableCell>}
                       <TableCell className="text-right tabular-nums">
                         {Number.isFinite(value) ? formatLeadMoney(value) : "Unavailable"}
                       </TableCell>

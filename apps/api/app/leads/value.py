@@ -1,9 +1,9 @@
 """What a lead is worth to Base: its ERCOT load zone, the grid value of each battery size
 there (from the zone backtest, app/grid), and the size we'd pitch.
 
-Screening estimate only: energy-arbitrage value of a battery trading on day-ahead plans
-(app/grid/dispatch.py), after losses, wear and the backup reserve; no retail margin, fees
-or ancillary services.
+Screening estimate only: energy-trading value of a battery on day-ahead plans
+(app/grid/dispatch.py) in an average past year, after losses, wear and the backup reserve;
+no retail margin, fees or ancillary services.
 """
 
 import geopandas as gpd
@@ -31,10 +31,14 @@ def assign_zones(homes: pd.DataFrame) -> pd.Series:
 
 def zone_battery_values() -> dict[str, dict[str, dict]]:
     """Per zone and battery size, from the latest grid compute:
-    {"LZ_HOUSTON": {"25": {"value": 194, "ceiling": 363, "low": 120, "low_year": 2020,
-    "high": 900, "high_year": 2023}, …}, …}. `value` is the realistic day-ahead-planner
-    value over the last year, `ceiling` the perfect-hindsight one, low/high the worst and
-    best full calendar years (None before the history is loaded)."""
+    {"LZ_HOUSTON": {"40": {"value": 891, "ceiling": 1650, "first_year": 2019,
+    "last_year": 2025, "recent": 233, "low": 310, "low_year": 2025, "high": 1741,
+    "high_year": 2023}, …}, …}.
+
+    `value` is the realistic day-ahead-planner value of an average full calendar year (what
+    a battery earns over a multi-year contract, not one quiet or spiky year) and `ceiling`
+    the average perfect-hindsight one. Without full years loaded both fall back to the last
+    12 months and first/last/low/high are None. `recent` is always the last 12 months."""
     with engine.connect() as conn:
         rows = conn.execute(text("SELECT settlement_point, metrics, series FROM grid_zone_metrics"))
         values = {}
@@ -44,15 +48,25 @@ def zone_battery_values() -> dict[str, dict[str, dict]]:
             years = series.get("battery_years") or []
             values[zone] = {}
             for k in LEAD_BATTERIES_KW:
-                low = min(years, key=lambda y: y[str(k)], default=None)
-                high = max(years, key=lambda y: y[str(k)], default=None)
-                values[zone][str(k)] = {
-                    "value": round(metrics[f"battery_value_{k}"]),
-                    "ceiling": round(metrics[f"battery_ceiling_{k}"]),
-                    "low": low and round(low[str(k)]),
-                    "low_year": low and low["year"],
-                    "high": high and round(high[str(k)]),
-                    "high_year": high and high["year"],
+                size, ceil_key = str(k), f"ceiling_{k}"
+                hist = years if all(ceil_key in y for y in years) else []
+                if hist:
+                    value = sum(y[size] for y in hist) / len(hist)
+                    ceiling = sum(y[ceil_key] for y in hist) / len(hist)
+                    low = min(hist, key=lambda y: y[size])
+                    high = max(hist, key=lambda y: y[size])
+                else:
+                    value, ceiling = metrics[f"battery_value_{k}"], metrics[f"battery_ceiling_{k}"]
+                values[zone][size] = {
+                    "value": round(value),
+                    "ceiling": round(ceiling),
+                    "first_year": hist[0]["year"] if hist else None,
+                    "last_year": hist[-1]["year"] if hist else None,
+                    "recent": round(metrics[f"battery_value_{k}"]),
+                    "low": round(low[size]) if hist else None,
+                    "low_year": low["year"] if hist else None,
+                    "high": round(high[size]) if hist else None,
+                    "high_year": high["year"] if hist else None,
                 }
         return values
 

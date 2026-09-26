@@ -124,7 +124,7 @@ and West, in line with WattGap's measured 48–63% across 2019–2025.
 
 ## Battery value per lead size
 
-`compute` also values the battery sizes we pitch to leads (`LEAD_BATTERIES_KW` in `app/grid/config.py`: 25/40/50 kWh at an assumed ~0.46 kW per kWh). Each zone's `metrics` stores `battery_value_<kWh>` (realistic, last 365 days) and `battery_ceiling_<kWh>` ($/yr), and `series.battery_years` holds the realistic value per full past calendar year (as far back as prices are loaded; `backfill 2019 … 2024` for the full history). Lead scoring reads these; see [residential-leads.md](residential-leads.md).
+`compute` also values the battery sizes we pitch to leads (`LEAD_BATTERIES_KW` in `app/grid/config.py`: 25/40/50 kWh at an assumed ~0.46 kW per kWh). Each zone's `metrics` stores `battery_value_<kWh>` (realistic, last 365 days) and `battery_ceiling_<kWh>` ($/yr), and `series.battery_years` holds the realistic value (`"25"`, …) and ceiling (`"ceiling_25"`, …) per full past calendar year (as far back as prices are loaded; `backfill 2019 … 2024` for the full history). Leads are valued on the average of those years. `compute` runs one ceiling LP per zone, size and year (~2–3 min with 2019–2025 loaded). Lead scoring reads these; see [residential-leads.md](residential-leads.md).
 
 ## API and map
 
