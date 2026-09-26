@@ -11,6 +11,7 @@ from app.leads.config import scoring
 from app.leads.pipeline import SOURCES
 from app.leads.scoring import DRIVERS
 from app.models import Lead, Property, SourceRun
+from app.routers.grid import BatteryValue
 
 router = APIRouter(tags=["leads"])
 
@@ -32,7 +33,7 @@ class LeadItem(BaseModel):
     trigger: str | None
     status: str
     load_zone: str | None
-    battery_values: dict[str, float] | None  # battery kWh -> estimated grid value $/yr
+    battery_values: dict[str, BatteryValue] | None  # keyed by battery kWh
     recommended_kwh: int | None
     sizing_reason: str | None
     value: float | None  # $/yr for the recommended battery
@@ -79,6 +80,7 @@ class LeadSummary(BaseModel):
     leads: int
     new_this_week: int
     by_signal: dict[str, int]
+    by_zone: dict[str, int]  # load zone -> leads (all statuses); zones without leads omitted
     last_scored_at: datetime | None
 
 
@@ -139,6 +141,13 @@ def lead_summary(db: DB):
             k: db.scalar(select(func.count()).select_from(Lead).where(_has_signal(k)))
             for k in SIGNAL_TYPES
         },
+        "by_zone": dict(
+            db.execute(
+                select(Lead.load_zone, func.count())
+                .where(Lead.load_zone.is_not(None))
+                .group_by(Lead.load_zone)
+            ).all()
+        ),
         "last_scored_at": db.scalar(select(func.max(Lead.scored_at))),
     }
 
@@ -151,6 +160,7 @@ class LeadFilters(BaseModel):
     new_only: bool = False
     zip: str | None = None
     status: Status | None = None
+    zone: str | None = None  # ERCOT load zone code, e.g. LZ_HOUSTON
 
     def apply(self, query):
         unknown = set(self.signals) - set(SIGNAL_TYPES)
@@ -165,6 +175,8 @@ class LeadFilters(BaseModel):
             query = query.where(Property.situs_zip == self.zip)
         if self.status:
             query = query.where(Lead.status == self.status)
+        if self.zone:
+            query = query.where(Lead.load_zone == self.zone)
         return query
 
 
@@ -174,9 +186,15 @@ def _filters(
     new_only: bool = False,
     zip: str | None = None,
     status: Status | None = None,
+    zone: str | None = None,
 ) -> LeadFilters:
     return LeadFilters(
-        min_score=min_score, signals=signals, new_only=new_only, zip=zip, status=status
+        min_score=min_score,
+        signals=signals,
+        new_only=new_only,
+        zip=zip,
+        status=status,
+        zone=zone,
     )
 
 
