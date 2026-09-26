@@ -30,11 +30,11 @@ def capture(score: pd.Series, y: pd.Series, k: float) -> float:
     return y[top].sum() / y.sum()
 
 
-def evaluate(df: pd.DataFrame, score: pd.Series) -> dict[str, float]:
+def evaluate(df: pd.DataFrame, score: pd.Series, y: str = TEST) -> dict[str, float]:
     s = score.fillna(score.median())  # a handful of suppressed ACS medians
-    rate = df[TEST] / df["eligible_homes"]
+    rate = df[y] / df["eligible_homes"]
     big = df["eligible_homes"] >= MIN_HOMES_FOR_RATE
-    return {"capture@10": capture(s, df[TEST], 0.10), "capture@20": capture(s, df[TEST], 0.20),
+    return {"capture@10": capture(s, df[y], 0.10), "capture@20": capture(s, df[y], 0.20),
             "spearman": s[big].rank().corr(rate[big].rank())}
 
 

@@ -33,6 +33,7 @@ cp .env.example .env   # then set TYPESAFE_API_KEY
 | `acs/ANALYSIS.md` | ACS data analysis: validation, missingness, MOE, vintage differences, first look at the label |
 | `acs/FEATURES.md` | Generated data dictionary for `bg_acs_<vintage>.parquet` |
 | `train/build_table.py` | Joins label + ACS + parcels → `data/processed/train_bg.parquet` (one row per training block group) |
+| `train/model.py` | Propensity v1: LightGBM Poisson, per-city offset, spatial / temporal / leave-one-city-out evaluation |
 | `train/baselines.py` | Income / home value / past-installs baselines, scored within city on 2024-2025 installs |
 | `docs/typesafe/` | Jev docs snapshot (SDK, primitives, confidence, jev-1.13 limits) |
 | `data/` | Git-ignored. `raw/` downloads, `interim/` normalized tables, `gold/` labels, `processed/` outputs |
@@ -66,7 +67,10 @@ Training table and baselines (after the three pipelines above):
 ```bash
 uv run python -m train.build_table   # -> data/processed/train_bg.parquet + checks
 uv run python -m train.baselines
+uv run python -m train.model         # ~35 s -> data/processed/model_v1*.txt, train_bg_oof.parquet
 ```
+
+LightGBM on macOS needs OpenMP: `brew install libomp`.
 
 ACS comes from the Census table-based summary files, not api.census.gov (which now requires a key).
 `--vintage 2024` = ACS 2020-2024 on 2020 block groups. `--vintage 2021` (2017-2021, same block groups)
@@ -135,3 +139,30 @@ score; Spearman on install rate, block groups with ≥ 50 eligible homes):
 | home value only | 45% | 0.53 | 67% | 0.37 |
 | past installs 2021-23 (rate) | 44% | 0.56 | 59% | 0.34 |
 | random | 18% | 0.04 | 22% | 0.02 |
+
+## Propensity model v1 (`train/model.py`)
+
+LightGBM Poisson on the 24 ACS features; offset = log(eligible homes) + log(city install rate), so the model
+ranks block groups *within* a city. Shallow trees (7 leaves, ≥ 30 rows per leaf), rounds by inner CV, 5 seeds
+averaged. Spatial CV folds are 5 km grid cells.
+
+Spatial CV × time (train 2021-2023 on 4/5 of the blocks, rank the held-out fifth, 2024-2025 installs):
+
+| | Austin capture@10 / @20 / Spearman | San Antonio capture@10 / @20 / Spearman |
+| --- | --- | --- |
+| **model v1** | **34%** / 47% / 0.47 | 40% / 63% / 0.36 |
+| home value only | 26% / 45% / 0.53 | 44% / 67% / 0.37 |
+| income only | 27% / 46% / 0.37 | 43% / 58% / 0.33 |
+| past installs 2021-23 | 26% / 44% / 0.56 | 41% / 59% / 0.34 |
+
+- **v1 ties home value, it does not beat it.** Better at the very top in Austin (capture@10 +8 pts), worse
+  or equal elsewhere. Same picture on the full 2021-2025 label.
+- **Leave one city out fails**: a model trained on one city ranks the other worse than home value alone
+  (Austin capture@20 36%, San Antonio 44%). What drives installs differs between the two cities, a warning for
+  scoring DFW, which has no permits.
+- **SHAP:** home value dominates; density, single-family share and household size are negative, 65+ households
+  positive. Electric heat is ~neutral once the rest is in.
+- **The negative single-family effect is partly an exposure artifact.** With parcel eligible homes as exposure,
+  `pct_owner_sfd` importance drops from 0.16 to 0.03 (`pct_sfd` and density stay negative). ACS undercounts
+  eligible homes in mixed block groups, which inflates their rate. Dropping block groups under 50 eligible
+  homes changes little.
