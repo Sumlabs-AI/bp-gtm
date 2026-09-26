@@ -8,4 +8,3 @@ pnpm up        # web http://localhost:3000 · api http://localhost:8000/docs
 ```
 
 Docs live in [`wiki/`](wiki/README.md).
-# bp-gtm
