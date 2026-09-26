@@ -13,6 +13,9 @@ Evaluations, all scored within city with train.baselines.evaluate:
    so the model has to match a baseline that knows more than it does.
 2. spatial CV, 2021-2025: same folds, full label; more installs, less noise.
 3. leave one city out: train on one city, rank the other (2021-2025).
+4. transfer to Fort Worth (never trained on): fit on Austin + San Antonio, rank Fort Worth block groups, score
+   against its battery installs (its only visible label). Fit once on the backup label, once on batteries.
+5. Base Power 2026 (Austin): do the spatial out-of-fold scores (2021-2025 label) point to where Base sold?
 Outputs: data/processed/model_v1.txt (fit on all rows, 2021-2025), data/processed/train_bg_oof.parquet
 """
 from __future__ import annotations
@@ -103,6 +106,8 @@ def score_glm(m: dict, df: pd.DataFrame, feats: list[str] | None = None) -> pd.S
 
 
 MODELS = {"LGBM": (fit, score), "GLM": (fit_glm, score_glm)}
+TRAIN_CITIES = ["austin", "san_antonio"]
+HOLDOUT_CITY = "fort_worth"
 
 
 def spatial_folds(df: pd.DataFrame) -> pd.Series:
@@ -144,7 +149,9 @@ def explain(boosters: list[lgb.Booster], df: pd.DataFrame, feats: list[str]) -> 
 
 
 def main():
-    df = pd.read_parquet(PROCESSED / "train_bg.parquet")
+    full = pd.read_parquet(PROCESSED / "train_bg.parquet")
+    df = full[full["city"].isin(TRAIN_CITIES)].reset_index(drop=True)
+    fw = full[full["city"] == HOLDOUT_CITY].reset_index(drop=True)
     feats = acs_features(pd.DataFrame(columns=pq.read_schema(PROCESSED / "bg_acs_2024.parquet").names))
     folds = spatial_folds(df)
     print(f"{len(df):,} rows, {len(feats)} features, {folds.nunique()} spatial folds "
@@ -166,6 +173,23 @@ def main():
             loco[m][test] = score_fn(fit_fn(df[~test], "y", feats), df[test], feats)
     print("3. leave one city out (train on the other city), 2021-2025")
     print(compare(df, loco, "y", base).to_string(), "\n")
+
+    if len(fw):
+        print(f"4. transfer to Fort Worth ({len(fw)} block groups, {fw['y_battery'].sum()} battery installs "
+              f"2021-2025), never trained on")
+        fw_scores = {}
+        for label in ["y", "y_battery"]:
+            for m, (fit_fn, score_fn) in MODELS.items():
+                fw_scores[f"{m} on {label}"] = score_fn(fit_fn(df, label, feats), fw, feats)
+        print(compare(fw, fw_scores, "y_battery", base).to_string(), "\n")
+
+    austin = df["city"] == "austin"
+    if df.loc[austin, "base_power_2026"].sum():
+        d = df[austin]
+        print(f"5. Base Power 2026 installs in Austin ({d['base_power_2026'].sum()}), spatial out-of-fold scores")
+        s5 = {**{m: oof_all[m][d.index] for m in MODELS},
+              "past backup installs 2021-25 (rate)": d["y"] / d["exposure"]}
+        print(compare(d, s5, "base_power_2026", base).to_string(), "\n")
 
     glm = fit_glm(df, "y")
     print("GLM coefficients (per 1 sd, log-rate):",

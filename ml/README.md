@@ -15,7 +15,7 @@ cp .env.example .env   # then set TYPESAFE_API_KEY
 
 | Path | What |
 | --- | --- |
-| `permits/fetch.py` | Step 1: pull Austin (Socrata) + San Antonio (CSV) permits → `data/interim/permits_all.parquet` |
+| `permits/fetch.py` | Step 1: pull Austin (Socrata), San Antonio (CSV), Fort Worth (ArcGIS, battery label only) permits → `data/interim/permits_all.parquet` |
 | `permits/keywords.py` | Keyword prefilter and flags (generator / battery / solar / panel …) |
 | `permits/questions.py` | The Jev questions (one per gold field) and the per-permit state |
 | `permits/jev.py` | Runs Jev over permits with an answer cache; loads `ml/.env` |
@@ -174,7 +174,16 @@ home value 0.68 / 0.75.
 - **Parcel exposure fixed most of the spurious owner-occupied-SFD effect** (ACS undercounts eligible homes in mixed
   block groups). A negative single-family *share* remains; unexplained, possibly installs on homes the label
   counts as "can't tell" property type.
-- **Fort Worth as a third city**: its open-data permits (ArcGIS `CFW_Open_Data_Development_Permits_View`,
-  1.6M rows) describe residential building permits, but 98% of electrical/plumbing permits have no description,
-  so standby generators are invisible. It could only give a battery (mostly solar + storage) label. Dallas open
-  data stops in mid-2020.
+- **Fort Worth (validation city, never trained on).** Fetched from the city's ArcGIS points layer
+  (`permits.fetch --cities fort_worth`). Only building permits carry descriptions, so generators are invisible:
+  9 in 2021-2025 vs 686 batteries in the table rows. 97% of its battery permits are bundled with solar. Nothing
+  ranks them, not the models and not home value (capture AUC 0.50-0.54). Their drivers are a solar-buyer profile
+  (newer, mortgaged, middle-income homes: year built ρ 0.27, mortgage 0.25, home value 0.14), whereas generators
+  follow wealth (Austin home value ρ 0.55). **Solar + storage is a different buyer from backup power**, so Fort
+  Worth cannot validate the backup model; it would need its trade permits.
+- **Base Power's own installs follow the backup pattern.** 229 Base Power permits in 2026 fall in Austin training
+  block groups (outside the 2021-2025 label). Spatial out-of-fold scores: LightGBM capture AUC 0.69, top 20% of
+  homes hold 45% of Base installs (2.3× random); past backup installs 0.74 / 49%; home value 0.68 / 43%. The
+  backup label is a valid proxy for Base's customers.
+- **Label fix:** permits at the same address and date were deduplicated in unstable sort order, so adding rows
+  could swap a built permit for a withdrawn one. Ties now keep the built permit (Austin 2021-2025: +25 installs).

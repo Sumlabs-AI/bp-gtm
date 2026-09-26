@@ -5,7 +5,12 @@ Output: data/interim/permits_all.parquet  (one row per permit, candidates + reca
 Cities:
   - Austin      Socrata 3syk-w9eu (server-side keyword filter, has lat/lon, status, contractor)
   - San Antonio CKAN bulk CSVs (2020-2024 file + current file; coords in lon/lat or TX State Plane ft)
-Fort Worth moved to ArcGIS Hub and Dallas' Socrata feed stops in 2020 -> not wired yet.
+  - Fort Worth  ArcGIS MapServer CIVIC/Permits (points). Only building permits carry a description: 98% of
+                electrical / plumbing permits are blank, so standby generators are mostly invisible and the
+                city is usable for a battery label only.
+Dallas' Socrata feed stops in mid-2020 -> not wired.
+
+`--cities` replaces only those cities' rows in permits_all.parquet; the other cities are kept as they are.
 """
 from __future__ import annotations
 
@@ -35,6 +40,70 @@ COLUMNS = [
     "lat", "lon", "applied_date", "issued_date", "status", "valuation", "contractor",
     "class_hint", "source_row_kind",
 ]
+
+
+# ---------------------------------------------------------------- Fort Worth
+FW_URL = "https://mapit.fortworthtexas.gov/ags/rest/services/CIVIC/Permits/MapServer/0/query"
+FW_FIELDS = ["Permit_No", "Permit_Type", "Permit_SubType", "B1_WORK_DESC", "Addr_No", "Direction", "Street_Name",
+             "Street_Suffix", "Zip_Code", "File_Date", "Status_Date", "Current_Status", "JobValue", "Use_Type"]
+
+
+def _fw_pages(where: str, max_rows: int | None = None, page: int = 1000):
+    offset = 0
+    while True:
+        params = {"where": where, "outFields": ",".join(FW_FIELDS), "outSR": 4326, "f": "json",
+                  "orderByFields": "Permit_No", "resultOffset": offset, "resultRecordCount": page}
+        r = requests.post(FW_URL, data=params, timeout=300)
+        r.raise_for_status()
+        js = r.json()
+        if "error" in js:
+            raise RuntimeError(js["error"])
+        feats = js.get("features", [])
+        for f in feats:
+            yield {**f["attributes"], "lon": (f.get("geometry") or {}).get("x"), "lat": (f.get("geometry") or {}).get("y")}
+        offset += len(feats)
+        if not feats or not js.get("exceededTransferLimit") or (max_rows and offset >= max_rows):
+            return
+
+
+def _fw_frame(rows: list[dict], kind: str) -> pd.DataFrame:
+    df = pd.DataFrame(rows, columns=FW_FIELDS + ["lon", "lat"])
+    parts = df[["Addr_No", "Direction", "Street_Name", "Street_Suffix"]].astype("string").fillna("")
+    addr = parts.agg(" ".join, axis=1).str.replace(r"\s+", " ", regex=True).str.strip()
+    ms = lambda c: pd.to_datetime(pd.to_numeric(df[c], errors="coerce"), unit="ms", errors="coerce")
+    return pd.DataFrame({
+        "city": "fort_worth",
+        "permit_id": df["Permit_No"],
+        "permit_type": df["Permit_Type"] + " - " + df["Permit_SubType"].fillna(""),
+        "work_class": df["Use_Type"],
+        "description": df["B1_WORK_DESC"],
+        "address": addr,
+        "zip": df["Zip_Code"].astype("string"),
+        "lat": pd.to_numeric(df["lat"], errors="coerce"),
+        "lon": pd.to_numeric(df["lon"], errors="coerce"),
+        "applied_date": ms("File_Date"),
+        "issued_date": pd.NaT,  # not published; File_Date is the application date
+        "status": df["Current_Status"],
+        "valuation": pd.to_numeric(df["JobValue"], errors="coerce"),
+        "contractor": None,
+        "class_hint": None,
+        "source_row_kind": kind,
+    })
+
+
+def fetch_fort_worth(since: str, recall_n: int) -> pd.DataFrame:
+    date = f"File_Date >= date '{since}'"
+    kw = " OR ".join(f"UPPER(B1_WORK_DESC) LIKE '{t}'" for t in AUSTIN_LIKE_TERMS)
+    cand = list(_fw_pages(f"{date} AND ({kw})"))
+    print(f"fort_worth: {len(cand):,} keyword candidates")
+    frames = [_fw_frame(cand, "candidate")]
+    if recall_n:
+        rec = list(_fw_pages(f"{date} AND Permit_Type = 'Residential Building Permit' AND B1_WORK_DESC IS NOT NULL "
+                             f"AND NOT ({kw})", max_rows=recall_n * 20))
+        rec = pd.DataFrame(rec).sample(min(recall_n, len(rec)), random_state=0).to_dict("records")
+        print(f"fort_worth: {len(rec):,} recall-sample rows")
+        frames.append(_fw_frame(rec, "recall_sample"))
+    return pd.concat(frames, ignore_index=True)
 
 
 # ---------------------------------------------------------------- Austin
@@ -166,18 +235,26 @@ def main():
 
     INTERIM.mkdir(parents=True, exist_ok=True)
     RAW.mkdir(parents=True, exist_ok=True)
-    fetchers = {"austin": fetch_austin, "san_antonio": fetch_san_antonio}
-    df = pd.concat([fetchers[c](args.since, args.recall_sample) for c in args.cities.split(",")],
-                   ignore_index=True)[COLUMNS]
+    fetchers = {"austin": fetch_austin, "san_antonio": fetch_san_antonio, "fort_worth": fetch_fort_worth}
+    cities = args.cities.split(",")
+    df = pd.concat([fetchers[c](args.since, args.recall_sample) for c in cities], ignore_index=True)[COLUMNS]
     df["description"] = df["description"].fillna("").map(lambda s: re.sub(r"\s+", " ", s).strip())
     df = df.drop_duplicates(["city", "permit_id"])
     flags = keyword_flags(df["description"] + " " + df["permit_type"].fillna("") + " " + df["contractor"].fillna(""))
     df = pd.concat([df.reset_index(drop=True), flags.reset_index(drop=True)], axis=1)
     # Austin's server-side LIKE is looser than the regex: keep a candidate only if the regex agrees.
     df = df[(df["source_row_kind"] == "recall_sample") | flags.any(axis=1).values]
+    # Fort Worth is a battery-label city (see top): skip its ~17k solar/panel-only candidates, saving Jev calls.
+    fw_skip = (df["city"] == "fort_worth") & (df["source_row_kind"] == "candidate") & \
+        ~(df["kw_battery"] | df["kw_generator"] | df["kw_contractor"])
+    df = df[~fw_skip]
+    out = INTERIM / "permits_all.parquet"
+    if out.exists():
+        old = pd.read_parquet(out)
+        df = pd.concat([old[~old["city"].isin(cities)], df], ignore_index=True)
     df.to_parquet(INTERIM / "permits_all.parquet", index=False)
     print(df.groupby(["city", "source_row_kind"]).size().to_string())
-    print(flags.groupby(df["city"]).sum().to_string())
+    print(df.groupby("city")[list(flags.columns)].sum().to_string())
 
 
 if __name__ == "__main__":

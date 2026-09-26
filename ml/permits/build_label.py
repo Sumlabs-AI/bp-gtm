@@ -24,8 +24,10 @@ INTERIM, PROCESSED, TIGER = ROOT / "data" / "interim", ROOT / "data" / "processe
 DEDUP_DAYS = 180
 # Answers this close to the Noul cutoff are flagged; the label is reported with and without them.
 UNCERTAIN_BAND = (0.3, 0.7)
-NOT_BUILT = {"Expired", "Withdrawn", "VOID", "Cancelled - Contractor Required", "Aborted"}
-CITY_PLACES = {"austin": "Austin", "san_antonio": "San Antonio"}
+NOT_BUILT = {"Expired", "Withdrawn", "VOID", "Void", "Cancelled - Contractor Required", "Aborted"}
+CITY_PLACES = {"austin": "Austin", "san_antonio": "San Antonio", "fort_worth": "Fort Worth"}
+# Fort Worth publishes descriptions on building permits only (generators are on blank trade permits):
+# its backup_install is effectively a battery label. Compare it with battery_install elsewhere.
 
 
 def _norm_address(city: pd.Series, addr: pd.Series) -> pd.Series:
@@ -70,13 +72,15 @@ CATEGORIES = ["gen_install", "battery_install", "backup_install", "solar_install
 def dedup(ev: pd.DataFrame, col: str) -> pd.Series:
     """True for the first event of `col` at an address; repeats within DEDUP_DAYS are dropped."""
     keep = pd.Series(False, index=ev.index)
-    sub = ev[ev[col] & (ev["addr_key"].str.len() > len("austin|"))].sort_values("date")
+    has_addr = ~ev["addr_key"].str.endswith("|")
+    # Same-address, same-day ties: keep the built permit, then the lowest id, so the result is deterministic.
+    sub = ev[ev[col] & has_addr].sort_values(["date", "not_built", "permit_id"], kind="stable")
     last: dict[str, pd.Timestamp] = {}
     for i, k, d in zip(sub.index, sub["addr_key"], sub["date"]):
         if k not in last or (d - last[k]).days > DEDUP_DAYS:
             keep[i] = True
             last[k] = d
-    no_addr = ev[col] & (ev["addr_key"].str.len() <= len("austin|"))
+    no_addr = ev[col] & ~has_addr
     return keep | no_addr
 
 

@@ -9,6 +9,9 @@ Inputs:  data/processed/bg_permits.parquet     label counts (block group x city 
 Output:  data/processed/train_bg.parquet
 
 Choices (see README "Training table"):
+- Cities: Austin and San Antonio train the model (backup label = generator or battery). Fort Worth rows are
+  validation only: its generators sit on trade permits without descriptions, so its label is batteries.
+  `y_battery` (= aux_battery_install) is the like-for-like label across all three.
 - Rows: block groups >= 90% inside the permit city (permits only cover city limits) with eligible_homes > 0.
 - Label: backup installs 2021-2025. 2026 is partial; pre-2021 has no San Antonio data. Per-year columns kept
   for the temporal split (train 2021-2023, test 2024-2025) and the without-Uri check (drop 2021).
@@ -77,6 +80,12 @@ def build() -> tuple[pd.DataFrame, list[str]]:
     df = df.merge(label_counts(permits, df), on="GEOID", how="left", validate="one_to_one")
     ycols = [c for c in df.columns if c.startswith(("y_", "aux_"))] + ["y"]
     df[ycols] = df[ycols].fillna(0).astype(int)
+
+    df["y_battery"] = df["aux_battery_install"]
+    # Base Power's own installs (Austin, 2026 only so far): the exact product, outside the label window.
+    base = permits[permits["year"] == 2026].merge(df[["GEOID", "city"]], on=["GEOID", "city"])
+    df["base_power_2026"] = df["GEOID"].map(base.groupby("GEOID")["base_power"].sum()).fillna(0).astype(int)
+    df["label_kind"] = np.where(df["city"] == "fort_worth", "battery_only", "backup")
 
     df = df.merge(parcels.drop(columns="county").add_prefix("parcel_").rename(columns={"parcel_GEOID": "GEOID"}),
                   on="GEOID", how="left", validate="one_to_one")
