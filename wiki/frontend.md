@@ -11,18 +11,20 @@ apps/web/src/
 ├── app/
 │   ├── layout.tsx         Root: fonts, TooltipProvider, Toaster
 │   ├── globals.css        Theme tokens (light/dark)
-│   └── (dashboard)/       Route group — every page inside gets the dashboard shell
+│   └── (dashboard)/       Route group — every page inside gets the app shell
 │       ├── layout.tsx     SidebarProvider + AppSidebar + SiteHeader
-│       ├── page.tsx       Sample dashboard (unreachable: "/" redirects to /grid in next.config.ts)
-│       ├── data.json      Placeholder table data for the sample dashboard
-│       └── grid/          Grid Zones: page.tsx (map + ranking), [zone]/page.tsx (detail)
+│       ├── leads/         Leads list + map (home: "/" redirects here), [id] detail
+│       ├── grid/          Grid Zones: page.tsx (map + ranking), [zone]/page.tsx (detail)
+│       └── data/          Data sources (Operations)
+│       (each has loading.tsx / error.tsx; leads/[id] also not-found.tsx)
 │   └── maplibre/[file]/   Serves MapLibre's web worker from node_modules (see below)
 ├── components/
 │   ├── grid/              zone-map (MapLibre), zone-charts (recharts), driver-bars
 │   ├── ui/                shadcn/ui primitives — generated; edit sparingly
-│   ├── app-sidebar.tsx    Sidebar nav items (edit `data` to change navigation)
-│   ├── site-header.tsx    Top bar
-│   └── …                  Dashboard pieces from the shadcn `dashboard-01` block
+│   ├── leads/             leads-map, status-control, priority-help, lead-return-link
+│   ├── app-sidebar.tsx    Navigation: Leads, Grid Zones; Operations → Data sources
+│   ├── site-header.tsx    Route title / breadcrumb
+│   └── route-error.tsx    Shared error state
 ├── hooks/use-mobile.ts
 └── lib/
     ├── api.ts             apiFetch<T>() + API types
@@ -30,15 +32,21 @@ apps/web/src/
     └── utils.ts           cn() class-merging helper
 ```
 
-## Dashboard shell
+## App shell ("Base Radar")
 
-Based on the shadcn [`dashboard-01`](https://ui.shadcn.com/blocks#dashboard-01) block. To add a page inside the shell, create `src/app/(dashboard)/<route>/page.tsx` and add a nav entry in `components/app-sidebar.tsx`. Pages outside the shell (e.g. login) go directly under `src/app/`.
+Sales-first: `/` redirects to `/leads` (`next.config.ts`). The sidebar has Leads and Grid Zones, plus Operations → Data sources. The shadcn `dashboard-01` sample content was removed. To add a page inside the shell, create `src/app/(dashboard)/<route>/page.tsx`, add a nav entry in `components/app-sidebar.tsx` and a title in `components/site-header.tsx`. Pages outside the shell (e.g. login) go directly under `src/app/`.
 
-The sample dashboard page still shows **static placeholder data** from the block. `/` currently redirects to `/grid` (temporary redirect in `next.config.ts`).
+UX conventions for leads (agreed in a design review, 2026-09-26):
+- The list opens on the **Unreviewed** queue (`status=new`); "All leads" is `status=all`.
+- **Priority value** (= fit/100 × historical grid value of the suggested size) is always labelled as a *ranking metric* with its explanation; it is not revenue or customer savings.
+- Battery values are "Historical grid value to Base", always shown in 25 / 40 / 50 kWh order with the **suggested size** highlighted.
+- Grid value detail uses progressive disclosure (design review with Codex, 2026-09-26): the list, map preview and lead tiles show only the realistic average-year value, always labelled with its basis ("Average year 2019–2025", or "Last 12 months" when history isn't loaded). The lead page's collapsed "Past years and how this is estimated" holds the last 12 months, the lowest/highest full year, the perfect-hindsight ceiling, a year-by-year table (from `GET /grid/zones/{zone}`, optional) and the method. The zone page shows the 25/40/50 estimate vs ceiling and the value-by-year chart by default; panels built on the 39.2 kWh zone battery are labelled "reference battery". Don't present "% of ceiling" as operating performance.
+- Signals: list shows only recorded ones as badges; detail shows Yes/No with "No = not found in available records". Talking points cite the evidence (permit month, appraisal record) and only say "confirm…" for undated appraisal-only flags.
+- Detail links carry a `back` param so returning keeps filters, sort, page and view.
 
 ## Grid Zones (`/grid`)
 
-Map + ranked list of ERCOT load zones by Grid Value Score; `/grid/[zone]` explains one zone's drivers with charts. Data comes from `GET /grid/zones[/{code}]` — see [grid-economics.md](grid-economics.md). Both pages call `await connection()` so they're never prerendered at build time.
+Dollar-led comparison (design review with Codex, 2026-09-26). `/grid` ("Compare Load Zones") leads with a table of all 8 Load Zones sorted by **Grid Value · 40 kWh · average year** (then last 12 months, and leads per zone with a "View leads" link to `/leads?zone=…&status=all`, or "No leads yet"), with a map colored by the same $ metric on a zero-based scale; the "Color map by" selector sits directly above the map. The relative **Zone Economics Score** (last 12 months), its drivers and weights follow in an always-visible "Price analysis · Last 12 months" section, never as the headline (user feedback: price analysis is not collapsed). A 4/100 score is a relative index, not "bad value". `/grid/[zone]` shows the lead count and link, the 25/40/50 table (average year, last 12 months, average-year ceiling), then Grid Value by calendar year, then the visible "Price analysis" section (score, drivers, reference-battery charts); only the method text "How Grid Value is estimated" is collapsed. Collapsibles use `components/disclosure.tsx`, which the lead page uses too. Data comes from `GET /grid/zones[/{code}]` plus `GET /leads/summary` (`by_zone`) — see [grid-economics.md](grid-economics.md). Both pages call `await connection()` so they're never prerendered at build time. `/leads` accepts `zone=` end to end (list, map, pagination, back links) and shows a removable Load Zone chip.
 
 - Map: `react-map-gl/maplibre` + OpenFreeMap `positron` basemap (no API key). Zone shapes come from the API (`GET /grid/zones.geojson`, file `apps/api/app/grid/ercot-zones.geojson`), colored client-side with a MapLibre `match` expression from `scoreColor()`.
 - **MapLibre worker gotcha:** MapLibre resolves its worker file relative to its own bundle, which Turbopack doesn't emit (→ 404, blank map). `zone-map.tsx` calls `setWorkerUrl("/maplibre/maplibre-gl-worker.mjs")`, served by `app/maplibre/[file]/route.ts` straight from `node_modules`.

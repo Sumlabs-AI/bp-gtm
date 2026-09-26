@@ -14,8 +14,10 @@ from sqlalchemy.dialects.postgresql import insert
 
 from app.db import SessionLocal
 from app.grid import sources
-from app.grid.config import LEAD_BATTERIES_KW, battery, scoring
-from app.grid.metrics import backtest_daily, score_zones, zone_metrics
+from app.grid.config import LEAD_BATTERIES_KW, battery, planner, scoring
+from app.grid.dispatch import ceiling, simulate
+from app.grid.metrics import per_year, score_zones, zone_metrics
+from app.grid.sources import ERCOT_TZ
 from app.grid.store import load_prices, upsert_prices
 from app.grid.zones import REFERENCE_HUB, ZONES
 from app.models import GridPrice, GridZoneMetrics
@@ -45,41 +47,67 @@ def update() -> None:
         api.close()
 
 
-def per_year(rt: pd.DataFrame) -> float:
-    """Scale a sum over the window to one year (same as zone_metrics' annualization)."""
-    days = max((rt.index.max() - rt.index.min()).total_seconds() / 86400, 1)
-    return 365 / days
+def full_years(rt: pd.Series) -> list[int]:
+    """Local calendar years before this one with (nearly) every real-time interval."""
+    counts = pd.Series(rt.index.tz_convert(ERCOT_TZ).year).value_counts()
+    current = pd.Timestamp.now(tz=ERCOT_TZ).year
+    return sorted(int(y) for y, n in counts.items() if y < current and n >= 0.98 * 365 * 96)
+
+
+def battery_years(rt: pd.Series, da: pd.Series, sized: dict) -> list[dict]:
+    """Realistic value ("25", …) and perfect-hindsight ceiling ("ceiling_25", …) of each
+    battery size in each full past calendar year. Leads are valued on the average year."""
+    rt_year = rt.index.tz_convert(ERCOT_TZ).year
+    da_year = da.index.tz_convert(ERCOT_TZ).year
+    rows = []
+    for year in full_years(rt):
+        year_rt, year_da = rt[rt_year == year], da[da_year == year]
+        row = {"year": year}
+        for kwh, b in sized.items():
+            row[str(kwh)] = round(float(simulate(year_rt, year_da, b, planner).sum()), 2)
+            row[f"ceiling_{kwh}"] = round(ceiling(year_rt, b), 2)
+        rows.append(row)
+    return rows
 
 
 def compute() -> None:
     end = pd.Timestamp.now(tz=UTC)
-    prices = load_prices(end - pd.Timedelta(days=scoring.lookback_days + 1), end)
-    rt = prices[prices.market == "RT"].pivot(
+    prices = load_prices(pd.Timestamp("2000-01-01", tz=UTC), end)
+    all_rt = prices[prices.market == "RT"].pivot(
         index="interval_start", columns="settlement_point", values="price"
     )
-    da = prices[prices.market == "DA"].pivot(
+    all_da = prices[prices.market == "DA"].pivot(
         index="interval_start", columns="settlement_point", values="price"
     )
     # Use exactly the trailing window ending at the latest real-time interval.
-    period_end = rt.index.max()
+    period_end = all_rt.index.max()
     period_start = period_end - pd.Timedelta(days=scoring.lookback_days)
-    rt, da = rt[rt.index > period_start], da[da.index > period_start]
+    rt, da = all_rt[all_rt.index > period_start], all_da[all_da.index > period_start]
 
     metrics, series = {}, {}
     for zone in ZONES:
+        zone_rt, zone_da = rt[zone.code].dropna(), da[zone.code].dropna()
         metrics[zone.code], series[zone.code] = zone_metrics(
-            rt[zone.code].dropna(),
-            rt[REFERENCE_HUB].dropna(),
-            da[zone.code].dropna(),
-            battery,
-            scoring,
+            zone_rt, rt[REFERENCE_HUB].dropna(), zone_da, battery, planner, scoring
         )
-        # Grid value of each battery size we pitch; leads use these per zone.
-        for kwh, kw in LEAD_BATTERIES_KW.items():
-            sized = battery.model_copy(update={"capacity_kwh": kwh, "power_kw": kw})
-            daily = backtest_daily(rt[zone.code].dropna(), sized)
-            metrics[zone.code][f"battery_value_{kwh}"] = float(daily.sum() * per_year(rt))
-        print(f"{zone.code}: ${metrics[zone.code]['arbitrage_usd']:,.0f}/battery/yr")
+        # Value of each battery size we pitch; leads use these per zone. The realistic
+        # value is the day-ahead planner's; the ceiling is perfect hindsight.
+        sized = {
+            kwh: battery.model_copy(update={"capacity_kwh": kwh, "power_kw": kw})
+            for kwh, kw in LEAD_BATTERIES_KW.items()
+        }
+        for kwh, b in sized.items():
+            value = simulate(zone_rt, zone_da, b, planner).sum() * per_year(rt)
+            metrics[zone.code][f"battery_value_{kwh}"] = float(value)
+            metrics[zone.code][f"battery_ceiling_{kwh}"] = ceiling(zone_rt, b) * per_year(rt)
+        series[zone.code]["battery_years"] = battery_years(
+            all_rt[zone.code].dropna(), all_da[zone.code].dropna(), sized
+        )
+        m = metrics[zone.code]
+        print(
+            f"{zone.code}: ${m['arbitrage_usd']:,.0f}/battery/yr "
+            f"(ceiling ${m['arbitrage_ceiling_usd']:,.0f})"
+        )
     scores = score_zones(metrics, scoring)
 
     rows = [
