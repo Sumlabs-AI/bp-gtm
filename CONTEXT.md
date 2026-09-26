@@ -61,8 +61,20 @@ The last date an external source's history covers. Features computed from that s
 _Avoid_: last updated, as of today
 
 **Weather Need Component**:
-The weather-derived part of Need Score (historical severe weather, active alerts, forecast extremes).
+The weather-derived part of Need Score. Baseline: Storm Exposure and Temperature Extremes Exposure over history. Live (later): active alerts and forecast extremes.
 _Avoid_: weather score
+
+**Storm Exposure**:
+How often a place falls under warnings for frequent outage-causing storms (severe thunderstorm, tornado, extreme wind), counted in warning-days, as a Texas percentile. Part of the Weather Need Component; varies within a county. Rare tropical and ice events are not in it (they appear through outage history, and later in Live Need).
+_Avoid_: storm risk, storm score
+
+**Temperature Extremes Exposure**:
+How often a place measurably reaches heat or cold that makes an outage dangerous (days ≥ 100°F, days ≤ 28°F), as a Texas percentile. Part of the Weather Need Component. Measured temperature, not NWS advisories, and without humidity.
+_Avoid_: heat score, climate risk
+
+**Warning-day**:
+A local calendar day on which a place was inside at least one qualifying NWS warning area. Counting days, not warnings, keeps one storm with several warnings from counting several times.
+_Avoid_: warning count (when meaning days)
 
 **Grid Need Component**:
 The ERCOT-derived part of Need Score (load, capacity, forecast load, resource outages, prices). Only signals that indicate value/urgency for residential storage belong here.
