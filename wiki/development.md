@@ -12,6 +12,17 @@ pnpm down        # docker compose down
 docker compose down -v   # also wipe the database volume
 ```
 
+## Load grid data
+
+A fresh database has no prices, so `/grid` is empty. Load and score them (details in [grid-economics.md](grid-economics.md)):
+
+```bash
+docker compose exec api python -m app.grid backfill 2025 2026   # or: cd apps/api && uv run python -m app.grid …
+docker compose exec api python -m app.grid compute
+```
+
+ERCOT credentials go in the repo-root `.env` (see `.env.example`); only `update` needs them.
+
 ## Run apps on the host (faster iteration)
 
 ```bash
