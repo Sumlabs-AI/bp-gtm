@@ -14,7 +14,7 @@ export default function NeedPage() {
         <div className="flex flex-wrap gap-2">
           <Badge variant="outline">Resolution: H3 8</Badge>
           <Badge variant="outline">Markets: Houston, Austin</Badge>
-          <Badge variant="outline">Colour: Baseline / Outage / Weather Need</Badge>
+          <Badge variant="outline">Colour: Baseline Need / Propensity / Outage / Weather</Badge>
         </div>
       </div>
       <CellMap className="h-[640px]" />

@@ -17,6 +17,7 @@ from app.need.live.forecast import COMPARISON
 from app.need.live.forecast_store import active_forecast, forecast_status, most_severe_level
 from app.need.live.grid import condition_summary, grid_live, latest_condition
 from app.need.live.store import active_alerts, alert_status, most_severe_category
+from app.need.ml import latest_propensity
 from app.need.outage.component import outage_components
 from app.need.store import cells_in_viewport, get_cell
 from app.need.weather.component import weather_components
@@ -166,6 +167,17 @@ class BaselineOut(BaseModel):
     notes: list[str]
 
 
+class PropensityOut(BaseModel):
+    """The ML workstream's Propensity Score for this Cell (latest prediction). Not Need,
+    not Opportunity."""
+
+    score: float
+    modelVersion: str  # noqa: N815
+    featureVersion: str  # noqa: N815  (Need Feature Version it was scored against)
+    scoredAt: datetime  # noqa: N815
+    importedAt: datetime  # noqa: N815
+
+
 class CellDetail(BaseModel):
     h3: str
     resolution: int
@@ -173,6 +185,7 @@ class CellDetail(BaseModel):
     loadZone: str | None  # noqa: N815
     needScore: float | None  # noqa: N815  (camelCase is the API contract)
     baseline: BaselineOut | None
+    propensity: PropensityOut | None
     components: dict[str, Any]
     live: Live
 
@@ -236,6 +249,7 @@ def list_cells(db: DB, bbox: Annotated[str, Query(description="west,south,east,n
     forecasts = active_forecast(db, cells, now)
     grid = grid_live(db, cells, now)
     baseline = baseline_components(db, cells)
+    propensity = latest_propensity(db, [c.h3_index for c in cells])
     return {
         "type": "FeatureCollection",
         # ERCOT-wide, so given once (also when no Cell is in view) for the map's status chip.
@@ -249,6 +263,9 @@ def list_cells(db: DB, bbox: Annotated[str, Query(description="west,south,east,n
                     "h3": c.h3_index,
                     "needScore": None,
                     "baselineNeed": b.baseline_need if (b := baseline[c.h3_index]) else None,
+                    "propensityScore": p.propensity_score
+                    if (p := propensity[c.h3_index])
+                    else None,
                     "outageNeed": (outage[c.h3_index] or {}).get("score"),
                     "weatherNeed": (weather[c.h3_index] or {}).get("score"),
                     "activeAlerts": len(alerts[c.h3_index]),
@@ -275,6 +292,7 @@ def cell_detail(db: DB, h3_index: str):
     components = {name: c for name, c in (("outage", outage), ("weather", weather)) if c}
     fetched_at, stale = alert_status(db, now)
     b = baseline_components(db, [cell])[cell.h3_index]
+    p = latest_propensity(db, [cell.h3_index])[cell.h3_index]
     reliability = ((outage or {}).get("utilityReliabilityNeed") or {}).get("score")
     point = geo.cell_to_parent(cell.h3_index, forecast_config.resolution)
     status = forecast_status(db, [point], now)
@@ -298,6 +316,15 @@ def cell_detail(db: DB, h3_index: str):
             notes=b.notes,
         )
         if b
+        else None,
+        propensity=PropensityOut(
+            score=p.propensity_score,
+            modelVersion=p.model_version,
+            featureVersion=p.feature_version,
+            scoredAt=p.scored_at,
+            importedAt=p.imported_at,
+        )
+        if p
         else None,
         components=components,
         live=Live(

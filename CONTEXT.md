@@ -121,8 +121,12 @@ _Avoid_: grid alert, EEA (unless ERCOT declared one)
 ### Propensity and Opportunity
 
 **Propensity Score**:
-Per-Cell prediction of battery adoption likelihood, owned by the ML workstream and built primarily from permit history. Answers "how likely is adoption here?", not "how needed is it?". Not yet built; distinct from Lead Score.
-_Avoid_: adoption score, ML score, permit score, lead score
+Per-Cell (H3 res 8) likelihood or affinity for battery adoption, 0–100, produced by the ML workstream from permit history and static Need features. Answers "how likely is adoption here?", not "how needed is it?" (Baseline Need) and not "why now?" (Live Need). Carries the model version, the Feature Version it was scored against, and when it was scored.
+_Avoid_: adoption score, ML score, permit score, lead score, probability (the contract is 0–100)
+
+**Feature Version**:
+The version of the Need feature definitions (which columns, thresholds, windows and sources) an export was produced with. A Propensity Score records the Feature Version it was trained or scored against, so definitions can change without silently invalidating a model.
+_Avoid_: schema version, data version
 
 **Opportunity**:
 The GTM interpretation of a Cell's Need Score together with its Propensity Score. Both dimensions stay visible; the combining formula is undefined until decided by the team.

@@ -11,6 +11,7 @@ from sqlalchemy import (
     SmallInteger,
     String,
     Text,
+    UniqueConstraint,
     func,
 )
 from sqlalchemy.dialects.postgresql import JSONB
@@ -300,3 +301,36 @@ class CellBaselineNeed(Base):
     dominant_driver: Mapped[str | None] = mapped_column(String(10))  # outage|weather|both
     notes: Mapped[list[str]] = mapped_column(JSONB)
     computed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+
+
+class PropensityImport(Base):
+    """One propensity.parquet handed over by the ML workstream."""
+
+    __tablename__ = "propensity_imports"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    imported_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    file_name: Mapped[str] = mapped_column(String(200))
+    rows: Mapped[int] = mapped_column(Integer)
+    product_cells: Mapped[int] = mapped_column(Integer)  # rows for seeded Cells
+    other_cells: Mapped[int] = mapped_column(Integer)  # valid res-8 Cells we haven't seeded
+    model_versions: Mapped[list[str]] = mapped_column(JSONB)
+    feature_versions: Mapped[list[str]] = mapped_column(JSONB)
+    warnings: Mapped[list[str]] = mapped_column(JSONB)
+
+
+class CellPropensity(Base):
+    """A Propensity Score prediction for one res-8 Cell (ML workstream output). History is
+    kept; the API serves the latest `scored_at` per Cell. Not Need, not Opportunity."""
+
+    __tablename__ = "cell_propensities"
+    __table_args__ = (UniqueConstraint("h3_index", "model_version", "scored_at"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    h3_index: Mapped[str] = mapped_column(String(15))  # indexed by the unique constraint
+    propensity_score: Mapped[float] = mapped_column(Float)  # 0-100
+    model_version: Mapped[str] = mapped_column(String(80))
+    feature_version: Mapped[str] = mapped_column(String(40))  # Need Feature Version scored against
+    scored_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))  # model prediction time
+    imported_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    import_id: Mapped[int] = mapped_column(ForeignKey("propensity_imports.id"))

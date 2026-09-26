@@ -187,3 +187,9 @@ class BaselineConfig(BaseModel):
 
 
 baseline = BaselineConfig()
+
+
+# Version of the Need feature definitions (columns, thresholds, windows, sources) that the
+# ML exports carry and a Propensity file records. Bump it when a definition changes; the
+# changelog lives in wiki/ml-contract.md.
+FEATURE_VERSION = "1.0.0"

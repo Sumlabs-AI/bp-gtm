@@ -6,6 +6,7 @@ from app.models.need import (
     BaselineNeedReference,
     Cell,
     CellBaselineNeed,
+    CellPropensity,
     CountyOutageFeatures,
     CountyTemperatureFeatures,
     ForecastPoint,
@@ -14,6 +15,7 @@ from app.models.need import (
     GridCondition,
     NwsAlert,
     NwsAlertSnapshot,
+    PropensityImport,
     StormFeatures,
     UtilityReliability,
 )
@@ -21,6 +23,7 @@ from app.models.need import (
 __all__ = [
     "BaselineNeedReference",
     "CellBaselineNeed",
+    "CellPropensity",
     "Cell",
     "CountyOutageFeatures",
     "CountyTemperatureFeatures",
@@ -34,6 +37,7 @@ __all__ = [
     "Lead",
     "NwsAlert",
     "NwsAlertSnapshot",
+    "PropensityImport",
     "Meter",
     "Permit",
     "Property",

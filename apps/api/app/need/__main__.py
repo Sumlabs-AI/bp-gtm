@@ -15,6 +15,8 @@ uv run python -m app.need live grid               # ERCOT condition + reserves (
 uv run python -m app.need live grid-prices        # RT zone prices from MIS (worker: 15 min)
 uv run python -m app.need live grid-dam           # day-ahead zone prices from MIS (worker: hourly)
 uv run python -m app.need baseline compute        # Baseline Need (after outage + weather)
+uv run python -m app.need export-ml --out-dir data/ml         # need_features + res-6 reference
+uv run python -m app.need import-propensity propensity.parquet  # the ML workstream's predictions
 uv run python -m app.need export --out cells.csv        # h3_index, resolution, center (for ML)
 """
 
@@ -294,6 +296,39 @@ def baseline() -> None:
     print("\nDominant driver:", cells["dominant_driver"].value_counts().to_dict())
 
 
+def export_ml(out_dir: Path) -> None:
+    from app.need.ml import export_features
+
+    r = export_features(out_dir)
+    print(
+        f"ML export (feature_version {r.feature_version})\n{'─' * 30}\n"
+        f"{r.features_path.name:<32}{r.cells:>8,} rows (res-8 product Cells)\n"
+        f"{r.reference_path.name:<32}{r.reference_cells:>8,} rows (res-6 Texas reference)\n"
+        f"columns: {', '.join(r.feature_columns)}\n"
+        f"reference columns: {', '.join(r.reference_columns)}"
+    )
+
+
+def import_propensity_file(path: Path) -> None:
+    from app.need.ml import PropensityFileRejected, import_propensity
+
+    if not path.is_file():
+        raise SystemExit(f"No such file: {path}")
+    try:
+        with SessionLocal() as db:
+            r = import_propensity(db, path)
+            db.commit()
+    except PropensityFileRejected as exc:
+        raise SystemExit(f"Rejected {path.name}: {exc}") from None
+    print(
+        f"Imported {path.name}: {r.rows:,} predictions ({r.product_cells:,} product Cells, "
+        f"{r.other_cells:,} other Cells); model {', '.join(r.model_versions)}; "
+        f"feature_version {', '.join(r.feature_versions)}"
+    )
+    for w in r.warnings:
+        print(f"  warning: {w}")
+
+
 def export(out: Path) -> None:
     columns = ("h3_index", "resolution", "center_lat", "center_lng")
     with SessionLocal() as db, out.open("w", newline="") as f:
@@ -324,6 +359,10 @@ def main() -> None:
     p.add_argument("action", choices=["refresh", "forecast", "grid", "grid-prices", "grid-dam"])
     p = sub.add_parser("baseline", help="Baseline Need (after outage + weather compute)")
     p.add_argument("action", choices=["compute"])
+    p = sub.add_parser("export-ml", help="need_features + need_reference_res6 Parquet")
+    p.add_argument("--out-dir", type=Path, required=True)
+    p = sub.add_parser("import-propensity", help="load the ML workstream's propensity.parquet")
+    p.add_argument("path", type=Path)
     p = sub.add_parser("export", help="write all Cells to CSV")
     p.add_argument("--out", type=Path, required=True)
     args = parser.parse_args()
@@ -340,6 +379,10 @@ def main() -> None:
         live(args.action)
     elif args.cmd == "baseline":
         baseline()
+    elif args.cmd == "export-ml":
+        export_ml(args.out_dir)
+    elif args.cmd == "import-propensity":
+        import_propensity_file(args.path)
     else:
         export(args.out)
 

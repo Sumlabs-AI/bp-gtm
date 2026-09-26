@@ -6,6 +6,8 @@ Node 22+, pnpm 10 (`corepack enable`), Python 3.13 + [uv](https://docs.astral.sh
 
 ## Run everything in Docker
 
+The `db` image is Postgres 17 **+ PostGIS**, built from `docker/db/Dockerfile`. A volume created by the old `postgres:17-alpine` image must be moved by dump and restore before it works with it: see [need-engine.md](need-engine.md#switching-an-existing-database-to-postgis).
+
 ```bash
 pnpm up          # docker compose up --build
 pnpm down        # docker compose down
