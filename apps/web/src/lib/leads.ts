@@ -2,6 +2,8 @@
 
 export type LeadStatus = "new" | "reviewed" | "qualified" | "excluded"
 export type LeadSignal = "solar" | "ev_charger" | "new_home" | "new_owner" | "new_meter" | "pool"
+export type BatteryKwh = 25 | 40 | 50
+export type BatteryValues = Record<"25" | "40" | "50", number>
 
 export type LeadItem = {
   id: number
@@ -14,6 +16,12 @@ export type LeadItem = {
   triggered_at: string | null
   trigger: string | null
   status: LeadStatus
+  load_zone: string | null
+  battery_values: BatteryValues | null
+  recommended_kwh: BatteryKwh | null
+  sizing_reason: string | null
+  value: number | null
+  expected_value: number | null
 }
 
 export type LeadPage = {
@@ -24,6 +32,7 @@ export type LeadPage = {
 export type LeadDriver = {
   key: string
   label: string
+  kind: "percentile" | "flag"
   weight: number // 0-1, share of the lead score
   score: number // 0-100
   value: number | boolean | null

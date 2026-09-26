@@ -16,6 +16,7 @@ router = APIRouter(tags=["leads"])
 
 DB = Annotated[Session, Depends(get_db)]
 Status = Literal["new", "reviewed", "qualified", "excluded"]
+PERCENTILE_DRIVERS = {"home_size", "home_value"}
 SIGNAL_TYPES = ("solar", "ev_charger", "new_home", "new_owner", "new_meter", "pool")
 
 
@@ -30,6 +31,12 @@ class LeadItem(BaseModel):
     triggered_at: datetime | None
     trigger: str | None
     status: str
+    load_zone: str | None
+    battery_values: dict[str, float] | None  # battery kWh -> estimated grid value $/yr
+    recommended_kwh: int | None
+    sizing_reason: str | None
+    value: float | None  # $/yr for the recommended battery
+    expected_value: float | None  # score/100 × value: the default ranking
 
 
 class LeadPage(BaseModel):
@@ -40,6 +47,7 @@ class LeadPage(BaseModel):
 class DriverOut(BaseModel):
     key: str
     label: str
+    kind: Literal["percentile", "flag"]
     weight: float
     score: float
     value: float | bool | None
@@ -110,6 +118,12 @@ def _item(lead: Lead, prop: Property) -> dict:
         "triggered_at": lead.triggered_at,
         "trigger": lead.trigger,
         "status": lead.status,
+        "load_zone": lead.load_zone,
+        "battery_values": lead.battery_values,
+        "recommended_kwh": lead.recommended_kwh,
+        "sizing_reason": lead.sizing_reason,
+        "value": lead.value,
+        "expected_value": lead.expected_value,
     }
 
 
@@ -173,13 +187,18 @@ Filters = Annotated[LeadFilters, Depends(_filters)]
 def list_leads(
     db: DB,
     filters: Filters,
-    sort: Literal["score", "triggered_at"] = "score",
+    sort: Literal["priority", "score", "value", "triggered_at"] = "priority",
     limit: int = Query(50, ge=1, le=500),
     offset: int = Query(0, ge=0),
 ):
     query = filters.apply(select(Lead, Property).join(Property))
     total = db.scalar(select(func.count()).select_from(query.subquery()))
-    order = Lead.score.desc() if sort == "score" else Lead.triggered_at.desc().nulls_last()
+    order = {
+        "priority": Lead.expected_value.desc().nulls_last(),
+        "score": Lead.score.desc(),
+        "value": Lead.value.desc().nulls_last(),
+        "triggered_at": Lead.triggered_at.desc().nulls_last(),
+    }[sort]
     rows = db.execute(query.order_by(order, Property.id).limit(limit).offset(offset)).all()
     return {"total": total, "items": [_item(lead, prop) for lead, prop in rows]}
 
@@ -282,6 +301,7 @@ def _detail(db: Session, lead_id: int) -> dict:
             {
                 "key": d.key,
                 "label": d.label,
+                "kind": "percentile" if d.key in PERCENTILE_DRIVERS else "flag",
                 "weight": scoring.weights[d.key] / total,
                 **lead.drivers[d.key],
             }

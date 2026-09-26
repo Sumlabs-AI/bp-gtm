@@ -302,3 +302,42 @@ def test_map_points_and_cells(client, monkeypatch):
     assert sum(f["properties"]["count"] for f in cells["features"]) == 2
 
     assert client.get("/leads/geo", params={"bbox": "nope"}).status_code == 422
+
+
+def test_value_per_battery_size_and_priority(client):
+    with SessionLocal() as db:  # grid compute output for the Houston zone
+        db.execute(
+            text(
+                "INSERT INTO grid_zone_metrics (settlement_point, period_start, period_end, "
+                "grid_value_score, metrics, scores, series) "
+                "VALUES ('LZ_HOUSTON', :t, :t, 10, :m, '{}', '{}')"
+            ),
+            {
+                "t": WEEK1,
+                "m": '{"battery_value_25": 560, "battery_value_40": 900, "battery_value_50": 1120}',
+            },
+        )
+        db.commit()
+    homes = [h | {"has_pool": True} if h["account"] == "B" else h for h in WEEK1_HOMES]
+    refresh(homes, WEEK1_METERS, WEEK1_PERMITS, "v1", WEEK1)
+    parcels = [{"county": "harris", "account": "A", "lat": 29.76, "lon": -95.37}]  # Houston
+    pipeline.run_source("hcad_parcels", now=WEEK1, module=fake(parcels, PARCEL_COLUMNS, "v1"))
+    score_leads(WEEK1, scoring)
+
+    a = by_account(client, "A").json()  # point inside LZ_HOUSTON
+    b = by_account(client, "B").json()  # no point: zone from its CenterPoint meter
+    assert a["load_zone"] == b["load_zone"] == "LZ_HOUSTON"
+    assert a["battery_values"] == {"25": 560, "40": 900, "50": 1120}
+    assert (a["recommended_kwh"], a["value"]) == (50, 1120)  # 4,000 sqft
+    assert a["sizing_reason"] == "4,000 sqft home → 50 kWh"
+    assert (b["recommended_kwh"], b["value"]) == (40, 900)  # 1,500 sqft + pool
+    assert a["expected_value"] == round(a["score"] / 100 * 1120)
+    kinds = {d["key"]: d["kind"] for d in a["drivers"]}
+    assert kinds["home_size"] == "percentile" and kinds["solar"] == "flag"
+
+    by_priority = client.get("/leads").json()["items"]
+    assert [i["expected_value"] for i in by_priority] == sorted(
+        (i["expected_value"] for i in by_priority), reverse=True
+    )
+    by_value = client.get("/leads", params={"sort": "value"}).json()["items"]
+    assert by_value[0]["value"] == 1120

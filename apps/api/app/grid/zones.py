@@ -1,6 +1,9 @@
 """ERCOT settlement points we track, with plain-language descriptions."""
 
 from dataclasses import dataclass
+from pathlib import Path
+
+ZONES_GEOJSON = Path(__file__).with_name("ercot-zones.geojson")
 
 # Every zone is compared against this system-wide reference price.
 REFERENCE_HUB = "HB_HUBAVG"

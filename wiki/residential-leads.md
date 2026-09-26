@@ -33,6 +33,17 @@ A property becomes a lead only if it is single-family (state class A1), has a ho
 
 Drivers (0–100, weights in `app/leads/config.py`): home size and home value are percentiles among eligible homes; solar (appraisal record **or** permit), EV charger, pool/spa (a large, steady electric load), new owner (owner changed on the appraisal roll within the lookback) and new home (recent year built, new-home permit or new meter) are yes/no. Score = weighted average. `reasons` names the two strongest drivers.
 
+## Value to Base and priority
+
+Each lead also gets an **estimated annual grid value** (`app/leads/value.py`):
+
+1. **Load zone:** the lead's parcel point inside the zone polygons (`app/grid/ercot-zones.geojson`, smallest polygon wins), else its TDSP (`TDSP_ZONES`).
+2. **Battery values:** the zone's backtest value for 25 / 40 / 50 kWh (`battery_value_*` from `python -m app.grid compute`). Run grid `compute` before lead `score`.
+3. **Recommended size:** by heated sqft (`battery_sizing` in `app/leads/config.py`: <2,500 → 25, <4,000 → 40, else 50); a pool bumps it one size up. `sizing_reason` says why.
+4. **Expected value** = fit score / 100 × value of the recommended size. `GET /leads` sorts by it by default (`sort=priority`); also `score`, `value`, `triggered_at`.
+
+It's a screening estimate of energy-arbitrage value (perfect hindsight, last 12 months of real-time prices): no retail margin, fees or ancillary services yet. In the Harris pilot every lead is in LZ_HOUSTON, so the zone doesn't change the ranking yet; it will once other TDSPs' counties are added (North ≈ +22%, West ≈ +39% vs Houston).
+
 ## What counts as "new"
 
 The first load of each source is the **baseline**: nothing in it is announced as new. After that, a lead's `trigger`/`triggered_at` is its latest event: new solar/EV/new-home permit, new electric meter, new owner, or newly eligible. A trigger is kept until a newer one replaces it, and the reviewer's `status` (new/reviewed/qualified/excluded) survives re-scoring. `GET /leads?new_only=true` = triggered in the last 7 days.

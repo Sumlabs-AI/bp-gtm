@@ -8,7 +8,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Checkbox } from "@/components/ui/checkbox"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Separator } from "@/components/ui/separator"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { apiFetch } from "@/lib/api"
@@ -19,6 +19,9 @@ const PAGE_SIZE = 50
 const SIGNALS = Object.keys(SIGNAL_LABELS) as LeadSignal[]
 const SCORES = [0, 50, 70, 85]
 const STATUSES: LeadStatus[] = ["new", "reviewed", "qualified", "excluded"]
+const SORTS = ["priority", "score", "value", "triggered_at"] as const
+const BATTERY_SIZES = ["25", "40", "50"] as const
+const formatDollars = (value: number) => `$${Math.round(value).toLocaleString("en-US")}`
 
 function first(value: string | string[] | undefined): string | undefined {
   return Array.isArray(value) ? value[0] : value
@@ -30,7 +33,7 @@ function recentTrigger(triggeredAt: string | null, trigger: string | null): stri
   if (!Number.isFinite(age) || age < 0 || age > 7 * 24 * 60 * 60 * 1000) return null
   const days = Math.floor(age / (24 * 60 * 60 * 1000))
   const when = days === 0 ? "today" : days === 1 ? "yesterday" : `${days} days ago`
-  return `${trigger ?? "New lead"} · ${when}`
+  return `${trigger ? signalLabel(trigger) : "New lead"} · ${when}`
 }
 
 export default async function LeadsPage(props: PageProps<"/leads">) {
@@ -45,7 +48,7 @@ export default async function LeadsPage(props: PageProps<"/leads">) {
   const zip = (first(query.zip) ?? "").trim()
   const requestedStatus = first(query.status)
   const status = STATUSES.find((value) => value === requestedStatus)
-  const sort = first(query.sort) === "triggered_at" ? "triggered_at" : "score"
+  const sort = SORTS.find((value) => value === first(query.sort)) ?? "priority"
   const view = first(query.view) === "map" ? "map" : "list"
   const requestedOffset = Number(first(query.offset) ?? 0)
   const offset = Number.isSafeInteger(requestedOffset) && requestedOffset >= 0
@@ -58,7 +61,7 @@ export default async function LeadsPage(props: PageProps<"/leads">) {
   if (newOnly) filters.set("new_only", "true")
   if (zip) filters.set("zip", zip)
   if (status) filters.set("status", status)
-  if (sort !== "score") filters.set("sort", sort)
+  if (sort !== "priority") filters.set("sort", sort)
 
   const listQuery = new URLSearchParams(filters)
   listQuery.set("limit", String(PAGE_SIZE))
@@ -86,7 +89,7 @@ export default async function LeadsPage(props: PageProps<"/leads">) {
       <div className="flex flex-col gap-2">
         <h2 className="text-2xl font-semibold tracking-tight">Residential leads</h2>
         <p className="max-w-4xl text-sm text-muted-foreground">
-          Single-family, owner-occupied homes Base can serve in the Harris County pilot, scored on home size, value, solar, EV charger, pool, new owner, and new home.
+          Single-family, owner-occupied homes Base can serve in the Harris County pilot, ranked by expected annual battery value.
         </p>
       </div>
 
@@ -137,7 +140,9 @@ export default async function LeadsPage(props: PageProps<"/leads">) {
                     <Select name="min_score" defaultValue={String(minScore)}>
                       <SelectTrigger id="min-score" className="w-full"><SelectValue /></SelectTrigger>
                       <SelectContent>
-                        {SCORES.map((score) => <SelectItem key={score} value={String(score)}>{score === 0 ? "Any score" : `${score}+`}</SelectItem>)}
+                        <SelectGroup>
+                          {SCORES.map((score) => <SelectItem key={score} value={String(score)}>{score === 0 ? "Any score" : `${score}+`}</SelectItem>)}
+                        </SelectGroup>
                       </SelectContent>
                     </Select>
                   </div>
@@ -150,8 +155,10 @@ export default async function LeadsPage(props: PageProps<"/leads">) {
                     <Select name="status" defaultValue={status ?? "all"}>
                       <SelectTrigger id="status" className="w-full"><SelectValue /></SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="all">All statuses</SelectItem>
-                        {STATUSES.map((value) => <SelectItem key={value} value={value}>{value[0].toUpperCase() + value.slice(1)}</SelectItem>)}
+                        <SelectGroup>
+                          <SelectItem value="all">All statuses</SelectItem>
+                          {STATUSES.map((value) => <SelectItem key={value} value={value}>{value[0].toUpperCase() + value.slice(1)}</SelectItem>)}
+                        </SelectGroup>
                       </SelectContent>
                     </Select>
                   </div>
@@ -160,8 +167,12 @@ export default async function LeadsPage(props: PageProps<"/leads">) {
                     <Select name="sort" defaultValue={sort}>
                       <SelectTrigger id="sort" className="w-full"><SelectValue /></SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="score">Highest score</SelectItem>
-                        <SelectItem value="triggered_at">Most recent trigger</SelectItem>
+                        <SelectGroup>
+                          <SelectItem value="priority">Priority (expected value)</SelectItem>
+                          <SelectItem value="score">Fit score</SelectItem>
+                          <SelectItem value="value">Battery value</SelectItem>
+                          <SelectItem value="triggered_at">Newest signal</SelectItem>
+                        </SelectGroup>
                       </SelectContent>
                     </Select>
                   </div>
@@ -198,47 +209,73 @@ export default async function LeadsPage(props: PageProps<"/leads">) {
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Score</TableHead>
+                    <TableHead>Expected value ($/yr)</TableHead>
+                    <TableHead>Fit</TableHead>
                     <TableHead>Address</TableHead>
-                    <TableHead>ZIP</TableHead>
+                    <TableHead>Battery value ($/yr)</TableHead>
                     <TableHead>Signals</TableHead>
-                    <TableHead>Why</TableHead>
-                    <TableHead>New</TableHead>
+                    <TableHead>Why now</TableHead>
                     <TableHead>Status</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {page.items.map((lead) => (
-                    <TableRow key={lead.id}>
-                      <TableCell>
-                        <Badge className="tabular-nums" style={{ background: scoreColor(lead.score) }}>
-                          {lead.score.toFixed(0)}
-                        </Badge>
-                      </TableCell>
-                      <TableCell>
-                        <Link href={`/leads/${lead.id}`} className="font-medium text-primary hover:underline">
-                          {lead.address ?? `Lead ${lead.id}`}
-                        </Link>
-                        {lead.city && <span className="block text-xs text-muted-foreground">{lead.city}</span>}
-                      </TableCell>
-                      <TableCell>{lead.zip ?? "—"}</TableCell>
-                      <TableCell>
-                        <div className="flex max-w-52 flex-wrap gap-1">
-                          {lead.signals.length ? lead.signals.map((signal) => (
-                            <Badge key={signal} variant="secondary">{signalLabel(signal)}</Badge>
-                          )) : "—"}
-                        </div>
-                      </TableCell>
-                      <TableCell className="max-w-64 whitespace-normal text-muted-foreground">{lead.reasons}</TableCell>
-                      <TableCell className="max-w-48 whitespace-normal text-muted-foreground">{recentTrigger(lead.triggered_at, lead.trigger) ?? "—"}</TableCell>
-                      <TableCell><Badge variant="outline" className="capitalize">{lead.status}</Badge></TableCell>
-                    </TableRow>
-                  ))}
+                  {page.items.map((lead) => {
+                    const batteryValues = lead.battery_values
+                    return (
+                      <TableRow key={lead.id}>
+                        <TableCell className="tabular-nums">
+                          {lead.expected_value === null ? (
+                            <span className="text-xs text-muted-foreground">Value unavailable</span>
+                          ) : (
+                            <span className="font-semibold">{formatDollars(lead.expected_value)}</span>
+                          )}
+                        </TableCell>
+                        <TableCell>
+                          <Badge className="tabular-nums" style={{ background: scoreColor(lead.score) }}>
+                            {lead.score.toFixed(0)}
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="max-w-64 min-w-48 whitespace-normal">
+                          <Link href={`/leads/${lead.id}`} className="font-medium text-primary hover:underline">
+                            {lead.address ?? `Lead ${lead.id}`}
+                          </Link>
+                          <span className="block text-xs text-muted-foreground">
+                            {[lead.city, lead.zip].filter(Boolean).join(" · ") || "Location unavailable"}
+                          </span>
+                          {lead.reasons && <span className="block text-xs text-muted-foreground">{lead.reasons}</span>}
+                        </TableCell>
+                        <TableCell>
+                          {batteryValues ? (
+                            <div className="flex min-w-60 flex-wrap items-center gap-x-2 gap-y-1 text-xs tabular-nums">
+                              {BATTERY_SIZES.map((size) => (
+                                <span key={size} className={Number(size) === lead.recommended_kwh ? "font-semibold" : undefined}>
+                                  {size} kWh {formatDollars(batteryValues[size])}
+                                  {Number(size) === lead.recommended_kwh && <Badge variant="secondary" className="ml-1">Pitch</Badge>}
+                                </span>
+                              ))}
+                            </div>
+                          ) : <span className="text-xs text-muted-foreground">Value unavailable</span>}
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex max-w-52 flex-wrap gap-1">
+                            {lead.signals.length ? lead.signals.map((signal) => (
+                              <Badge key={signal} variant="secondary">{signalLabel(signal)}</Badge>
+                            )) : "—"}
+                          </div>
+                        </TableCell>
+                        <TableCell className="max-w-40 whitespace-normal text-muted-foreground">{recentTrigger(lead.triggered_at, lead.trigger) ?? "—"}</TableCell>
+                        <TableCell><Badge variant="outline" className="capitalize">{lead.status}</Badge></TableCell>
+                      </TableRow>
+                    )
+                  })}
                   {page.items.length === 0 && (
                     <TableRow><TableCell colSpan={7} className="py-10 text-center text-muted-foreground">No leads match these filters.</TableCell></TableRow>
                   )}
                 </TableBody>
               </Table>
+              <p className="mt-4 text-xs text-muted-foreground">
+                Battery values are historical screening estimates of energy-arbitrage value from ERCOT real-time prices (perfect hindsight, last 12 months). They exclude retail margin, fees, and ancillary services.
+              </p>
               <div className="mt-4 flex items-center justify-between gap-3">
                 <span className="text-sm text-muted-foreground">50 leads per page</span>
                 <div className="flex gap-2">

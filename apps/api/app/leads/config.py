@@ -9,6 +9,15 @@ from pydantic import BaseModel
 BASE_TDSPS = {"centerpoint", "oncor", "aep_central", "aep_north", "tnmp"}
 
 
+# Rough ERCOT load zone per TDSP, used only when a lead has no map point.
+TDSP_ZONES = {
+    "centerpoint": "LZ_HOUSTON",
+    "oncor": "LZ_NORTH",  # Oncor also serves parts of LZ_WEST
+    "aep_central": "LZ_SOUTH",
+    "aep_north": "LZ_WEST",
+}
+
+
 class LeadScoringConfig(BaseModel):
     # Signals older than this don't count (permit issued / owner changed).
     signal_lookback_days: int = 3 * 365
@@ -25,6 +34,8 @@ class LeadScoringConfig(BaseModel):
         "new_home": 0.10,
         "pool": 0.10,  # pools/spas: large, steady electric load
     }
+    # Battery we'd pitch, by heated area (sqft upper bounds); a pool bumps it one size up.
+    battery_sizing: list[tuple[float, int]] = [(2_500, 25), (4_000, 40), (float("inf"), 50)]
 
 
 scoring = LeadScoringConfig()

@@ -2,6 +2,7 @@ from datetime import datetime
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException
+from fastapi.responses import FileResponse
 from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -9,7 +10,7 @@ from sqlalchemy.orm import Session
 from app.db import get_db
 from app.grid.config import battery, scoring
 from app.grid.metrics import DRIVERS, primary_reason
-from app.grid.zones import ZONES_BY_CODE
+from app.grid.zones import ZONES_BY_CODE, ZONES_GEOJSON
 from app.models import GridZoneMetrics
 
 router = APIRouter(prefix="/grid", tags=["grid"])
@@ -76,6 +77,12 @@ def _ranked(db: Session) -> list[GridZoneMetrics]:
     return list(
         db.scalars(select(GridZoneMetrics).order_by(GridZoneMetrics.grid_value_score.desc()))
     )
+
+
+@router.get("/zones.geojson")
+def zones_geojson():
+    """Approximate load zone boundaries (see scripts/build_zone_geojson.py)."""
+    return FileResponse(ZONES_GEOJSON, media_type="application/geo+json")
 
 
 @router.get("/zones", response_model=list[ZoneSummary])

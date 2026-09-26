@@ -14,8 +14,8 @@ from sqlalchemy.dialects.postgresql import insert
 
 from app.db import SessionLocal
 from app.grid import sources
-from app.grid.config import battery, scoring
-from app.grid.metrics import score_zones, zone_metrics
+from app.grid.config import LEAD_BATTERIES_KW, battery, scoring
+from app.grid.metrics import backtest_daily, score_zones, zone_metrics
 from app.grid.store import load_prices, upsert_prices
 from app.grid.zones import REFERENCE_HUB, ZONES
 from app.models import GridPrice, GridZoneMetrics
@@ -45,6 +45,12 @@ def update() -> None:
         api.close()
 
 
+def per_year(rt: pd.DataFrame) -> float:
+    """Scale a sum over the window to one year (same as zone_metrics' annualization)."""
+    days = max((rt.index.max() - rt.index.min()).total_seconds() / 86400, 1)
+    return 365 / days
+
+
 def compute() -> None:
     end = pd.Timestamp.now(tz=UTC)
     prices = load_prices(end - pd.Timedelta(days=scoring.lookback_days + 1), end)
@@ -68,6 +74,11 @@ def compute() -> None:
             battery,
             scoring,
         )
+        # Grid value of each battery size we pitch; leads use these per zone.
+        for kwh, kw in LEAD_BATTERIES_KW.items():
+            sized = battery.model_copy(update={"capacity_kwh": kwh, "power_kw": kw})
+            daily = backtest_daily(rt[zone.code].dropna(), sized)
+            metrics[zone.code][f"battery_value_{kwh}"] = float(daily.sum() * per_year(rt))
         print(f"{zone.code}: ${metrics[zone.code]['arbitrage_usd']:,.0f}/battery/yr")
     scores = score_zones(metrics, scoring)
 

@@ -16,6 +16,7 @@ from sqlalchemy.dialects.postgresql import insert
 
 from app.db import engine
 from app.leads.config import BASE_TDSPS, LeadScoringConfig
+from app.leads.value import assign_zones, recommend_battery, zone_battery_values
 from app.models import Lead
 
 
@@ -66,7 +67,7 @@ def score_leads(now: datetime, cfg: LeadScoringConfig, baseline: bool = False) -
     homes = _read(
         """
         SELECT id AS property_id, address_key, market_value, heated_sqft, year_built,
-               owner_changed_at, has_solar, has_pool
+               owner_changed_at, has_solar, has_pool, lat, lon
         FROM properties
         WHERE is_single_family AND homestead AND NOT confidential AND address_key IS NOT NULL
         """
@@ -122,6 +123,8 @@ def score_leads(now: datetime, cfg: LeadScoringConfig, baseline: bool = False) -
 
     total = sum(cfg.weights.values())
     eligible["score"] = sum(drivers[k] * w for k, w in cfg.weights.items()) / total
+    eligible["load_zone"] = assign_zones(eligible)
+    battery_values = zone_battery_values()
 
     had_leads = not existing.empty and not baseline
     prior = existing.set_index("property_id")
@@ -194,10 +197,21 @@ def score_leads(now: datetime, cfg: LeadScoringConfig, baseline: bool = False) -
         when, trigger = max(events, key=lambda e: e[0]) if events else (None, None)
 
         scores = {k: round(float(drivers.at[i, k]), 1) for k in cfg.weights}
+        score = round(float(home.score), 1)
+        kwh, sizing_reason = recommend_battery(home.heated_sqft, bool(home.has_pool), cfg)
+        zone = home.load_zone if isinstance(home.load_zone, str) else None
+        values = battery_values.get(zone)
+        value = values[str(kwh)] if values else None
         rows.append(
             {
                 "property_id": int(home.property_id),
-                "score": round(float(home.score), 1),
+                "score": score,
+                "load_zone": zone,
+                "battery_values": values,
+                "recommended_kwh": kwh,
+                "sizing_reason": sizing_reason,
+                "value": value,
+                "expected_value": None if value is None else round(score / 100 * value, 0),
                 "drivers": {
                     k: {"score": scores[k], "value": _driver_value(k, home, scores)}
                     for k in cfg.weights
@@ -229,8 +243,10 @@ def _write_leads(rows: list[dict]) -> None:
     with engine.begin() as conn:
         ids = [r["property_id"] for r in rows]
         conn.execute(text("DELETE FROM leads WHERE NOT (property_id = ANY(:ids))"), {"ids": ids})
-        for chunk in range(0, len(rows), 5000):
-            stmt = insert(Lead).values(rows[chunk : chunk + 5000])
+        # Postgres allows at most 65,535 bind parameters per statement.
+        batch = 60_000 // len(rows[0])
+        for chunk in range(0, len(rows), batch):
+            stmt = insert(Lead).values(rows[chunk : chunk + batch])
             # Keep a trigger until a newer one replaces it ("newly eligible" only fires once).
             newer = or_(
                 Lead.triggered_at.is_(None),
@@ -246,7 +262,19 @@ def _write_leads(rows: list[dict]) -> None:
                     set_={
                         **{
                             c: stmt.excluded[c]
-                            for c in ("score", "drivers", "signals", "reasons", "scored_at")
+                            for c in (
+                                "score",
+                                "drivers",
+                                "signals",
+                                "reasons",
+                                "scored_at",
+                                "load_zone",
+                                "battery_values",
+                                "recommended_kwh",
+                                "sizing_reason",
+                                "value",
+                                "expected_value",
+                            )
                         },
                         "triggered_at": case(
                             (newer, stmt.excluded.triggered_at), else_=Lead.triggered_at

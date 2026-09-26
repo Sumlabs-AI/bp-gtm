@@ -106,6 +106,14 @@ class Lead(Base):
     triggered_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), index=True)
     trigger: Mapped[str | None] = mapped_column(Text)
     status: Mapped[str] = mapped_column(String(20), server_default="new")
+    # Value to Base: ERCOT load zone -> grid value per battery size -> recommended size.
+    load_zone: Mapped[str | None] = mapped_column(String(20))
+    battery_values: Mapped[dict | None] = mapped_column(JSONB)  # {"25": $/yr, "40": …, "50": …}
+    recommended_kwh: Mapped[int | None] = mapped_column(Integer)
+    sizing_reason: Mapped[str | None] = mapped_column(Text)
+    value: Mapped[float | None] = mapped_column(Float)  # $/yr for the recommended size
+    # score/100 × value: the default ranking ("priority").
+    expected_value: Mapped[float | None] = mapped_column(Float, index=True)
     scored_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
 
 

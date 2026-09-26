@@ -40,7 +40,7 @@ The sample dashboard page still shows **static placeholder data** from the block
 
 Map + ranked list of ERCOT load zones by Grid Value Score; `/grid/[zone]` explains one zone's drivers with charts. Data comes from `GET /grid/zones[/{code}]` — see [grid-economics.md](grid-economics.md). Both pages call `await connection()` so they're never prerendered at build time.
 
-- Map: `react-map-gl/maplibre` + OpenFreeMap `positron` basemap (no API key). Zone shapes are a static file, `public/geo/ercot-zones.geojson`, colored client-side with a MapLibre `match` expression from `scoreColor()`.
+- Map: `react-map-gl/maplibre` + OpenFreeMap `positron` basemap (no API key). Zone shapes come from the API (`GET /grid/zones.geojson`, file `apps/api/app/grid/ercot-zones.geojson`), colored client-side with a MapLibre `match` expression from `scoreColor()`.
 - **MapLibre worker gotcha:** MapLibre resolves its worker file relative to its own bundle, which Turbopack doesn't emit (→ 404, blank map). `zone-map.tsx` calls `setWorkerUrl("/maplibre/maplibre-gl-worker.mjs")`, served by `app/maplibre/[file]/route.ts` straight from `node_modules`.
 
 ## Leads (`/leads`) and data sources (`/data`)

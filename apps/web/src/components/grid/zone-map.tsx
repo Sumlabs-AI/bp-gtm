@@ -16,6 +16,7 @@ import {
 import { formatDriverValue, scoreColor, type ZoneSummary } from "@/lib/grid"
 
 const BASEMAP = "https://tiles.openfreemap.org/styles/positron"
+const ZONES_URL = `${process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000"}/grid/zones.geojson`
 const TEXAS_BOUNDS: [[number, number], [number, number]] = [
   [-106.7, 25.8],
   [-93.5, 36.6],
@@ -92,7 +93,7 @@ export function ZoneMap({
           scrollZoom={false} // let the wheel scroll the page; zoom with the buttons
           attributionControl={{ compact: true }}
         >
-          <Source id="zones" type="geojson" data="/geo/ercot-zones.geojson">
+          <Source id="zones" type="geojson" data={ZONES_URL}>
             <Layer
               id="zones-fill"
               type="fill"
