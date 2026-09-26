@@ -108,18 +108,21 @@ export function CellMap({ className }: { className?: string }) {
                 <Layer
                   key="cells-fill"
                   id="cells-fill"
+                  minzoom={H3_MAP_MIN_ZOOM}
                   type="fill"
                   paint={{ "fill-color": "#6366f1", "fill-opacity": 0.08 }}
                 />,
                 <Layer
                   key="cells-line"
                   id="cells-line"
+                  minzoom={H3_MAP_MIN_ZOOM}
                   type="line"
                   paint={{ "line-color": "#6366f1", "line-width": 0.5, "line-opacity": 0.5 }}
                 />,
                 <Layer
                   key="cells-highlight"
                   id="cells-highlight"
+                  minzoom={H3_MAP_MIN_ZOOM}
                   type="line"
                   filter={["in", ["get", "h3"], ["literal", highlighted]]}
                   paint={{ "line-color": "#312e81", "line-width": 2.5 }}
@@ -158,7 +161,7 @@ export function CellMap({ className }: { className?: string }) {
         <SheetContent>
           <SheetHeader>
             <SheetTitle className="font-mono">{selected}</SheetTitle>
-            <SheetDescription>H3 Cell. Need Score arrives with the first Need signals.</SheetDescription>
+            <SheetDescription>H3 Cell. Need Score arrives with the first Need Components.</SheetDescription>
           </SheetHeader>
           {shownDetail && (
             <dl className="grid grid-cols-2 gap-x-4 gap-y-2 px-4 text-sm">

@@ -30,7 +30,7 @@ Status: **Milestone 1 (Cells)**. Cells exist for Harris and Travis counties and 
 ```bash
 docker compose exec api python -m app.need seed                  # every Market; safe to re-run
 docker compose exec api python -m app.need seed --market travis
-docker compose exec api python -m app.need export /app/data/cells.csv   # h3_index,resolution,center_lat,center_lng
+docker compose exec api python -m app.need export --out /app/data/cells.csv # h3_index,resolution,center_lat,center_lng
 docker compose exec api python -m scripts.download_counties       # refresh county files (Census, network)
 ```
 
@@ -52,7 +52,7 @@ Measured (M-series laptop, Docker): seeding Harris creates 5,550 Cells in 0.35 s
 The `db` image changed from `postgres:17-alpine` to Debian `postgres:17` + PostGIS (`docker/db/Dockerfile`). A volume created by the old image should be moved by dump and restore, not reused. Reusing it risks collation mismatches between musl and glibc and corrupt text indexes. Don't wipe the volume and re-download either: lead sources are large and ERCOT rate-limits.
 
 ```bash
-docker compose exec db pg_dump -U app -Fc app > app.dump   # BEFORE pulling this change (old image running)
+docker compose exec -T db pg_dump -U app -Fc app > app.dump   # BEFORE pulling this change (old image running)
 docker compose down
 docker volume rm bp-gtm_pgdata                              # name: docker volume ls
 docker compose up -d --build db

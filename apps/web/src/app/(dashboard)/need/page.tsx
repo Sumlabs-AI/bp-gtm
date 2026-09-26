@@ -8,7 +8,7 @@ export default function NeedPage() {
         <h2 className="text-2xl font-semibold tracking-tight">Where is backup power needed?</h2>
         <p className="max-w-3xl text-sm text-muted-foreground">
           The Need Engine scores H3 Cells (~0.7 km² hexagons). Cells cover Harris and Travis
-          counties for now; Need signals (outages, weather, grid) come next. Click a Cell for its
+          counties for now; Need Components (outage, weather, grid) come next. Click a Cell for its
           detail.
         </p>
         <div className="flex flex-wrap gap-2">

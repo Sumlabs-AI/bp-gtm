@@ -37,11 +37,11 @@ def _row(cell: str) -> dict:
     }
 
 
-def seed_polygon(db: Session, geometry: dict, resolution: int | None = None) -> SeedReport:
+def seed_polygon(db: Session, geometry: dict) -> SeedReport:
     """Insert the Cells covering a GeoJSON (Multi)Polygon; existing Cells are left alone.
     The caller commits."""
     started = time.perf_counter()
-    resolution = resolution or need.h3_resolution
+    resolution = need.h3_resolution
     cells = sorted(geo.polygon_to_cells(geometry, resolution))
     inserted = 0
     for i in range(0, len(cells), BATCH):

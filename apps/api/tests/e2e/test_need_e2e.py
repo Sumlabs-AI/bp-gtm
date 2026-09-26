@@ -1,9 +1,11 @@
 """Need Engine Cells end to end: geometry -> seeded Cells in PostGIS -> HTTP API."""
 
 from shapely.geometry import shape
+from sqlalchemy import func, select
 
 from app import geo
 from app.db import SessionLocal
+from app.models import Cell
 from app.need.config import need
 from app.need.store import seed_polygon
 
@@ -41,6 +43,8 @@ def test_seeding_is_idempotent():
     again = seed(square(LNG, LAT, 0.02))
     assert again.generated == first.generated
     assert (again.inserted, again.existing) == (0, first.generated)
+    with SessionLocal() as db:
+        assert db.scalar(select(func.count()).select_from(Cell)) == first.generated
 
     # An overlapping area only adds the Cells that weren't there yet.
     wider = seed(square(LNG, LAT, 0.04))

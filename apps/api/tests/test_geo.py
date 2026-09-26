@@ -23,7 +23,7 @@ def test_latlng_maps_to_a_resolution_8_cell():
     assert len(cell) == 15
     int(cell, 16)  # canonical lowercase hex string
     assert cell == cell.lower()
-    assert geo.RESOLUTION == 8
+    assert geo.cell_resolution(cell) == 8
     # Res-8 hexagon edge is ~0.5 km, so the point is well within 1 km of the center.
     assert km_between(HOUSTON, geo.cell_to_center(cell)) < 1
     assert geo.latlng_to_cell(*geo.cell_to_center(cell)) == cell

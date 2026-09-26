@@ -2,7 +2,7 @@
 
 uv run python -m app.need seed                     # every Market (idempotent)
 uv run python -m app.need seed --market harris
-uv run python -m app.need export cells.csv         # h3_index, resolution, center (for ML)
+uv run python -m app.need export --out cells.csv        # h3_index, resolution, center (for ML)
 """
 
 import argparse
@@ -55,7 +55,7 @@ def main() -> None:
         help="repeatable; default: every Market",
     )
     p = sub.add_parser("export", help="write all Cells to CSV")
-    p.add_argument("out", type=Path)
+    p.add_argument("--out", type=Path, required=True)
     args = parser.parse_args()
 
     if args.cmd == "seed":
