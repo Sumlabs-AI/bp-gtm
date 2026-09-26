@@ -28,7 +28,7 @@ Status: **Milestones 1–2 (Cells + Load Zone)**. Cells exist for Harris and Tra
 
 ## Load Zone
 
-A Cell's `load_zone` comes from `app.grid.zones.zone_for_points`, the **same function Leads use**: its center inside the zone polygon, and where polygons overlap (Austin Energy and CPS inside LZ_SOUTH) the smallest one wins. So a Lead and its Cell can't disagree. Tests cover the rule once (`tests/test_grid_zones.py`) and check that Cells use it (`tests/e2e/test_need_e2e.py`).
+A Cell's `load_zone` comes from `app.grid.zones.zone_for_points`, the **same function Leads use**: its center inside the zone polygon, and where polygons overlap (Austin Energy and CPS inside LZ_SOUTH) the smallest one wins. Same rule, same code, so there's no second implementation to drift. A Lead and its Cell can still differ in two cases. Near a zone boundary the parcel point and the Cell center can fall on different sides. And a Lead whose Cell is unknown still gets a zone from its TDSP fallback. Tests cover the rule once (`tests/test_grid_zones.py`) and check that Cells use it (`tests/e2e/test_need_e2e.py`).
 
 - `enrich` recomputes **every** Cell on each run and writes only the rows that changed, so it's idempotent and picks up a new zone file or rule. `seed` runs it automatically.
 - `None` = the center is outside every polygon. Harris has 95 such Cells on its edges: the zone polygons are simplified (`scripts/build_zone_geojson.py`). There is no fallback, unlike Leads, which fall back to their TDSP.

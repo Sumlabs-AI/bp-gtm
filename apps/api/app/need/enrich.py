@@ -14,7 +14,7 @@ from app.models import Cell
 
 
 @dataclass
-class ZoneReport:
+class LoadZoneReport:
     processed: int
     assigned: int
     unknown: int
@@ -23,7 +23,7 @@ class ZoneReport:
     seconds: float
 
 
-def enrich_load_zones(db: Session) -> ZoneReport:
+def enrich_load_zones(db: Session) -> LoadZoneReport:
     """Set each Cell's load zone from its center, with the same rule Leads use.
     The caller commits."""
     started = time.perf_counter()
@@ -37,7 +37,7 @@ def enrich_load_zones(db: Session) -> ZoneReport:
         rows = stale[["h3_index", "zone"]].rename(columns={"zone": "load_zone"})
         db.execute(update(Cell), rows.to_dict("records"))
     by_zone = Counter(z for z in cells["zone"] if z is not None)
-    return ZoneReport(
+    return LoadZoneReport(
         processed=len(cells),
         assigned=sum(by_zone.values()),
         unknown=len(cells) - sum(by_zone.values()),

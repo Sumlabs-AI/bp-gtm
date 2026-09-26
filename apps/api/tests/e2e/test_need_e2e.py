@@ -157,17 +157,14 @@ def test_enrichment_assigns_each_cell_its_load_zone(client):
     austin = seed(square(AUSTIN[1], AUSTIN[0], 0.01)).generated
     gulf = seed(square(GULF[1], GULF[0], 0.01)).generated
 
+    # Which zone each Cell gets is the shared rule's job (tests/test_grid_zones.py); here:
+    # every Cell is processed, and a Cell outside every zone stays unknown (no fallback).
     report = enrich()
     assert report.processed == houston + austin + gulf
     assert (report.assigned, report.unknown) == (houston + austin, gulf)
-    assert report.by_zone == {"LZ_HOUSTON": houston, "LZ_AEN": austin}
-
-    def zone_of(lat: float, lng: float) -> str | None:
-        return client.get(f"/need/cells/{geo.latlng_to_cell(lat, lng)}").json()["loadZone"]
-
-    assert zone_of(LAT, LNG) == "LZ_HOUSTON"
-    assert zone_of(*AUSTIN) == "LZ_AEN"
-    assert zone_of(*GULF) is None
+    assert sum(report.by_zone.values()) == report.assigned
+    gulf_cell = client.get(f"/need/cells/{geo.latlng_to_cell(*GULF)}").json()
+    assert gulf_cell["loadZone"] is None
 
 
 def test_cells_use_the_shared_load_zone_rule(client):

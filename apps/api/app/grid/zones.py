@@ -1,4 +1,5 @@
-"""ERCOT settlement points we track, with plain-language descriptions."""
+"""ERCOT settlement points we track, with plain-language descriptions, and the one rule
+that places a point in a load zone (zone_for_points)."""
 
 from dataclasses import dataclass
 from functools import cache
