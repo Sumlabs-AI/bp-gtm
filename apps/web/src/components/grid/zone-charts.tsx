@@ -22,16 +22,16 @@ export function HourlyProfileChart({ zone }: { zone: ZoneDetail }) {
     hub: { label: "ERCOT hub avg", color: "#64748b" },
   } satisfies ChartConfig
   return (
-    <Card>
-      <CardHeader>
+    <Card className="min-w-0">
+      <CardHeader className="min-w-0">
         <CardTitle>Average price by hour of day</CardTitle>
         <CardDescription>
           Real-time $/MWh, local time. The gap between the cheap midday/overnight hours and
           the evening peak is what a battery captures.
         </CardDescription>
       </CardHeader>
-      <CardContent>
-        <ChartContainer config={config} className="aspect-auto h-64 w-full">
+      <CardContent className="min-w-0">
+        <ChartContainer config={config} className="aspect-auto h-64 min-w-0 w-full">
           <LineChart data={zone.series.hourly_profile} margin={{ left: 4, right: 12 }}>
             <CartesianGrid vertical={false} />
             <XAxis dataKey="hour" tickLine={false} axisLine={false} tickFormatter={(h) => `${h}h`} />
@@ -56,20 +56,21 @@ export function HourlyProfileChart({ zone }: { zone: ZoneDetail }) {
 }
 
 export function MonthlyValueChart({ zone }: { zone: ZoneDetail }) {
+  const { battery } = zone.assumptions
   const config = {
-    arbitrage_usd: { label: "Battery value ($)", color: "#15803d" },
+    arbitrage_usd: { label: "Day-ahead estimate ($)", color: "#15803d" },
   } satisfies ChartConfig
   return (
-    <Card>
-      <CardHeader>
+    <Card className="min-w-0">
+      <CardHeader className="min-w-0">
         <CardTitle>Battery value by month</CardTitle>
         <CardDescription>
-          What one battery would have earned each month in the backtest. Spiky months mean
-          value depends on a few scarcity events.
+          Day-ahead estimates for the reference battery ({battery.capacity_kwh} kWh,{" "}
+          {battery.power_kw} kW) · $/month. Spiky months mean value depends on a few scarcity events.
         </CardDescription>
       </CardHeader>
-      <CardContent>
-        <ChartContainer config={config} className="aspect-auto h-64 w-full">
+      <CardContent className="min-w-0">
+        <ChartContainer config={config} className="aspect-auto h-64 min-w-0 w-full">
           <BarChart data={zone.series.monthly} margin={{ left: 4, right: 12 }}>
             <CartesianGrid vertical={false} />
             <XAxis dataKey="month" tickLine={false} axisLine={false} tickFormatter={monthLabel} />
@@ -85,21 +86,55 @@ export function MonthlyValueChart({ zone }: { zone: ZoneDetail }) {
   )
 }
 
+export function BatteryYearsChart({ zone }: { zone: ZoneDetail }) {
+  const config = {
+    "25": { label: "25 kWh", color: "#86c896" },
+    "40": { label: "40 kWh", color: "#22c55e" },
+    "50": { label: "50 kWh", color: "#15803d" },
+  } satisfies ChartConfig
+  return (
+    <Card className="min-w-0">
+      <CardHeader className="min-w-0">
+        <CardTitle>Grid Value by calendar year</CardTitle>
+        <CardDescription>
+          Day-ahead estimates for full calendar years · $/year.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="min-w-0">
+        <ChartContainer config={config} className="aspect-auto h-56 min-w-0 w-full">
+          <BarChart data={zone.series.battery_years ?? []} margin={{ left: 4, right: 12 }}>
+            <CartesianGrid vertical={false} />
+            <XAxis dataKey="year" tickLine={false} axisLine={false} />
+            <YAxis tickLine={false} axisLine={false} width={40} tickFormatter={(v) => `$${v}`} />
+            <ChartTooltip
+              content={<ChartTooltipContent labelFormatter={(_, p) => String(p[0]?.payload.year)} />}
+            />
+            <ChartLegend content={<ChartLegendContent />} />
+            <Bar dataKey="25" fill="var(--color-25)" radius={4} />
+            <Bar dataKey="40" fill="var(--color-40)" radius={4} />
+            <Bar dataKey="50" fill="var(--color-50)" radius={4} />
+          </BarChart>
+        </ChartContainer>
+      </CardContent>
+    </Card>
+  )
+}
+
 export function MonthlyBasisChart({ zone }: { zone: ZoneDetail }) {
   const config = {
     avg_basis: { label: "Zone − hub ($/MWh)", color: "#15803d" },
   } satisfies ChartConfig
   return (
-    <Card>
-      <CardHeader>
+    <Card className="min-w-0">
+      <CardHeader className="min-w-0">
         <CardTitle>Price vs. the rest of the grid</CardTitle>
         <CardDescription>
           Monthly average of zone price minus ERCOT hub average. Above zero means power is
           scarcer here than elsewhere, usually from transmission congestion.
         </CardDescription>
       </CardHeader>
-      <CardContent>
-        <ChartContainer config={config} className="aspect-auto h-64 w-full">
+      <CardContent className="min-w-0">
+        <ChartContainer config={config} className="aspect-auto h-64 min-w-0 w-full">
           <BarChart data={zone.series.monthly} margin={{ left: 4, right: 12 }}>
             <CartesianGrid vertical={false} />
             <XAxis dataKey="month" tickLine={false} axisLine={false} tickFormatter={monthLabel} />

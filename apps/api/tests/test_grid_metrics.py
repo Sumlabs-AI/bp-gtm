@@ -1,30 +1,8 @@
 import pandas as pd
-import pytest
 
-from app.grid.config import BatteryConfig, ScoringConfig
-from app.grid.metrics import backtest_daily, primary_reason, score_zones
+from app.grid.config import ScoringConfig
+from app.grid.metrics import primary_reason, score_zones
 from app.grid.sources import parse_historical
-
-
-def day_prices(values: list[float]) -> pd.Series:
-    idx = pd.date_range("2026-06-01", periods=len(values), freq="15min", tz="America/Chicago")
-    return pd.Series(values, index=idx.tz_convert("UTC"))
-
-
-def test_backtest_single_cycle():
-    # 1 kWh steps, 2 steps of capacity, lossless: buy 2 intervals at $10, sell 2 at $110.
-    battery = BatteryConfig(capacity_kwh=2, power_kw=4, round_trip_efficiency=1.0)
-    prices = day_prices([10, 10, 50, 110, 110, 50])
-    value = backtest_daily(prices, battery).iloc[0]
-    assert value == pytest.approx(2 * (110 - 10) / 1000)
-
-
-def test_backtest_respects_order_and_efficiency():
-    battery = BatteryConfig(capacity_kwh=1, power_kw=4, round_trip_efficiency=0.5)
-    # Expensive first, cheap later: a battery that starts empty can't profit.
-    assert backtest_daily(day_prices([100, 1]), battery).iloc[0] == 0
-    # Spread of 2x exactly cancels 50% efficiency.
-    assert backtest_daily(day_prices([10, 20]), battery).iloc[0] == pytest.approx(0)
 
 
 def test_scores_are_relative_and_weighted():
