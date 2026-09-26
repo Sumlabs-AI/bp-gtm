@@ -3,7 +3,18 @@
 export type LeadStatus = "new" | "reviewed" | "qualified" | "excluded"
 export type LeadSignal = "solar" | "ev_charger" | "new_home" | "new_owner" | "new_meter" | "pool"
 export type BatteryKwh = 25 | 40 | 50
-export type BatteryValues = Record<"25" | "40" | "50", number>
+export type BatteryValue = {
+  value: number
+  ceiling: number
+  first_year: number | null
+  last_year: number | null
+  recent: number
+  low: number | null
+  low_year: number | null
+  high: number | null
+  high_year: number | null
+}
+export type BatteryValues = Record<"25" | "40" | "50", BatteryValue>
 
 export const BATTERY_SIZES = [25, 40, 50] as const
 export const STATUS_LABELS: Record<LeadStatus, string> = {
@@ -12,7 +23,13 @@ export const STATUS_LABELS: Record<LeadStatus, string> = {
   qualified: "Qualified",
   excluded: "Excluded",
 }
-export const PRIORITY_HELP = "Fit ÷ 100 × historical annual grid value for the suggested battery. Fit is not a purchase probability. Grid value assumes perfect hindsight over the last 12 months and excludes retail margin, fees, and ancillary services. This ranking metric is not forecast revenue or customer savings."
+export const PRIORITY_HELP = "Fit ÷ 100 × historical grid value for the suggested battery in an average past year (day-ahead plans, no hindsight). Fit is not a purchase probability. Priority value is a ranking metric, not forecast revenue or customer savings."
+
+export function valueBasis(value: BatteryValue | null | undefined): string {
+  return value && value.first_year !== null && value.last_year !== null
+    ? `Average year ${value.first_year}–${value.last_year}`
+    : "Last 12 months"
+}
 
 export function formatLeadMoney(value: number): string {
   return `$${Math.round(value).toLocaleString("en-US")}`
@@ -23,7 +40,7 @@ export function leadReturnHref(value: string | string[] | undefined): string {
   if (!href || (href !== "/leads" && !href.startsWith("/leads?"))) return "/leads"
   const params = new URLSearchParams(href.split("?").slice(1).join("?"))
   const filters = new URLSearchParams()
-  for (const key of ["status", "min_score", "signals", "new_only", "zip", "sort", "offset", "view"]) {
+  for (const key of ["status", "min_score", "signals", "new_only", "zip", "zone", "sort", "offset", "view"]) {
     for (const item of params.getAll(key)) filters.append(key, item)
   }
   return `/leads${filters.size ? `?${filters}` : ""}`
@@ -88,6 +105,7 @@ export type LeadSummary = {
   leads: number
   new_this_week: number
   by_signal: Record<LeadSignal, number>
+  by_zone: Record<string, number>
   last_scored_at: string | null
 }
 

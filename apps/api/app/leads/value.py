@@ -1,8 +1,9 @@
 """What a lead is worth to Base: its ERCOT load zone, the grid value of each battery size
 there (from the zone backtest, app/grid), and the size we'd pitch.
 
-Screening estimate only: energy-arbitrage value with perfect hindsight; no retail margin,
-fees or ancillary services.
+Screening estimate only: energy-trading value of a battery on day-ahead plans
+(app/grid/dispatch.py) in an average past year, after losses, wear and the backup reserve;
+no retail margin, fees or ancillary services.
 """
 
 import geopandas as gpd
@@ -10,7 +11,7 @@ import pandas as pd
 from sqlalchemy import text
 
 from app.db import engine
-from app.grid.config import LEAD_BATTERIES_KW
+from app.grid.metrics import battery_values
 from app.grid.zones import ZONES_GEOJSON
 from app.leads.config import TDSP_ZONES, LeadScoringConfig
 
@@ -28,15 +29,15 @@ def assign_zones(homes: pd.DataFrame) -> pd.Series:
     return by_point.reindex(homes.index).fillna(homes["tdsp"].map(TDSP_ZONES))
 
 
-def zone_battery_values() -> dict[str, dict[str, float]]:
-    """{"LZ_HOUSTON": {"25": 563.0, "40": …, "50": …}, …} from the latest grid compute."""
+def zone_battery_values() -> dict[str, dict[str, dict]]:
+    """Per zone, `battery_values` (app/grid/metrics.py) from the latest grid compute."""
     with engine.connect() as conn:
-        rows = conn.execute(text("SELECT settlement_point, metrics FROM grid_zone_metrics"))
+        rows = conn.execute(text("SELECT settlement_point, metrics, series FROM grid_zone_metrics"))
         values = {}
-        for zone, metrics in rows:
-            sizes = {str(k): metrics.get(f"battery_value_{k}") for k in LEAD_BATTERIES_KW}
-            if all(v is not None for v in sizes.values()):
-                values[zone] = {k: round(v, 0) for k, v in sizes.items()}
+        for zone, metrics, series in rows:
+            sizes = battery_values(metrics, series)
+            if sizes is not None:
+                values[zone] = sizes
         return values
 
 

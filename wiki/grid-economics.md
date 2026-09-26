@@ -72,7 +72,7 @@ Five raw metrics become 0–100 driver scores. Defaults and weights live in
 
 | Driver | Weight | Raw metric |
 | --- | ---: | --- |
-| Battery arbitrage | 40% | Daily battery backtest value, annualized to $/battery/year. |
+| Battery arbitrage | 40% | Realistic battery value (day-ahead planner, below), annualized to $/battery/year. |
 | Congestion premium | 20% | Mean of `max(zone RT − HB_HUBAVG RT, 0)` over aligned intervals, $/MWh. |
 | Scarcity hours | 15% | RT intervals at or above $1,000/MWh, converted to hours and annualized. |
 | Grid surprise | 15% | Mean absolute difference between hourly averaged RT and aligned DA prices, $/MWh. |
@@ -91,26 +91,50 @@ can change when the comparison data or assumptions change.
 
 ## Battery backtest
 
-For each America/Chicago calendar day, `backtest_daily` uses dynamic
-programming over battery state of charge to find the best charge/discharge
-sequence with perfect knowledge of that day's RT prices. It starts and
-ends each day empty, moves at most one 15-minute power step per interval,
-and applies round-trip efficiency as a charging loss.
+`app/grid/dispatch.py` runs two backtests on the same battery physics, adapted
+from [WattGap](https://github.com/saivarun3407/wattgap) (MIT, see
+`app/grid/LICENSE-wattgap`):
 
-The modeled battery defaults to 39.2 kWh capacity, 11.5 kW power, and 90%
-round-trip efficiency. These are analysis assumptions in
-`app/grid/config.py`, not published battery specifications. The backtest is
-a perfect-foresight historical upper bound for screening, not a P&L forecast.
+- **Realistic value (`simulate`)**: a day-ahead planner that uses no hindsight.
+  Each local day it picks its charge hours (the cheapest day-ahead hours) and
+  discharge hours (the most expensive) from that day's DA prices, which ERCOT
+  publishes the afternoon before. Window lengths are the whole hours a full
+  charge or discharge takes at full power. It plans nothing when the DA spread
+  doesn't cover losses and wear. Inside the windows it follows the RT price:
+  it charges only if RT is cheap enough to pay back and sells only above
+  breakeven. Outside them it sells at full power when RT beats the day's top
+  DA price by `PlannerConfig.spike_multiple` (1.25, WattGap's value). Charge
+  carries over from day to day. A test checks that later prices never change
+  earlier results.
+- **Ceiling (`ceiling`)**: the most any battery with the same physics could
+  have earned with perfect knowledge of every RT price, as one linear program
+  over the whole window (scipy HiGHS). The realistic value can't exceed it.
+
+Shared physics: each of charging and discharging loses √(round-trip
+efficiency); `reserve_soc` (20%) of capacity is kept as the member's backup
+and never sold; `wear_usd_per_kwh` ($0.02) is charged per kWh discharged; the
+battery starts at its reserve and leftover energy is worth nothing. The zone
+battery defaults to 39.2 kWh / 11.5 kW / 90%. These are analysis assumptions
+in `app/grid/config.py`, not published battery specifications.
+
+The realistic value is still a screening estimate, not a P&L forecast: energy
+only (no ancillary services, retail margin or fees), load-zone prices, price
+taker. On 2025 prices it earned about 50% of the ceiling in Houston, North
+and West, in line with WattGap's measured 48–63% across 2019–2025.
 
 ## Battery value per lead size
 
-`compute` also backtests the battery sizes we pitch to leads (`LEAD_BATTERIES_KW` in `app/grid/config.py`: 25/40/50 kWh at an assumed ~0.46 kW per kWh) and stores `battery_value_<kWh>` ($/yr) in each zone's `metrics`. Lead scoring reads these; see [residential-leads.md](residential-leads.md).
+`compute` also values the battery sizes we pitch to leads (`LEAD_BATTERIES_KW` in `app/grid/config.py`: 25/40/50 kWh at an assumed ~0.46 kW per kWh). Each zone's `metrics` stores `battery_value_<kWh>` (realistic, last 365 days) and `battery_ceiling_<kWh>` ($/yr), and `series.battery_years` holds the realistic value (`"25"`, …) and ceiling (`"ceiling_25"`, …) per full past calendar year (as far back as prices are loaded; `backfill 2019 … 2024` for the full history). Leads are valued on the average of those years. `compute` runs one ceiling LP per zone, size and year (~2–3 min with 2019–2025 loaded). Lead scoring reads these; see [residential-leads.md](residential-leads.md).
 
 ## API and map
 
-- `GET /grid/zones` returns scored zone summaries in descending rank.
-- `GET /grid/zones/{code}` adds the analysis period, raw metrics, chart
-  series, and current assumptions; unknown codes return 404.
+- `GET /grid/zones` returns zone summaries in descending Zone Economics Score
+  rank. Each carries `battery_values` (per 25/40/50 kWh, the same Grid Value
+  shape leads use: average-year `value`/`ceiling`, `recent`, worst/best year;
+  built by `battery_values()` in `app/grid/metrics.py`), `history_years`, the
+  last-12-months `period_start`/`period_end`, and `computed_at`.
+- `GET /grid/zones/{code}` adds raw metrics, chart series, and current
+  assumptions; unknown codes return 404.
 
 The zone shapes live in `apps/api/app/grid/ercot-zones.geojson`, served at `GET /grid/zones.geojson` (web map) and used to place leads in a zone. Rebuild it from
 `apps/api` with `uv run python scripts/build_zone_geojson.py` if its source

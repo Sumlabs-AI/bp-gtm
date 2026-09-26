@@ -13,11 +13,21 @@ class BatteryConfig(BaseModel):
     capacity_kwh: float = 39.2
     power_kw: float = 11.5
     round_trip_efficiency: float = 0.90
+    # Cost of cycle wear per kWh discharged, and the share of capacity kept as the
+    # member's backup reserve (never sold). Assumptions taken from WattGap, not Base specs.
+    wear_usd_per_kwh: float = 0.02
+    reserve_soc: float = 0.20
 
 
 # Battery sizes we value per lead: capacity kWh -> power kW. Base publishes the 25/50 kWh
 # sizes but not power ratings; ~0.46 kW per kWh is our assumption.
 LEAD_BATTERIES_KW = {25: 11.5, 40: 18.4, 50: 23.0}
+
+
+class PlannerConfig(BaseModel):
+    # Outside its planned hours the battery sells only if real time beats the day's top
+    # day-ahead price by this multiple (WattGap's value, chosen on Jul-Aug 2023 prices).
+    spike_multiple: float = 1.25
 
 
 class ScoringConfig(BaseModel):
@@ -37,4 +47,5 @@ class ScoringConfig(BaseModel):
 
 
 battery = BatteryConfig()
+planner = PlannerConfig()
 scoring = ScoringConfig()

@@ -32,6 +32,9 @@ docker compose exec api python -m app.leads refresh             # lead sources (
 docker compose exec api python -m app.leads score               # score the leads
 ```
 
+For the per-year battery value ranges shown on leads, also load past years (~1 min per year):
+`docker compose exec api python -m app.grid backfill 2019 2020 2021 2022 2023 2024`, then `compute` again.
+
 The `worker` service repeats all of this every Sunday at 03:00 Central.
 
 Then open http://localhost:3000 (redirects to `/leads`).
