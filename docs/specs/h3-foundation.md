@@ -1,6 +1,6 @@
 # Milestone 1 — H3 Cell Foundation
 
-Labels: `ready-for-agent`
+Tracked in [#4](https://github.com/mamalovesyou/bp-gtm/issues/4) (`ready-for-agent`). The issue is the source of truth; this file is a mirror.
 
 ## Problem Statement
 
@@ -42,7 +42,7 @@ No Need Score is computed yet; `needScore` is `null` everywhere. This milestone 
 
 ### Glossary
 
-All naming follows `CONTEXT.md`: **Cell**, **Market**, **Load Zone**, **Need Score**, **Propensity Score**. `grid` continues to mean the existing ERCOT economics package and is not used for Cell concepts.
+All naming follows `CONTEXT.md`: **Cell**, **Market**, **Load Zone**, **Need Score**, **Need Signal**, **Propensity Score**. `grid` continues to mean the existing ERCOT economics package and is not used for Cell concepts. The residential leads work (**Lead**, **Lead Score**, **Grid Value**, **Expected Value**, **Lead Cluster**) is a separate, existing feature: Lead Score is not the Propensity Score and Expected Value is not Opportunity.
 
 ### Geographic scope and resolution
 
@@ -56,7 +56,7 @@ Polygon-to-Cell coverage uses the H3 library's default: a Cell is included when 
 
 ### Database
 
-- Switch the Postgres image to the PostGIS-enabled PostgreSQL 17 image. A migration enables the `postgis` extension.
+- Switch the Postgres image to the PostGIS-enabled PostgreSQL 17 image. A migration enables the `postgis` extension. The worker service shares the same database and needs no change.
 - New `cells` table:
   - `h3_index` — string, 15 characters, primary key
   - `resolution` — small integer, not null
@@ -65,8 +65,8 @@ Polygon-to-Cell coverage uses the H3 library's default: a Cell is included when 
 - `h3_index` is stored and exchanged everywhere as its canonical hexadecimal string. No bigint form anywhere in the contract.
 - Responsibility split: H3 library owns cell identity and polygon-to-cell coverage; PostGIS owns storage, spatial indexing, viewport filtering, and future point-in-polygon/intersection queries. Do not reimplement H3 coverage as PostGIS intersection queries.
 - Bulk insert with conflict-ignore on `h3_index` gives idempotency. Counts for the seed report come from the insert result, not from a pre-query.
-- Recorded as an ADR: PostGIS chosen over plain Postgres + lat/lng + Shapely because upcoming milestones require persistent spatial relationships across counties, Load Zones, weather polygons, outage areas, utility territories, and properties.
-- Known operational note: swapping from the Alpine image to the Debian-based PostGIS image on an existing volume may produce collation-version warnings. Recommended path is to recreate the volume and re-run the existing grid backfill and compute commands. Surface this in the wiki and the milestone report.
+- Recorded as an ADR: PostGIS chosen over the in-process alternative already proven in the repo (geopandas spatial join, as used for Lead Load Zone assignment) because upcoming milestones repeatedly query persistent spatial relationships across counties, Load Zones, weather polygons, outage areas and utility territories, and the map needs GIST-indexed viewport queries. Existing lead tables keep their plain lat/lon columns; no migration of them.
+- Image swap procedure (the database now holds large lead datasets that are expensive and rate-limited to re-download): dump the database with the old image, switch the image, recreate the volume, restore the dump. Do not recreate the volume and re-fetch sources; ERCOT has returned 403 after repeated full downloads. Document the procedure in the wiki and notify other developers, since their local volumes are affected too.
 
 ### Geo module (ML engineer contract)
 
@@ -77,7 +77,9 @@ A pure module with no database or web-framework imports, exposing:
 - `h3_index` → polygon (GeoJSON-style ring, lng/lat order)
 - polygon or multipolygon (GeoJSON geometry) → set of `h3_index`
 
-This module is the only place H3 library calls live. Routes and stores call it; they do not call the H3 library directly.
+This module is the only place H3 library calls live. Routes and stores call it; they do not call the H3 library directly. "Dependency-free" means no database or web-framework imports; it may use `h3` and the `shapely` already present via geopandas.
+
+New Python dependencies: `h3` and `geoalchemy2` only. Shapely, pyproj and geopandas are already installed.
 
 ### Need package
 
@@ -89,17 +91,17 @@ This module is the only place H3 library calls live. Routes and stores call it; 
 
 ### County geometry
 
-- Downloader script (Census cartographic boundary files, selected by GEOID, not county name) writes committed GeoJSON files, one per county, under the API's data directory. Follows the existing pattern of a script that fetches external GIS data and commits a static output.
+- Downloader script (Census cartographic boundary files, selected by GEOID, not county name, read with the geopandas dependency already in the project) writes committed GeoJSON files, one per county, inside the geo package next to the code. The API's `data/` directory is gitignored (raw lead downloads), so committed geometry must not live there. Follows the existing pattern of the ERCOT zone GeoJSON, which is committed next to the grid package code.
 - Seeding reads only the committed files. No runtime dependency on Census availability. No bounding-box shortcuts; real county geometry is used.
 
 ### API
 
 Two routes only, under `/need`:
 
-- `GET /need/cells?west&south&east&north`
+- `GET /need/cells?bbox=west,south,east,north`
+  - Viewport parameter follows the existing lead map convention (`bbox` as a comma-separated string, 422 when malformed) rather than four separate parameters.
   - Returns a GeoJSON `FeatureCollection`. Each feature: `id` = `h3_index`, `geometry` = Polygon, `properties` = `{ "h3": <h3_index>, "needScore": null }`.
   - If the viewport would exceed `viewport_max_cells`, respond with a client error (400) and `{"detail": "Viewport contains too many H3 cells. Zoom in to continue."}`.
-  - Invalid or missing bounds are a validation error.
 - `GET /need/cells/{h3_index}`
   - Returns `{ "h3", "resolution", "center": { "lat", "lng" }, "needScore": null, "components": {} }`.
   - Unknown or malformed `h3_index` returns 404.
@@ -111,8 +113,8 @@ Routes use the existing `get_db` dependency, `response_model` pattern, and expli
 - New `/need` page in the dashboard shell, server component by default, with a client map component.
 - Map reuses the existing MapLibre worker workaround, tile style, navigation control, and the `apiFetch` helper with `NEXT_PUBLIC_API_URL`.
 - Constant `H3_MAP_MIN_ZOOM = 9` in the need library module. Below it the Cell layer is hidden and no request is made.
-- At or above it: on `moveend`, debounced, read the current bounds, call `GET /need/cells`, and replace the GeoJSON source data. No fetch on `move`.
-- Layers: subtle fill, outline, and a highlight layer for hovered/selected Cell, mirroring the existing zone map's fill/line/selected structure.
+- At or above it: on `moveend`, debounced, read the current bounds, call `GET /need/cells`, and replace the GeoJSON source data. No fetch on `move`. Cancel the in-flight request when a new one starts, mirroring the existing leads map.
+- Layers: subtle fill, outline, and a highlight layer for hovered/selected Cell, mirroring the existing zone map's fill/line/selected structure. Layers must be direct children of their source (no Fragment wrapper), per the documented react-map-gl gotcha.
 - Hover shows a tooltip with the `h3_index`. Click opens a side sheet (shadcn Sheet) showing the detail endpoint payload.
 - On the "too many cells" error, show the API's message in place of the layer rather than failing silently.
 - Initial view centers on Houston at a zoom at or above the minimum so Cells are visible immediately; Austin reachable by panning or a small market switcher (Houston / Austin) that flies the map.
@@ -123,7 +125,8 @@ Routes use the existing `get_db` dependency, `response_model` pattern, and expli
 - `CONTEXT.md` already holds the glossary.
 - ADR: PostGIS adoption.
 - New wiki page for the Need Engine: Cell definition, resolution, index format, boundary rule, seed/export/download commands, API contract, ML handoff, and the image-swap note.
-- Update wiki index, database page (PostGIS, extension migration), development page (seed step in getting started), and frontend page (Need map).
+- Update wiki index, database page (PostGIS, extension migration, image swap procedure), development page (seed step in getting started), and frontend page (Need map).
+- The Need Engine wiki page's ML handoff section points the ML engineer at existing inputs they can map onto Cells with the geo module: the permits table (lat/lon) and the properties table (parcel points).
 
 ## Testing Decisions
 
@@ -142,7 +145,7 @@ Three seams:
    - `h3_index` → polygon yields a closed ring of 7 points (6 unique) in lng/lat order
    - a small polygon yields a non-empty set of Cells all of whose centers lie inside or near the polygon; a multipolygon input is accepted
 
-Database tests use a `test_database_url` setting; when unset they skip. A session fixture creates the schema via Alembic on the test database and truncates `cells` between tests. The CLI wrapper and the Census download script are not unit-tested (same treatment as the existing grid CLI and zone GeoJSON script).
+Database tests live alongside the existing end-to-end suite and reuse its harness: the test session is forced onto the `_test` database, which is created and migrated with Alembic automatically, and all tables are truncated between tests. Like the existing suite, they require Postgres running (now the PostGIS image) and abort rather than skip without it. Prior art: the grid and leads end-to-end tests. The CLI wrapper and the Census download script are not unit-tested (same treatment as the existing grid CLI and zone GeoJSON script).
 
 Performance is measured, not asserted: the seed command's reported duration for Harris and Travis, and the response time and payload size of a full-county viewport request, go into the milestone report.
 
@@ -151,7 +154,8 @@ Performance is measured, not asserted: the seed command's reported duration for 
 - Any Need Score, component score, or feature computation (Milestones 3–6).
 - Static enrichment (county, ZIP, utility, Load Zone, Weather Zone) on Cells (Milestone 2).
 - Outage, weather, or additional ERCOT integrations.
-- Propensity model, permit ingestion, or Opportunity formula (ML workstream / Milestone 7).
+- Propensity model or Opportunity formula (ML workstream / Milestone 7). Permit ingestion already exists in the leads pipeline and is not changed.
+- Any change to Leads, Lead Score, Expected Value, or the lead tables (no `h3_index` on properties or permits in this milestone).
 - Multi-resolution H3, percentage-overlap boundary models.
 - Admin/seed HTTP endpoints, bulk lat/lng lookup endpoints.
 - Williamson, Hays, or other counties beyond Harris and Travis (supported by the mechanism, not seeded).
@@ -164,4 +168,7 @@ Performance is measured, not asserted: the seed command's reported duration for 
 
 - Expected scale: Harris ≈ 6.5k Cells, Travis ≈ 3.7k at resolution 8. Both fit comfortably under the 20k cap in a single county-wide viewport, which is why the cap and zoom gate are safety nets rather than active constraints today.
 - The Cell export and the geo module are the deliverables to hand the ML engineer; the wiki page is the written contract. Confirm with them whether they work in this repository (import the module directly) or separately (use the export plus documented resolution).
+- Known tension to revisit in Milestone 7: the product will have two rankings, Expected Value (per Lead, economics) and Opportunity (per Cell, Need × Propensity dimensions). Keep them distinct until the team decides how they relate.
+- Milestone 3 constraint: utility outage maps (CenterPoint, Oncor) are non-commercial and must not be scraped. Historical outage data needs another source; research this before starting Milestone 3.
+- Milestone 2 consistency: when assigning Cells to Load Zones, reuse the existing Lead rule (point inside zone polygon, smallest polygon wins) so a Lead and its Cell never disagree on Load Zone.
 - After this milestone, stop and report: what was implemented, measured seed and query timings, tests added, and issues discovered (notably the database image swap) before starting the first real Need signal.
