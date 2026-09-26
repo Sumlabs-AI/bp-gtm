@@ -49,3 +49,42 @@ class WeatherConfig(BaseModel):
 
 
 weather = WeatherConfig()
+
+
+class NwsAlertConfig(BaseModel):
+    """NWS Alerts (M4B-1): official alerts, observed and not scored."""
+
+    alerts_url: str = "https://api.weather.gov/alerts/active?area=TX"
+    user_agent: str = "base-power-gtm need engine (github.com/mamalovesyou/bp-gtm)"
+    refresh_minutes: int = 5
+    # With no successful Snapshot for this long, live data is reported stale.
+    stale_after_minutes: int = 30
+    # NWS event -> category. Anything else (flood, fire, air quality, marine) is ignored.
+    categories: dict[str, str] = {
+        "Tornado Warning": "tornado",
+        "Tornado Watch": "tornado",
+        "Severe Thunderstorm Warning": "severe_storm",
+        "Severe Thunderstorm Watch": "severe_storm",
+        "Extreme Wind Warning": "severe_storm",
+        "Hurricane Warning": "tropical",
+        "Hurricane Watch": "tropical",
+        "Tropical Storm Warning": "tropical",
+        "Tropical Storm Watch": "tropical",
+        "Storm Surge Warning": "tropical",
+        "Ice Storm Warning": "winter",
+        "Winter Storm Warning": "winter",
+        "Winter Storm Watch": "winter",
+        "Extreme Heat Warning": "heat",
+        "Extreme Heat Watch": "heat",
+        "Heat Advisory": "heat",
+        "Extreme Cold Warning": "cold",
+        "Extreme Cold Watch": "cold",
+        "Cold Weather Advisory": "cold",
+        "Hard Freeze Warning": "cold",
+        "Freeze Warning": "cold",
+    }
+    # Most severe first: which category a Cell reports when several are active.
+    category_order: list[str] = ["tornado", "tropical", "severe_storm", "winter", "cold", "heat"]
+
+
+nws_alerts = NwsAlertConfig()

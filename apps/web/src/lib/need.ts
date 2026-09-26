@@ -14,7 +14,14 @@ export type CellFeature = {
   type: "Feature"
   id: string
   geometry: { type: "Polygon"; coordinates: [number, number][][] }
-  properties: { h3: string; needScore: number | null; outageNeed: number | null; weatherNeed: number | null }
+  properties: {
+    h3: string
+    needScore: number | null
+    outageNeed: number | null
+    weatherNeed: number | null
+    activeAlerts: number
+    activeAlertCategory: AlertCategory | null
+  }
 }
 
 export type CellCollection = { type: "FeatureCollection"; features: CellFeature[] }
@@ -26,7 +33,29 @@ export type CellDetail = {
   loadZone: string | null
   needScore: number | null
   components: { outage?: OutageComponent; weather?: WeatherComponent }
+  live: { weather: { alerts: AlertFeed } }
 }
+
+// NWS Alerts: official alerts active for the Cell now. Observed, not scored; never shown
+// as equivalent to our derived Forecast Signals.
+export type AlertCategory = "tornado" | "tropical" | "severe_storm" | "winter" | "cold" | "heat"
+
+export type NwsAlert = {
+  id: string
+  event: string
+  category: AlertCategory
+  severity: string | null
+  certainty: string | null
+  urgency: string | null
+  headline: string | null
+  effectiveAt: string
+  endsAt: string
+  geometrySource: "alert" | "zones"
+  firstSeenAt: string
+  lastSeenAt: string
+}
+
+export type AlertFeed = { fetchedAt: string | null; stale: boolean; signals: NwsAlert[] }
 
 // Outage Need Component: county-level Observed Outage Exposure (EAGLE-I) and Utility
 // Reliability Need (EIA-861), each a Texas percentile (0-100, higher = more need).

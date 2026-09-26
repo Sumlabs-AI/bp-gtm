@@ -1,0 +1,240 @@
+{
+ "type": "FeatureCollection",
+ "updated": "2026-09-26T19:55:09+00:00",
+ "features": [
+  {
+   "type": "Feature",
+   "id": "https://api.weather.gov/alerts/urn:oid:2.49.0.1.840.0.1a0b89a5bec7f0b681ce9dab5a9c3ec91caa563f.001.1",
+   "geometry": {
+    "type": "Polygon",
+    "coordinates": [
+     [
+      [
+       -102.84,
+       30.39
+      ],
+      [
+       -102.81,
+       30.57
+      ],
+      [
+       -102.53,
+       30.54
+      ],
+      [
+       -102.54,
+       30.31
+      ],
+      [
+       -102.84,
+       30.39
+      ]
+     ]
+    ]
+   },
+   "properties": {
+    "id": "urn:oid:2.49.0.1.840.0.1a0b89a5bec7f0b681ce9dab5a9c3ec91caa563f.001.1",
+    "event": "Special Weather Statement",
+    "severity": "Moderate",
+    "certainty": "Observed",
+    "urgency": "Expected",
+    "messageType": "Alert",
+    "headline": "Special Weather Statement issued September 26 at 2:29PM CDT by NWS Midland/Odessa TX",
+    "senderName": "NWS Midland/Odessa TX",
+    "sent": "2026-09-26T14:29:00-05:00",
+    "effective": "2026-09-26T14:29:00-05:00",
+    "onset": "2026-09-26T14:29:00-05:00",
+    "expires": "2026-09-26T15:00:00-05:00",
+    "ends": null,
+    "affectedZones": [
+     "https://api.weather.gov/zones/forecast/TXZ075"
+    ],
+    "geocode": {
+     "SAME": [
+      "048371"
+     ],
+     "UGC": [
+      "TXZ075"
+     ]
+    }
+   }
+  },
+  {
+   "type": "Feature",
+   "id": "https://api.weather.gov/alerts/urn:oid:2.49.0.1.840.0.e14427b2a44bc9ec18d4b70e1e32d73d0c420139.001.1",
+   "geometry": {
+    "type": "Polygon",
+    "coordinates": [
+     [
+      [
+       -103.05,
+       30.57
+      ],
+      [
+       -103.03,
+       30.44
+      ],
+      [
+       -102.84,
+       30.44
+      ],
+      [
+       -102.86,
+       30.58
+      ],
+      [
+       -102.88,
+       30.58
+      ],
+      [
+       -103.05,
+       30.57
+      ]
+     ]
+    ]
+   },
+   "properties": {
+    "id": "urn:oid:2.49.0.1.840.0.e14427b2a44bc9ec18d4b70e1e32d73d0c420139.001.1",
+    "event": "Flash Flood Warning",
+    "severity": "Severe",
+    "certainty": "Likely",
+    "urgency": "Immediate",
+    "messageType": "Alert",
+    "headline": "Flash Flood Warning issued September 26 at 2:08PM CDT until September 26 at 5:15PM CDT by NWS Midland/Odessa TX",
+    "senderName": "NWS Midland/Odessa TX",
+    "sent": "2026-09-26T14:08:00-05:00",
+    "effective": "2026-09-26T14:08:00-05:00",
+    "onset": "2026-09-26T14:08:00-05:00",
+    "expires": "2026-09-26T17:15:00-05:00",
+    "ends": "2026-09-26T17:15:00-05:00",
+    "affectedZones": [
+     "https://api.weather.gov/zones/county/TXC371"
+    ],
+    "geocode": {
+     "SAME": [
+      "048371"
+     ],
+     "UGC": [
+      "TXC371"
+     ]
+    }
+   }
+  },
+  {
+   "type": "Feature",
+   "id": "https://api.weather.gov/alerts/urn:oid:2.49.0.1.840.0.76314c44ce7e06be0519f43a60681454bf37a851.001.1",
+   "geometry": null,
+   "properties": {
+    "id": "urn:oid:2.49.0.1.840.0.76314c44ce7e06be0519f43a60681454bf37a851.001.1",
+    "event": "Air Quality Alert",
+    "severity": "Unknown",
+    "certainty": "Unknown",
+    "urgency": "Unknown",
+    "messageType": "Alert",
+    "headline": "Air Quality Alert issued September 25 at 3:50PM CDT by NWS Fort Worth TX",
+    "senderName": "NWS Fort Worth TX",
+    "sent": "2026-09-25T15:50:00-05:00",
+    "effective": "2026-09-25T15:50:00-05:00",
+    "onset": "2026-09-25T15:50:00-05:00",
+    "expires": "2026-09-26T19:00:00-05:00",
+    "ends": null,
+    "affectedZones": [
+     "https://api.weather.gov/zones/forecast/TXZ102",
+     "https://api.weather.gov/zones/forecast/TXZ103",
+     "https://api.weather.gov/zones/forecast/TXZ104",
+     "https://api.weather.gov/zones/forecast/TXZ105",
+     "https://api.weather.gov/zones/forecast/TXZ117",
+     "https://api.weather.gov/zones/forecast/TXZ118",
+     "https://api.weather.gov/zones/forecast/TXZ119",
+     "https://api.weather.gov/zones/forecast/TXZ120",
+     "https://api.weather.gov/zones/forecast/TXZ121",
+     "https://api.weather.gov/zones/forecast/TXZ131",
+     "https://api.weather.gov/zones/forecast/TXZ133",
+     "https://api.weather.gov/zones/forecast/TXZ134",
+     "https://api.weather.gov/zones/forecast/TXZ135"
+    ],
+    "geocode": {
+     "SAME": [
+      "048497",
+      "048121",
+      "048085",
+      "048231",
+      "048367",
+      "048439",
+      "048113",
+      "048397",
+      "048257",
+      "048221",
+      "048251",
+      "048139",
+      "048213"
+     ],
+     "UGC": [
+      "TXZ102",
+      "TXZ103",
+      "TXZ104",
+      "TXZ105",
+      "TXZ117",
+      "TXZ118",
+      "TXZ119",
+      "TXZ120",
+      "TXZ121",
+      "TXZ131",
+      "TXZ133",
+      "TXZ134",
+      "TXZ135"
+     ]
+    }
+   }
+  },
+  {
+   "type": "Feature",
+   "id": "https://api.weather.gov/alerts/urn:oid:2.49.0.1.840.0.91fdb76ef55a24912199da05142df2bc9857c67d.001.1",
+   "geometry": null,
+   "properties": {
+    "id": "urn:oid:2.49.0.1.840.0.91fdb76ef55a24912199da05142df2bc9857c67d.001.1",
+    "event": "Air Quality Alert",
+    "severity": "Unknown",
+    "certainty": "Unknown",
+    "urgency": "Unknown",
+    "messageType": "Alert",
+    "headline": "Air Quality Alert issued September 25 at 3:48PM CDT by NWS Houston/Galveston TX",
+    "senderName": "NWS Houston/Galveston TX",
+    "sent": "2026-09-25T15:48:00-05:00",
+    "effective": "2026-09-25T15:48:00-05:00",
+    "onset": "2026-09-25T15:48:00-05:00",
+    "expires": "2026-09-26T19:00:00-05:00",
+    "ends": null,
+    "affectedZones": [
+     "https://api.weather.gov/zones/forecast/TXZ213",
+     "https://api.weather.gov/zones/forecast/TXZ237",
+     "https://api.weather.gov/zones/forecast/TXZ238",
+     "https://api.weather.gov/zones/forecast/TXZ313",
+     "https://api.weather.gov/zones/forecast/TXZ337",
+     "https://api.weather.gov/zones/forecast/TXZ338",
+     "https://api.weather.gov/zones/forecast/TXZ437",
+     "https://api.weather.gov/zones/forecast/TXZ438",
+     "https://api.weather.gov/zones/forecast/TXZ439"
+    ],
+    "geocode": {
+     "SAME": [
+      "048201",
+      "048039",
+      "048167"
+     ],
+     "UGC": [
+      "TXZ213",
+      "TXZ237",
+      "TXZ238",
+      "TXZ313",
+      "TXZ337",
+      "TXZ338",
+      "TXZ437",
+      "TXZ438",
+      "TXZ439"
+     ]
+    }
+   }
+  }
+ ]
+}

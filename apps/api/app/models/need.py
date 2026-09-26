@@ -1,8 +1,9 @@
 from datetime import date, datetime
 
 from geoalchemy2 import Geometry
-from sqlalchemy import Boolean, Date, DateTime, Float, Integer, SmallInteger, String
+from sqlalchemy import Boolean, Date, DateTime, Float, Integer, SmallInteger, String, Text, func
 from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.ext.hybrid import hybrid_property
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db import Base
@@ -122,3 +123,62 @@ class CountyTemperatureFeatures(Base):
     cold_28f_pctl: Mapped[float | None] = mapped_column(Float)
     temperature_exposure: Mapped[float | None] = mapped_column(Float)
     computed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+
+
+class NwsAlert(Base):
+    """One official NWS Alert (not a derived Forecast Signal). NWS event time (effective/ends)
+    is kept apart from our ingestion state (first/last seen, superseded). Rows are never deleted.
+    Active-ness is decided at read time (app/need/live/store.py)."""
+
+    __tablename__ = "nws_alerts"
+
+    id: Mapped[str] = mapped_column(String(200), primary_key=True)  # NWS alert id
+    event: Mapped[str] = mapped_column(String(60))
+    category: Mapped[str] = mapped_column(String(20))
+    severity: Mapped[str | None] = mapped_column(String(20))
+    certainty: Mapped[str | None] = mapped_column(String(20))
+    urgency: Mapped[str | None] = mapped_column(String(20))
+    message_type: Mapped[str | None] = mapped_column(String(20))
+    headline: Mapped[str | None] = mapped_column(Text)
+    sender: Mapped[str | None] = mapped_column(String(120))
+    zones: Mapped[list[str]] = mapped_column(JSONB)  # UGC codes (empty for polygon alerts)
+    # NWS event time.
+    sent_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    effective_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    onset_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    ends_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+    @hybrid_property
+    def ends(self) -> datetime:
+        """When the event ends: NWS `ends`, or `expires` when NWS gives no end."""
+        return self.ends_at or self.expires_at
+
+    @ends.inplace.expression
+    @classmethod
+    def _ends_expression(cls):
+        return func.coalesce(cls.ends_at, cls.expires_at)
+
+    # Area: the alert's own polygon, or the union of its NWS zones.
+    geometry: Mapped[str] = mapped_column(Geometry("MULTIPOLYGON", srid=4326), nullable=False)
+    geometry_source: Mapped[str] = mapped_column(String(10))  # "alert" | "zones"
+    # Ingestion state.
+    first_seen_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    last_seen_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    superseded_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class NwsAlertSnapshot(Base):
+    """One attempt to fetch all active NWS alerts for Texas. Only a successful Snapshot may
+    supersede signals; failed ones are logged and change nothing."""
+
+    __tablename__ = "nws_alert_snapshots"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    fetched_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
+    succeeded: Mapped[bool] = mapped_column(Boolean)
+    source_updated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    alerts_total: Mapped[int | None] = mapped_column(Integer)
+    signals_kept: Mapped[int | None] = mapped_column(Integer)
+    superseded: Mapped[int | None] = mapped_column(Integer)
+    error: Mapped[str | None] = mapped_column(Text)

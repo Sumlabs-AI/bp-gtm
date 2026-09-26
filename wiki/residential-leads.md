@@ -57,7 +57,7 @@ docker compose exec api python -m app.leads score
 docker compose exec api python -m app.worker --now             # the full weekly job, once
 ```
 
-The `worker` compose service runs the weekly job every Sunday 03:00 Central: ERCOT prices → grid scores → lead sources → lead scores.
+The `worker` compose service runs the weekly job every Sunday 03:00 Central: ERCOT prices → grid scores → lead sources → lead scores. It also takes a Live Weather Snapshot (NWS alerts) every 5 minutes; see [need-engine.md](need-engine.md).
 
 ## API
 
