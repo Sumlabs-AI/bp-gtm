@@ -1,8 +1,9 @@
 from datetime import date, datetime
 
 from geoalchemy2 import Geometry
-from sqlalchemy import Boolean, Date, DateTime, Float, Integer, SmallInteger, String, Text
+from sqlalchemy import Boolean, Date, DateTime, Float, Integer, SmallInteger, String, Text, func
 from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.ext.hybrid import hybrid_property
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db import Base
@@ -140,13 +141,24 @@ class LiveWeatherSignal(Base):
     message_type: Mapped[str | None] = mapped_column(String(20))
     headline: Mapped[str | None] = mapped_column(Text)
     sender: Mapped[str | None] = mapped_column(String(120))
-    zones: Mapped[list] = mapped_column(JSONB)  # UGC codes (empty for polygon alerts)
+    zones: Mapped[list[str]] = mapped_column(JSONB)  # UGC codes (empty for polygon alerts)
     # NWS event time.
     sent_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     effective_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     onset_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     ends_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+    @hybrid_property
+    def ends(self) -> datetime:
+        """When the event ends: NWS `ends`, or `expires` when NWS gives no end."""
+        return self.ends_at or self.expires_at
+
+    @ends.inplace.expression
+    @classmethod
+    def _ends_expression(cls):
+        return func.coalesce(cls.ends_at, cls.expires_at)
+
     # Area: the alert's own polygon, or the union of its NWS zones.
     geometry: Mapped[str] = mapped_column(Geometry("MULTIPOLYGON", srid=4326), nullable=False)
     geometry_source: Mapped[str] = mapped_column(String(10))  # "alert" | "zones"

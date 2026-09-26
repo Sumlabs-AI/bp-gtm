@@ -7,9 +7,9 @@ from sqlalchemy.orm import Session
 
 from app import geo
 from app.db import get_db
-from app.need.config import live_weather as live_config
+from app.models import LiveWeatherSignal
 from app.need.config import need
-from app.need.live.store import active_signals, live_status
+from app.need.live.store import active_signals, live_status, most_severe_category
 from app.need.outage.component import outage_components
 from app.need.store import cells_in_viewport, get_cell
 from app.need.weather.component import weather_components
@@ -59,12 +59,7 @@ class CellDetail(BaseModel):
     live: Live
 
 
-def _most_severe(signals: list) -> str | None:
-    categories = {s.category for s in signals}
-    return next((c for c in live_config.category_order if c in categories), None)
-
-
-def _live_signal(s) -> LiveSignal:
+def _live_signal(s: LiveWeatherSignal) -> LiveSignal:
     return LiveSignal(
         id=s.id,
         event=s.event,
@@ -74,7 +69,7 @@ def _live_signal(s) -> LiveSignal:
         urgency=s.urgency,
         headline=s.headline,
         effectiveAt=s.effective_at,
-        endsAt=s.ends_at or s.expires_at,
+        endsAt=s.ends,
         geometrySource=s.geometry_source,
         firstSeenAt=s.first_seen_at,
         lastSeenAt=s.last_seen_at,
@@ -114,7 +109,7 @@ def list_cells(db: DB, bbox: Annotated[str, Query(description="west,south,east,n
                     "outageNeed": (outage[c.h3_index] or {}).get("score"),
                     "weatherNeed": (weather[c.h3_index] or {}).get("score"),
                     "activeWeatherSignals": len(live[c.h3_index]),
-                    "activeWeatherCategory": _most_severe(live[c.h3_index]),
+                    "activeWeatherCategory": most_severe_category(live[c.h3_index]),
                 },
             }
             for c in cells

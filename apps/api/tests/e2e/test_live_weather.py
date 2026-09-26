@@ -1,13 +1,17 @@
 """Live Weather Signals: NWS alert snapshots -> signals -> Active for Cells at a given `now`."""
 
+import copy
+import json
 from datetime import UTC, datetime, timedelta
+from pathlib import Path
 
 import pytest
+from sqlalchemy import func, select
 
 from app import geo
 from app.db import SessionLocal
-from app.models import Cell
-from app.need.live.refresh import refresh
+from app.models import Cell, LiveWeatherSignal
+from app.need.live.refresh import take_snapshot
 from app.need.live.store import active_signals, live_status
 from app.need.store import seed_polygon
 
@@ -103,7 +107,7 @@ def run(payload, at: datetime, zones=resolve):
         return payload
 
     with SessionLocal() as db:
-        result = refresh(db, fetch=fetch, resolve_zones=zones, now=at)
+        result = take_snapshot(db, fetch=fetch, resolve_zones=zones, now=at)
         db.commit()
     return result
 
@@ -155,8 +159,16 @@ def test_failed_snapshot_changes_nothing_and_goes_stale():
     assert not result.succeeded
     assert active(t("14:15")) == ["tor-1"]
     with SessionLocal() as db:
+        from app.models import LiveWeatherSignal, LiveWeatherSnapshot
+
+        tor = db.get(LiveWeatherSignal, "tor-1")
+        assert (tor.last_seen_at, tor.superseded_at) == (t("14:00"), None)  # untouched
+        attempts = db.query(LiveWeatherSnapshot).order_by(LiveWeatherSnapshot.fetched_at).all()
+        assert [a.succeeded for a in attempts] == [True, False, False]
         assert live_status(db, t("14:25")) == (t("14:00"), False)
         assert live_status(db, t("14:31")) == (t("14:00"), True)  # > 30 min since success
+    # Stale doesn't hide signals: still active until they end, flagged as possibly outdated.
+    assert active(t("14:31")) == ["tor-1"]
 
 
 def test_zone_based_alerts_keep_their_geometry_source():
@@ -260,3 +272,79 @@ def test_api_lists_active_signals_and_staleness(client):
 def test_api_reports_stale_when_no_snapshot_succeeded(client):
     live = client.get(f"/need/cells/{H8}").json()["live"]["weather"]
     assert live == {"fetchedAt": None, "stale": True, "signals": []}
+
+
+FIXTURES = Path(__file__).resolve().parents[1] / "fixtures/nws"
+
+
+def real_zone(_zone_urls: list[str]) -> list[dict]:
+    # Inland Harris (TXZ213) as api.weather.gov returns it: a GeometryCollection of a
+    # Polygon and a MultiPolygon.
+    return [json.loads((FIXTURES / "forecast-TXZ213.json").read_text())]
+
+
+def test_recorded_nws_payload_is_parsed_and_filtered():
+    payload = json.loads((FIXTURES / "alerts-tx-2026-09-26.json").read_text())
+    result = run(payload, t("14:00"))
+    # Special Weather Statement, Flash Flood, Air Quality: none on the allowlist.
+    assert (result.succeeded, result.alerts_total, result.signals_kept) == (True, 4, 0)
+
+
+def test_real_zone_geometry_collection_becomes_a_valid_area():
+    payload = json.loads((FIXTURES / "alerts-tx-2026-09-26.json").read_text())
+    feature = copy.deepcopy(next(f for f in payload["features"] if f["geometry"] is None))
+    feature["properties"].update(
+        event="Heat Advisory",
+        effective="2026-05-16T10:00:00-05:00",
+        expires="2026-05-16T20:00:00-05:00",
+        ends="2026-05-16T20:00:00-05:00",
+        affectedZones=["https://api.weather.gov/zones/forecast/TXZ213"],
+    )
+    run(snapshot(feature), t("11:00"), zones=real_zone)
+    assert active(t("12:00")) == [feature["properties"]["id"]]  # downtown Houston
+    assert active(t("12:00"), A8) == []
+    with SessionLocal() as db:
+        valid = db.scalar(select(func.ST_IsValid(LiveWeatherSignal.geometry)))
+    assert valid
+
+
+def test_membership_uses_the_cell_center_not_any_overlap():
+    # A small box over one corner of the Houston Cell: overlaps the hexagon, misses its center.
+    lng, lat = max(geo.cell_to_polygon(H8)["coordinates"][0], key=lambda p: p[0])
+    corner = {
+        "type": "Polygon",
+        "coordinates": [
+            [
+                [lng - 0.001, lat - 0.001],
+                [lng + 0.01, lat - 0.001],
+                [lng + 0.01, lat + 0.001],
+                [lng - 0.001, lat + 0.001],
+                [lng - 0.001, lat - 0.001],
+            ]
+        ],
+    }
+    clipped = alert(
+        "tor-edge",
+        "Tornado Warning",
+        "2026-05-16T14:00:00-05:00",
+        "2026-05-16T15:00:00-05:00",
+        polygon=corner,
+    )
+    run(snapshot(clipped), t("14:01"))
+    with SessionLocal() as db:
+        area = select(LiveWeatherSignal.geometry).where(LiveWeatherSignal.id == "tor-edge")
+        overlaps = db.scalar(
+            select(func.ST_Intersects(area.scalar_subquery(), Cell.geometry)).where(
+                Cell.h3_index == H8
+            )
+        )
+    assert overlaps
+    assert active(t("14:10")) == []
+
+
+def test_a_write_failure_is_logged_and_changes_nothing():
+    run(snapshot(TORNADO), t("14:00"))
+    duplicate = snapshot(HEAT, HEAT)  # the same alert id twice: the upsert fails
+    result = run(duplicate, t("14:05"))
+    assert not result.succeeded and result.error
+    assert active(t("14:10")) == ["tor-1"]

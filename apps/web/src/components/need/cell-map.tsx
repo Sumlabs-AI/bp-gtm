@@ -20,7 +20,7 @@ const BASEMAP = "https://tiles.openfreemap.org/styles/positron"
 if (typeof window !== "undefined") setWorkerUrl("/maplibre/maplibre-gl-worker.mjs")
 
 type Status = "zoom-in" | "loading" | "ready" | "too-many" | "error"
-type Hover = { x: number; y: number; flip: boolean; h3: string }
+type Hover = { x: number; y: number; flip: boolean; h3: string; liveCategory: string | null }
 
 export function CellMap({ className }: { className?: string }) {
   const mapRef = React.useRef<MapRef>(null)
@@ -79,9 +79,17 @@ export function CellMap({ className }: { className?: string }) {
   }, [])
 
   function onMove(e: MapLayerMouseEvent) {
-    const h3 = e.features?.[0]?.properties?.h3
+    const properties = e.features?.[0]?.properties
     setHover(
-      h3 ? { x: e.point.x, y: e.point.y, flip: e.point.x > e.target.getContainer().clientWidth - 220, h3 } : null
+      properties?.h3
+        ? {
+            x: e.point.x,
+            y: e.point.y,
+            flip: e.point.x > e.target.getContainer().clientWidth - 220,
+            h3: properties.h3,
+            liveCategory: properties.activeWeatherCategory ?? null,
+          }
+        : null
     )
   }
 
@@ -185,6 +193,9 @@ export function CellMap({ className }: { className?: string }) {
             style={{ left: hover.flip ? hover.x - 180 : hover.x + 12, top: hover.y + 12 }}
           >
             {hover.h3}
+            {hover.liveCategory && (
+              <div className="mt-1 font-sans text-red-600">Active NWS alert: {hover.liveCategory.replace("_", " ")}</div>
+            )}
           </div>
         )}
       </div>

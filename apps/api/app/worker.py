@@ -10,6 +10,7 @@ live_weather_snapshots; a failure changes no signal).
 """
 
 import argparse
+import threading
 import time
 import traceback
 from datetime import UTC, datetime, timedelta
@@ -73,6 +74,7 @@ def main() -> None:
         return
     next_weekly = next_run(datetime.now(UTC))
     next_live = datetime.now(UTC)
+    weekly: threading.Thread | None = None
     print(f"Next weekly refresh: {next_weekly:%a %Y-%m-%d %H:%M %Z}", flush=True)
     while True:
         due, wake = plan(datetime.now(UTC), next_weekly, next_live)
@@ -80,7 +82,11 @@ def main() -> None:
             run_live()
             next_live = datetime.now(UTC) + timedelta(minutes=live_weather.refresh_minutes)
         if "weekly" in due:
-            run_weekly()
+            # In its own thread: the weekly job can take hours, and live Snapshots must keep
+            # coming meanwhile (or live data goes stale).
+            if weekly is None or not weekly.is_alive():
+                weekly = threading.Thread(target=run_weekly, name="weekly", daemon=True)
+                weekly.start()
             next_weekly = next_run(datetime.now(UTC))
             print(f"Next weekly refresh: {next_weekly:%a %Y-%m-%d %H:%M %Z}", flush=True)
         if wake:

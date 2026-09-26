@@ -24,7 +24,10 @@ export function LiveWeatherSignals({ live }: { live: LiveWeather }) {
             <p>
               In effect until <span className="font-medium">{time(s.endsAt)}</span>
               <span className="text-muted-foreground">
-                {" "}· {s.certainty} · {s.urgency} · area {s.geometrySource === "alert" ? "from the alert" : "from NWS zones"}
+                {" · "}
+                {[s.certainty, s.urgency, s.geometrySource === "alert" ? "area from the alert" : "area from NWS zones"]
+                  .filter(Boolean)
+                  .join(" · ")}
               </span>
             </p>
           </div>

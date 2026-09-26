@@ -10,6 +10,7 @@ from collections.abc import Callable
 from datetime import datetime
 
 from geoalchemy2.shape import from_shape
+from shapely import make_valid
 from shapely.geometry import MultiPolygon, Polygon, shape
 from shapely.geometry.base import BaseGeometry
 from shapely.ops import unary_union
@@ -28,11 +29,17 @@ def _time(value: str | None) -> datetime | None:
     return datetime.fromisoformat(value) if value else None
 
 
+def _polygons(geometry: BaseGeometry) -> list[Polygon]:
+    if isinstance(geometry, Polygon):
+        return [geometry]
+    return [p for part in getattr(geometry, "geoms", []) for p in _polygons(part)]
+
+
 def _multipolygon(geometry: BaseGeometry) -> MultiPolygon:
-    polygons = [g for g in getattr(geometry, "geoms", [geometry]) if isinstance(g, Polygon)]
-    polygons += [
-        p for g in getattr(geometry, "geoms", []) if isinstance(g, MultiPolygon) for p in g.geoms
-    ]
+    """A valid MultiPolygon from any NWS area: repaired, flattened (nested collections,
+    as zones come back) and merged, so overlapping parts don't make it invalid."""
+    merged = unary_union(_polygons(make_valid(geometry)))
+    polygons = _polygons(merged)
     if not polygons:
         raise ValueError(f"no polygon area in {geometry.geom_type}")
     return MultiPolygon(polygons)
@@ -77,18 +84,35 @@ def parse(payload: dict, resolve_zones: ResolveZones) -> list[dict]:
     return signals
 
 
-def refresh(db: Session, fetch: Fetch, resolve_zones: ResolveZones, now: datetime):
-    """Take one Snapshot at `now` and apply it if complete. The caller commits."""
+def take_snapshot(
+    db: Session, fetch: Fetch, resolve_zones: ResolveZones, now: datetime
+) -> LiveWeatherSnapshot:
+    """Take one Snapshot at `now` and apply it if complete. Any failure (fetch, parse,
+    zones, or the writes themselves) is logged as a failed Snapshot and changes no signal.
+    The caller commits."""
     snapshot = LiveWeatherSnapshot(fetched_at=now, succeeded=False)
     try:
         payload = fetch()
         signals = parse(payload, resolve_zones)
-    except Exception as exc:  # any failure: log it, change no signal
+        with db.begin_nested():  # all signal writes, or none
+            superseded = _apply(db, signals, now)
+    except Exception as exc:
         snapshot.error = f"{type(exc).__name__}: {exc}"
         db.add(snapshot)
         db.flush()
         return snapshot
+    snapshot.succeeded = True
+    snapshot.source_updated_at = _time(payload.get("updated"))
+    snapshot.alerts_total = len(payload["features"])
+    snapshot.signals_kept = len(signals)
+    snapshot.superseded = superseded
+    db.add(snapshot)
+    db.flush()
+    return snapshot
 
+
+def _apply(db: Session, signals: list[dict], now: datetime) -> int:
+    """Upsert the Snapshot's signals and supersede those it no longer lists."""
     if signals:
         stmt = insert(LiveWeatherSignal).values(
             [{**s, "first_seen_at": now, "last_seen_at": now} for s in signals]
@@ -100,7 +124,7 @@ def refresh(db: Session, fetch: Fetch, resolve_zones: ResolveZones, now: datetim
                 set_={**kept, "last_seen_at": now, "superseded_at": None},
             )
         )
-    superseded = db.execute(
+    return db.execute(
         update(LiveWeatherSignal)
         .where(
             LiveWeatherSignal.superseded_at.is_(None),
@@ -108,11 +132,3 @@ def refresh(db: Session, fetch: Fetch, resolve_zones: ResolveZones, now: datetim
         )
         .values(superseded_at=now)
     ).rowcount
-    snapshot.succeeded = True
-    snapshot.source_updated_at = _time(payload.get("updated"))
-    snapshot.alerts_total = len(payload["features"])
-    snapshot.signals_kept = len(signals)
-    snapshot.superseded = superseded
-    db.add(snapshot)
-    db.flush()
-    return snapshot

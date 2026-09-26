@@ -164,10 +164,10 @@ def live(action: str) -> None:
     from datetime import UTC, datetime
 
     from app.need.live import nws
-    from app.need.live.refresh import refresh
+    from app.need.live.refresh import take_snapshot
 
     with nws.client() as http, SessionLocal() as db:
-        snapshot = refresh(
+        snapshot = take_snapshot(
             db,
             fetch=lambda: nws.fetch_alerts(http),
             resolve_zones=nws.zone_resolver(http),

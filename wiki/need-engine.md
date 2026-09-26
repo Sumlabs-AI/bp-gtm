@@ -153,14 +153,14 @@ Cell (res 8) ─┬─ res-6 parent ── IEM SV/TO/EW warning-days 5y ── T
   - cold (extreme cold, cold weather advisory, (hard) freeze)
 
   Flood, fire, air quality and marine are ignored. Tropical and ice *are* live signals even though they're excluded from Baseline Weather: Baseline asks how often, Live asks is it happening now.
-- **Area**: the alert's own polygon (`geometry_source = "alert"`), or the union of its NWS zones (`"zones"`, forecast `TXZ…`/county `TXC…`, fetched once and cached in `data/cache/nws-zones/`).
+- **Area**: the alert's own polygon (`geometry_source = "alert"`), or the union of its NWS zones (`"zones"`, forecast `TXZ…`/county `TXC…`). Zones are fetched once and cached atomically in `data/cache/nws-zones/`. Zones come back as a `GeometryCollection` (e.g. Inland Harris = Polygon + MultiPolygon). Every area is repaired (`make_valid`), flattened and merged into one valid MultiPolygon.
 - **Two clocks, kept apart** (`live_weather_signals`, never deleted):
   - NWS event time: `effective_at`, `onset_at`, `expires_at`, `ends_at`
   - Our ingestion state: `first_seen_at`, `last_seen_at`, `superseded_at`
   - `live_weather_snapshots` logs every attempt: `fetched_at`, `succeeded`, counts, `error`
 - **Snapshots**:
   - A **successful, complete** Snapshot upserts allowlisted alerts and supersedes signals missing from it (NWS cancelled, replaced or ended them).
-  - **Any failure** (fetch, parse, one zone geometry) logs a failed Snapshot and changes no signal.
+  - **Any failure** (fetch, parse, one zone geometry, or the database writes, which run in a savepoint) logs a failed Snapshot and changes no signal.
 - **Active** (decided at read time, `app/need/live/store.py`, with an explicit `now`):
   - not superseded
   - `effective_at ≤ now < coalesce(ends_at, expires_at)`
@@ -172,7 +172,8 @@ Cell (res 8) ─┬─ res-6 parent ── IEM SV/TO/EW warning-days 5y ── T
   - `GET /need/cells/{h3}` → `live.weather = {fetchedAt, stale, signals[]}`. Each signal has event, category, severity, certainty, urgency, headline, effectiveAt, endsAt, geometrySource, firstSeenAt, lastSeenAt.
   - `GET /need/cells` features → `activeWeatherSignals` (count) and `activeWeatherCategory` (most severe, `category_order`).
 - **Map**: red outline on Cells with an active signal; the sheet lists them with end times and the stale flag.
-- **Tests** (`tests/e2e/test_live_weather.py`, NWS payloads injected):
+- **Worker**: the weekly job runs in its own thread, so live Snapshots keep coming while it works (hours for the lead sources).
+- **Tests** (`tests/e2e/test_live_weather.py`): NWS payloads are injected, plus recorded real fixtures in `tests/fixtures/nws/` (a Texas alert feed and the Inland Harris zone). Covered:
   - time expiry with no refresh
   - successful-Snapshot cancellation
   - failed-Snapshot staleness
@@ -181,6 +182,8 @@ Cell (res 8) ─┬─ res-6 parent ── IEM SV/TO/EW warning-days 5y ── T
   - allowlist
   - reappearing alerts
   - `ends` → `expires` fallback
+  - center rule vs overlap (a box over a Cell corner doesn't count)
+  - write failures logged as failed Snapshots
 
 ## Commands
 

@@ -1,6 +1,5 @@
 """Reading Live Weather Signals: which are Active for which Cells at a given `now`."""
 
-from collections import defaultdict
 from datetime import datetime, timedelta
 
 from sqlalchemy import func, select
@@ -19,7 +18,6 @@ def active_signals(
     if not cells:
         return result
     center = func.ST_SetSRID(func.ST_MakePoint(Cell.center_lng, Cell.center_lat), 4326)
-    ends = func.coalesce(LiveWeatherSignal.ends_at, LiveWeatherSignal.expires_at)
     rows = db.execute(
         select(Cell.h3_index, LiveWeatherSignal)
         .join(LiveWeatherSignal, func.ST_Contains(LiveWeatherSignal.geometry, center))
@@ -27,15 +25,18 @@ def active_signals(
             Cell.h3_index.in_([c.h3_index for c in cells]),
             LiveWeatherSignal.superseded_at.is_(None),
             LiveWeatherSignal.effective_at <= now,
-            ends > now,
+            LiveWeatherSignal.ends > now,
         )
         .order_by(LiveWeatherSignal.effective_at)
     )
-    by_cell = defaultdict(list)
     for h3_index, signal in rows:
-        by_cell[h3_index].append(signal)
-    result.update(by_cell)
+        result[h3_index].append(signal)
     return result
+
+
+def most_severe_category(signals: list[LiveWeatherSignal]) -> str | None:
+    categories = {s.category for s in signals}
+    return next((c for c in config.category_order if c in categories), None)
 
 
 def live_status(db: Session, now: datetime) -> tuple[datetime | None, bool]:
