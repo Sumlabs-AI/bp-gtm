@@ -327,7 +327,7 @@ class CellPropensity(Base):
     __table_args__ = (UniqueConstraint("h3_index", "model_version", "scored_at"),)
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    h3_index: Mapped[str] = mapped_column(String(15), index=True)
+    h3_index: Mapped[str] = mapped_column(String(15))  # indexed by the unique constraint
     propensity_score: Mapped[float] = mapped_column(Float)  # 0-100
     model_version: Mapped[str] = mapped_column(String(80))
     feature_version: Mapped[str] = mapped_column(String(40))  # Need Feature Version scored against

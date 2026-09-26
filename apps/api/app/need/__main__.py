@@ -303,12 +303,14 @@ def export_ml(out_dir: Path) -> None:
     print(
         f"ML export (feature_version {r.feature_version})\n{'─' * 30}\n"
         f"{r.features_path.name:<32}{r.cells:>8,} rows (res-8 product Cells)\n"
-        f"{r.reference_path.name:<32}{r.reference_cells:>8,} rows (res-6 Texas reference)"
+        f"{r.reference_path.name:<32}{r.reference_cells:>8,} rows (res-6 Texas reference)\n"
+        f"columns: {', '.join(r.feature_columns)}\n"
+        f"reference columns: {', '.join(r.reference_columns)}"
     )
 
 
 def import_propensity_file(path: Path) -> None:
-    from app.need.ml import ImportError_, import_propensity
+    from app.need.ml import PropensityFileRejected, import_propensity
 
     if not path.is_file():
         raise SystemExit(f"No such file: {path}")
@@ -316,7 +318,7 @@ def import_propensity_file(path: Path) -> None:
         with SessionLocal() as db:
             r = import_propensity(db, path)
             db.commit()
-    except ImportError_ as exc:
+    except PropensityFileRejected as exc:
         raise SystemExit(f"Rejected {path.name}: {exc}") from None
     print(
         f"Imported {path.name}: {r.rows:,} predictions ({r.product_cells:,} product Cells, "

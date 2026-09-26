@@ -5,6 +5,7 @@ from datetime import UTC, date, datetime, timedelta
 import duckdb
 import pandas as pd
 import pytest
+from sqlalchemy import select
 
 from app import geo
 from app.db import SessionLocal
@@ -12,7 +13,13 @@ from app.models import CellPropensity
 from app.need.baseline import compute_baseline
 from app.need.config import FEATURE_VERSION
 from app.need.enrich import enrich_counties, enrich_load_zones
-from app.need.ml import ImportError_, export_features, import_propensity
+from app.need.ml import (
+    FEATURE_COLUMNS,
+    REFERENCE_COLUMNS,
+    PropensityFileRejected,
+    export_features,
+    import_propensity,
+)
 from app.need.outage.store import save_county_features, save_utility_reliability
 from app.need.store import seed_polygon
 from app.need.weather.store import save_county_temperature, save_storm_features
@@ -152,6 +159,12 @@ def test_need_features_export_is_one_typed_row_per_cell(world, tmp_path):
     assert houston["exported_at"] is not None
     # No live columns: the model must not train on time-of-day signals.
     assert not [c for c in f.columns if any(w in c for w in LIVE_WORDS)]
+    # The exact contract: every column, in order, with the documented type.
+    assert list(f.columns) == list(FEATURE_COLUMNS)
+    types = duckdb.sql(f"DESCRIBE SELECT * FROM '{tmp_path / 'need_features.parquet'}'").df()
+    assert dict(zip(types["column_name"], types["column_type"], strict=True)) == {
+        c: t for c, t in FEATURE_COLUMNS.items()
+    }
 
 
 def test_missing_features_are_null_not_zero(world, tmp_path):
@@ -178,6 +191,7 @@ def test_reference_export_is_the_statewide_res6_grain(world, tmp_path):
     assert row["baseline_need_raw"] == pytest.approx(83.6, abs=0.1)
     assert row["feature_version"] == FEATURE_VERSION
     assert "baseline_need" not in r.columns  # the reference is ranked against, not ranked
+    assert list(r.columns) == list(REFERENCE_COLUMNS)
 
 
 def propensity_file(tmp_path, rows: list[dict], name: str = "propensity.parquet"):
@@ -207,7 +221,7 @@ def latest(h3: str) -> CellPropensity | None:
     with SessionLocal() as db:
         from app.need.ml import latest_propensity
 
-        return latest_propensity(db, [h3]).get(h3)
+        return latest_propensity(db, [h3])[h3]
 
 
 def test_valid_predictions_are_stored_and_reported(world, tmp_path):
@@ -236,14 +250,14 @@ def test_valid_predictions_are_stored_and_reported(world, tmp_path):
 def test_invalid_rows_reject_the_whole_file(world, tmp_path, bad, match):
     rows = [prediction(H8, 50.0), {**prediction(A8, 50.0), **bad}]
     path = propensity_file(tmp_path, rows)
-    with SessionLocal() as db, pytest.raises(ImportError_, match=match):
+    with SessionLocal() as db, pytest.raises(PropensityFileRejected, match=match):
         import_propensity(db, path)
     assert latest(H8) is None  # nothing stored
 
 
 def test_missing_required_column_rejects_the_file(world, tmp_path):
     rows = [{k: v for k, v in prediction(H8, 50.0).items() if k != "model_version"}]
-    with SessionLocal() as db, pytest.raises(ImportError_, match="model_version"):
+    with SessionLocal() as db, pytest.raises(PropensityFileRejected, match="model_version"):
         import_propensity(db, propensity_file(tmp_path, rows))
 
 
@@ -267,7 +281,7 @@ def test_history_is_kept_and_the_latest_prediction_is_served(world, tmp_path):
             ),
         )
         db.commit()
-        history = db.query(CellPropensity).filter(CellPropensity.h3_index == H8).all()
+        history = db.scalars(select(CellPropensity).where(CellPropensity.h3_index == H8)).all()
     assert len(history) == 3  # the re-import upserted, the older prediction is kept
     served = latest(H8)
     assert (served.propensity_score, served.model_version) == (85.0, "v2")
@@ -296,3 +310,27 @@ def test_api_shows_propensity_beside_baseline_without_combining(client, world, t
     body = client.get("/need/cells", params={"bbox": "-98.1,29.6,-95.2,30.5"}).json()
     props = {f["id"]: f["properties"] for f in body["features"]}
     assert (props[H8]["propensityScore"], props[A8]["propensityScore"]) == (92.0, None)
+
+
+@pytest.mark.parametrize(
+    "rows, match",
+    [
+        ([], "empty"),
+        ([prediction(H8, 50.0), prediction(H8, 60.0)], "duplicate"),
+        ([{**prediction(H8, 50.0), "scored_at": "not a time"}], "scored_at"),
+        ([{**prediction(H8, 50.0), "scored_at": datetime(2026, 9, 26, 12)}], "timezone"),
+    ],
+)
+def test_other_malformed_files_are_rejected_cleanly(world, tmp_path, rows, match):
+    frame = pd.DataFrame(rows, columns=list(prediction(H8, 1.0)))
+    path = tmp_path / "p.parquet"
+    duckdb.from_df(frame).write_parquet(str(path))
+    with SessionLocal() as db, pytest.raises(PropensityFileRejected, match=match):
+        import_propensity(db, path)
+
+
+def test_unreadable_file_is_rejected_cleanly(world, tmp_path):
+    path = tmp_path / "p.parquet"
+    path.write_text("this is not parquet")
+    with SessionLocal() as db, pytest.raises(PropensityFileRejected, match="read"):
+        import_propensity(db, path)

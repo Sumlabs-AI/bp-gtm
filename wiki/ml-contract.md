@@ -97,13 +97,16 @@ Details of every feature: [need-engine.md](need-engine.md).
 | `propensity_score` | double | **strictly 0–100**. Convert probabilities before export; the import does not auto-detect 0–1. |
 | `model_version` | string | your model identifier |
 | `feature_version` | string | the Need Feature Version you trained/scored against (from the export) |
-| `scored_at` | timestamp | model prediction time |
+| `scored_at` | timestamp | model prediction time, **timezone-aware** (naive timestamps are rejected) |
 
 - Extra columns are ignored.
-- **The whole file is rejected** (nothing stored) if any row has an invalid or non-res-8 `h3_index`, a score outside 0–100, or a missing required column. The report names the first offending rows.
+- **The whole file is rejected** (nothing stored) if any row has an invalid or non-res-8 `h3_index`, a score outside 0–100, a missing required column, a null in a required column, a naive or unparseable `scored_at`, or a duplicate `(h3_index, model_version, scored_at)`; also if the file is empty or unreadable. The report names the first offending rows.
 - Predictions for valid res-8 Cells we haven't seeded are accepted and counted separately.
 - A `feature_version` other than the current one is accepted with a warning.
-- Load: `python -m app.need import-propensity propensity.parquet`. History is kept (`cell_propensities`); the API serves the **latest `scored_at`** per Cell and names its `model_version`. `imported_at` is recorded separately.
+- Load: `python -m app.need import-propensity propensity.parquet`.
+  - `cell_propensities` keeps every prediction (unique per `h3_index`, `model_version`, `scored_at`; a re-import of the same key updates it). `imported_at` is recorded separately from `scored_at`.
+  - `propensity_imports` logs each file: rows, product Cells, other Cells, the model and feature versions seen, warnings.
+  - The API serves the **latest `scored_at`** per Cell (ties: latest import) and names its `model_version`.
 
 Meaning: Propensity = likelihood/affinity for battery adoption. It is **not** Need and **not** GTM Opportunity. The API shows it beside Baseline Need (`GET /need/cells/{h3}` → `propensity`, map features → `propensityScore`) and never combines the two here.
 

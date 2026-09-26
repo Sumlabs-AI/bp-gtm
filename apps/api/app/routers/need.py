@@ -264,7 +264,7 @@ def list_cells(db: DB, bbox: Annotated[str, Query(description="west,south,east,n
                     "needScore": None,
                     "baselineNeed": b.baseline_need if (b := baseline[c.h3_index]) else None,
                     "propensityScore": p.propensity_score
-                    if (p := propensity.get(c.h3_index))
+                    if (p := propensity[c.h3_index])
                     else None,
                     "outageNeed": (outage[c.h3_index] or {}).get("score"),
                     "weatherNeed": (weather[c.h3_index] or {}).get("score"),
@@ -292,7 +292,7 @@ def cell_detail(db: DB, h3_index: str):
     components = {name: c for name, c in (("outage", outage), ("weather", weather)) if c}
     fetched_at, stale = alert_status(db, now)
     b = baseline_components(db, [cell])[cell.h3_index]
-    p = latest_propensity(db, [cell.h3_index]).get(cell.h3_index)
+    p = latest_propensity(db, [cell.h3_index])[cell.h3_index]
     reliability = ((outage or {}).get("utilityReliabilityNeed") or {}).get("score")
     point = geo.cell_to_parent(cell.h3_index, forecast_config.resolution)
     status = forecast_status(db, [point], now)
