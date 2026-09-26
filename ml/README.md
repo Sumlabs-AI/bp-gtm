@@ -212,6 +212,16 @@ held-out homes without a 2021-2023 install, check who installed in 2024-2025 (60
   2024-2025 installers instead of 43%, 69% instead of 59% in San Antonio.
 - **LightGBM again only ties the single column**, even with year built, lot, sq ft, stories, deed year and the
   block-group ACS features.
+- **Value = the appraisal district's market value** (Travis `market_value`, Bexar `TotVal`), set for property tax
+  on every parcel. The area baseline is the ACS median owner-estimated home value (B25077) of the block group,
+  one number shared by all its homes. Scores are pure rankings, no fitted relation, so log vs dollars changes nothing.
+- **Monotone and accelerating, no ceiling.** Installs 2021-2025 per 1,000 homes by value decile: Austin 3.3 (under
+  $341k) → 7 → 11 → 16 → 22 → 33 → 67 (over $1.19M), top 1% (over $2.66M) 125. San Antonio 0.2 (under $142k) →
+  1.3 → 2.5 → 4.2 → 10.6 (over $475k), top 1% 27. Very large homes may fail Base's panel limits; that belongs in
+  installability, not propensity.
+- **Where the gain comes from** (top 20% share): Austin 43% (ACS area median) → 48% (median of appraisals in the
+  block group: better source) → 58% (the home's own appraisal: finer resolution). San Antonio 59% → 62% → 69%.
+  About two-thirds of the gain is resolution.
 - Caveat: appraisals are a 2025 snapshot, so a 2024-2025 install could nudge its own home's value (a generator is
   a few % of a typical home's value). Small next to the gap above.
 - Per-home value needs parcel data for every county scored. Have: Travis, Bexar, Dallas, Tarrant, Collin, Denton
