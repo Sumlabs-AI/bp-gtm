@@ -27,6 +27,8 @@ Seed the Need Engine Cells for `/need` (offline, a few seconds; see [need-engine
 docker compose exec api python -m app.need seed
 docker compose exec api python -m app.need outage download   # optional: ~6 GB, cached in apps/api/data/raw
 docker compose exec api python -m app.need outage compute    # Outage Need colours on /need
+docker compose exec api python -m app.need weather download  # optional: ~60 MB warnings + temperature
+docker compose exec api python -m app.need weather compute   # Weather Need colours on /need
 ```
 
 ERCOT credentials go in the repo-root `.env` (see `.env.example`); only `update` needs them.

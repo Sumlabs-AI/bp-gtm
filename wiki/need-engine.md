@@ -2,7 +2,7 @@
 
 Scores **how useful backup power is** in a place, per **Cell** (H3 resolution-8 hexagon, ~0.74 km²). It is separate from lead scoring and from the ML Propensity Score, which join onto the same Cells by `h3_index`. Terms: [`CONTEXT.md`](../CONTEXT.md). Why PostGIS: [ADR 0001](../docs/adr/0001-postgis.md).
 
-Status: **Milestones 1–3A (Cells, Load Zone, Baseline Outage Need)**. Cells exist for Harris and Travis counties. Each Cell has its ERCOT Load Zone and its county, plus an **Outage Need Component**, drawn on `/need`. There's no combined Need Score yet (`needScore: null`, see M6). Static geography is closed: a new geography is added only when a Need signal needs it. County was added in M3A for exactly that reason.
+Status: **Milestones 1–4A (Cells, Load Zone, Baseline Outage Need, Baseline Weather Need)**. Cells exist for Harris and Travis counties. Each Cell has its ERCOT Load Zone and its county, plus an **Outage Need Component**, drawn on `/need`. There's no combined Need Score yet (`needScore: null`, see M6). Static geography is closed: a new geography is added only when a Need signal needs it. County was added in M3A for exactly that reason.
 
 ## The Cell contract (shared with ML)
 
@@ -94,6 +94,46 @@ Cell ─┬─ county ── EAGLE-I 5y ── Texas percentile ── Observed 
   - CenterPoint 46.3 (SAIDI excl. major events 151 min/yr). Austin Energy 24.3 (69 min/yr).
   - Outage Need: Houston Cell 61.0, Austin Energy Cell 37.9, Travis outside Austin Energy 51.6 (utility unknown).
 
+## Baseline Weather Need (M4A, issue #11)
+
+```text
+Cell (res 8) ─┬─ res-6 parent ── IEM SV/TO/EW warning-days 5y ── Texas res-6 percentile ── Storm Exposure ─────────┐
+              └─ county ──────── nClimGrid ≥100°F / ≤28°F days 5y ── Texas county pctl ── Temperature Extremes ─┴─ Weather Need Component
+```
+
+- **Storm Exposure** (`app/need/weather/storms.py`):
+  - Source: NWS severe thunderstorm, tornado and extreme wind warning **polygons** (IEM archive, public domain).
+  - Measure: **Warning-days**, i.e. distinct local dates a place was inside ≥ 1 warning. Days, not warnings, so one storm counts once.
+  - Grid: a **statewide H3 res-6 grid** (~36 km², 16,697 Texas cells) is the Reference Population, and a res-8 Cell reads its res-6 parent (`geo.cell_to_parent`). The API returns that provenance (`resolution: 6`, `sourceCell`).
+  - Polygons map to res-6 cells by the center rule. A polygon too small to contain a center maps to its centroid's cell.
+  - Excluded: flash flood, marine and all zone-based products.
+- **Temperature Extremes Exposure** (`app/need/weather/temperature.py`):
+  - Source: **measured** NOAA nClimGrid-daily, county averages (EpiNOAA Parquet on AWS, public domain).
+  - Scored: days ≥ 100°F and days ≤ 28°F. Context only: days ≥ 95°F and ≤ 32°F.
+  - Exposure = mean of the two Texas county percentiles.
+  - **Limitation: dry-bulb only, no humidity or heat index.** Houston's humid heat is under-counted: Harris has 37 days ≥ 100°F in 5 y vs Travis 133.
+- **Weather Need Component** (`component.py`) = mean of the sub-scores that exist (shared `app/need/components.py`), with fallback notes. **The equal weights are provisional.**
+- **Tropical and ice are not in Baseline Weather.** Rare catastrophic events (Beryl, Uri) show up through Outage history, and later through Live Weather (M4B).
+- **Why warnings for storms but measured data for temperature.** One-off check over 254 Texas counties, 2021–2025:
+
+  | Check | Spearman vs measured | R² measured | + issuing office |
+  | --- | --- | --- | --- |
+  | Heat advisory days vs days ≥ 100°F | −0.29 | 0.01 | 0.85 |
+  | Cold advisory days vs days ≤ 28°F | −0.07 | 0.00 | 0.68 |
+  | SV/TO/EW warning-days vs SPC report-days (+ area, customers) | 0.76 | 0.66 | 0.82 |
+
+  Advisories reflect local thresholds and office practice. Storm warnings track reports. Per-office warning/report ratios run 3.0–5.3, and HGX is highest (~25% above median), which is noted as a caveat in the API.
+- Storage:
+  - Raw downloads: `data/raw/{iem,nclimgrid,census}` (the Texas outline, dissolved from Census counties).
+  - Postgres: `storm_exposure` (one row per Texas res-6 cell) and `county_temperature_features` (one row per Texas county).
+- Latency: IEM is near real time (Data Through = the day before the download). **EpiNOAA's county files lag months** (currently through 2026-02-28), so the 5-year temperature window ends there.
+- Real data:
+  - 144k SV/TO/EW warnings; compute takes ~40 s.
+  - Storm Exposure spread inside Harris is 21–75 across 111 res-6 cells (NW Houston 62, downtown 58, SE coast 36), and inside Travis 24–48.
+  - The Derecho (2024-05-16) and Beryl (2024-07-08) are warned in Harris.
+  - The top Texas storm cells are around Amarillo (74 warning-days in 5 y).
+  - Temperature Extremes: Harris 8, Travis 47.
+
 ## Commands
 
 ```bash
@@ -105,6 +145,9 @@ docker compose exec api python -m scripts.download_counties       # refresh coun
 docker compose exec api python -m app.need outage download         # EAGLE-I (5 yearly files, ~6 GB) + EIA-861, cached
 docker compose exec api python -m app.need outage compute          # Texas Parquet -> county/utility features
 docker compose exec api python -m app.need outage validate         # Major Outage Events per Market + minutes/customer by year
+docker compose exec api python -m app.need weather download        # IEM warning polygons + nClimGrid county Parquet (cached)
+docker compose exec api python -m app.need weather compute         # res-6 Storm Exposure + county Temperature Extremes
+docker compose exec api python -m app.need weather validate        # warning-days by year, Derecho/Beryl, top storm cells
 ```
 
 Seeding reads only the committed county files, so it needs no network. To add a county, add a `Market`, run `download_counties`, commit the GeoJSON, then seed it.
@@ -114,12 +157,12 @@ Measured (M-series laptop, Docker): seeding Harris creates 5,550 Cells in 0.35 s
 ## API
 
 - `GET /need/cells?bbox=west,south,east,north` returns a GeoJSON FeatureCollection. Each feature has `id` = `h3`, `properties: {h3, needScore}`. It returns **400** `"Viewport contains too many H3 cells. Zoom in to continue."` above `viewport_max_cells`, and **422** for a malformed bbox. Whole-Harris view: 5,550 Cells, ~0.15 s, ~2.3 MB uncompressed.
-- `GET /need/cells` features also carry `outageNeed` (the Outage Need Component or null).
+- `GET /need/cells` features also carry `outageNeed` and `weatherNeed` (each a component score or null). `components.weather` in the detail holds `stormExposure` (with `resolution`/`sourceCell` provenance, caveats), `temperatureExtremesExposure` (with `limitations`) and `notes`.
 - `GET /need/cells/{h3}` returns `{h3, resolution, center: {lat, lng}, loadZone, needScore, components}`. `components.outage` holds the score, `observedOutageExposure` (county, metrics, percentiles, source, dataThrough, lastObservedMajorOutageOn, daysSinceLastObservedMajorOutage), `utilityReliabilityNeed` (utility, SAIDI/SAIFI, years used, or null) and `notes`, or **404** for an unknown or invalid index.
 
 ## Map (`/need`)
 
-`components/need/cell-map.tsx`. Cells are hidden and not fetched below zoom `H3_MAP_MIN_ZOOM` (9, in `lib/need.ts`). Above that zoom it refetches on `moveend` (300 ms debounce, aborting the previous request). Cells are shaded by `outageNeed` (the neutral tint where it's null). Hovering shows the index. Clicking opens a sheet with the Cell detail: Load Zone, plus the Outage Need breakdown with raw metrics, sources and the "history through" date. The Houston/Austin buttons fly to each Market.
+`components/need/cell-map.tsx`. Cells are hidden and not fetched below zoom `H3_MAP_MIN_ZOOM` (9, in `lib/need.ts`). Above that zoom it refetches on `moveend` (300 ms debounce, aborting the previous request). A **Colour by** toggle shades Cells by `outageNeed` or `weatherNeed` (the neutral tint where null). Hovering shows the index. Clicking opens a sheet with the Cell detail: Load Zone, plus the Outage Need breakdown with raw metrics, sources and the "history through" date. The Houston/Austin buttons fly to each Market.
 
 ## Switching an existing database to PostGIS
 

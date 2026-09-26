@@ -14,7 +14,7 @@ export type CellFeature = {
   type: "Feature"
   id: string
   geometry: { type: "Polygon"; coordinates: [number, number][][] }
-  properties: { h3: string; needScore: number | null; outageNeed: number | null }
+  properties: { h3: string; needScore: number | null; outageNeed: number | null; weatherNeed: number | null }
 }
 
 export type CellCollection = { type: "FeatureCollection"; features: CellFeature[] }
@@ -25,7 +25,7 @@ export type CellDetail = {
   center: { lat: number; lng: number }
   loadZone: string | null
   needScore: number | null
-  components: { outage?: OutageComponent }
+  components: { outage?: OutageComponent; weather?: WeatherComponent }
 }
 
 // Outage Need Component: county-level Observed Outage Exposure (EAGLE-I) and Utility
@@ -68,6 +68,52 @@ export type OutageComponent = {
       saidiWithMed5y: number | null
       saifiWithMed5y: number | null
     }
+  } | null
+  notes: string[]
+}
+
+// Map colouring: which Need Component shades the Cells.
+export type ColorBy = "outageNeed" | "weatherNeed"
+export const COLOR_BY: { key: ColorBy; label: string }[] = [
+  { key: "outageNeed", label: "Outage Need" },
+  { key: "weatherNeed", label: "Weather Need" },
+]
+
+// Weather Need Component (Baseline): Storm Exposure from the Cell's res-6 parent (~36 km²)
+// and Temperature Extremes Exposure from its county, each a Texas percentile.
+export type WeatherComponent = {
+  score: number | null
+  stormExposure: {
+    score: number | null
+    resolution: number
+    sourceCell: string
+    source: string
+    dataThrough: string
+    metrics: {
+      warningDays5y: number
+      warningDays365d: number
+      severeThunderstormWarnings5y: number
+      tornadoWarnings5y: number
+      extremeWindWarnings5y: number
+    }
+    percentile: number | null
+    caveats: string[]
+  } | null
+  temperatureExtremesExposure: {
+    score: number | null
+    county: { fips: string }
+    source: string
+    dataThrough: string
+    metrics: {
+      heatDays100F5y: number
+      heatDays95F5y: number
+      coldDays28F5y: number
+      coldDays32F5y: number
+      heatDays100F365d: number
+      coldDays28F365d: number
+    }
+    percentiles: { heatDays100F5y: number | null; coldDays28F5y: number | null }
+    limitations: string[]
   } | null
   notes: string[]
 }

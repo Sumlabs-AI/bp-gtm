@@ -28,6 +28,11 @@ def cell_resolution(cell: str) -> int:
     return h3.get_resolution(cell)
 
 
+def cell_to_parent(cell: str, resolution: int) -> str:
+    """The coarser Cell containing `cell` (e.g. its res-6 parent, ~36 km²)."""
+    return h3.cell_to_parent(cell, resolution)
+
+
 def cell_to_polygon(cell: str) -> dict:
     """GeoJSON Polygon of the Cell, closed ring in [lng, lat] order."""
     ring = [[lng, lat] for lat, lng in h3.cell_to_boundary(cell)]

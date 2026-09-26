@@ -8,9 +8,10 @@ import "maplibre-gl/dist/maplibre-gl.css"
 import { Button } from "@/components/ui/button"
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet"
 import { OutageBreakdown } from "@/components/need/outage-breakdown"
+import { WeatherBreakdown } from "@/components/need/weather-breakdown"
 import { apiFetch } from "@/lib/api"
 import { scoreColor } from "@/lib/grid"
-import { H3_MAP_MIN_ZOOM, MARKETS, type CellCollection, type CellDetail } from "@/lib/need"
+import { COLOR_BY, H3_MAP_MIN_ZOOM, MARKETS, type CellCollection, type CellDetail, type ColorBy } from "@/lib/need"
 
 const BASEMAP = "https://tiles.openfreemap.org/styles/positron"
 
@@ -27,6 +28,7 @@ export function CellMap({ className }: { className?: string }) {
   const [data, setData] = React.useState<CellCollection | null>(null)
   const [status, setStatus] = React.useState<Status>("loading")
   const [hover, setHover] = React.useState<Hover | null>(null)
+  const [colorBy, setColorBy] = React.useState<ColorBy>("outageNeed")
   const [selected, setSelected] = React.useState<string | null>(null)
   // Keyed by Cell so a stale detail never shows under a newly selected Cell.
   const [detail, setDetail] = React.useState<CellDetail | null>(null)
@@ -116,11 +118,11 @@ export function CellMap({ className }: { className?: string }) {
                     // Outage Need Component when known, else the neutral substrate tint.
                     "fill-color": [
                       "case",
-                      ["==", ["get", "outageNeed"], null],
+                      ["==", ["get", colorBy], null],
                       "#6366f1",
-                      ["interpolate", ["linear"], ["get", "outageNeed"], 0, scoreColor(0), 50, scoreColor(50), 100, scoreColor(100)],
+                      ["interpolate", ["linear"], ["get", colorBy], 0, scoreColor(0), 50, scoreColor(50), 100, scoreColor(100)],
                     ],
-                    "fill-opacity": ["case", ["==", ["get", "outageNeed"], null], 0.08, 0.45],
+                    "fill-opacity": ["case", ["==", ["get", colorBy], null], 0.08, 0.45],
                   }}
                 />,
                 <Layer
@@ -158,6 +160,15 @@ export function CellMap({ className }: { className?: string }) {
           <span className="pr-1 text-muted-foreground">{STATUS_TEXT[status](data?.features.length ?? 0)}</span>
         </div>
 
+        <div className="absolute top-3 right-12 flex items-center gap-1 rounded-md border bg-background/90 px-2 py-1.5 text-xs shadow-sm">
+          <span className="pr-1 text-muted-foreground">Colour by</span>
+          {COLOR_BY.map((c) => (
+            <Button key={c.key} size="sm" variant={colorBy === c.key ? "secondary" : "ghost"} onClick={() => setColorBy(c.key)}>
+              {c.label}
+            </Button>
+          ))}
+        </div>
+
         {hover && (
           <div
             className="pointer-events-none absolute z-10 rounded-lg border bg-background p-2 font-mono text-xs shadow-md"
@@ -188,9 +199,10 @@ export function CellMap({ className }: { className?: string }) {
               <dd>{shownDetail.needScore ?? "—"}</dd>
             </dl>
           )}
-          {shownDetail?.components.outage && (
-            <div className="overflow-y-auto pb-4">
-              <OutageBreakdown outage={shownDetail.components.outage} />
+          {shownDetail && (shownDetail.components.outage || shownDetail.components.weather) && (
+            <div className="flex flex-col gap-6 overflow-y-auto pb-4">
+              {shownDetail.components.outage && <OutageBreakdown outage={shownDetail.components.outage} />}
+              {shownDetail.components.weather && <WeatherBreakdown weather={shownDetail.components.weather} />}
             </div>
           )}
         </SheetContent>

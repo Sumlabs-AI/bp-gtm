@@ -10,6 +10,7 @@ from datetime import date
 from sqlalchemy.orm import Session
 
 from app.models import Cell, CountyOutageFeatures, UtilityReliability
+from app.need.components import mean_of_present
 from app.need.config import UTILITY_BY_COUNTY, UTILITY_BY_LOAD_ZONE
 from app.need.outage.store import load_features
 
@@ -23,12 +24,6 @@ NO_EXPOSURE = "County outside the Reference Population: score uses Utility Relia
 def utility_for(cell: Cell) -> int | None:
     """Load Zone first (Austin Energy's territory), then county."""
     return UTILITY_BY_LOAD_ZONE.get(cell.load_zone) or UTILITY_BY_COUNTY.get(cell.county_fips)
-
-
-def score(exposure: float | None, reliability: float | None) -> float | None:
-    """Mean of the sub-scores that exist; None when neither does."""
-    present = [s for s in (exposure, reliability) if s is not None]
-    return round(sum(present) / len(present), 1) if present else None
 
 
 def _observed(c: CountyOutageFeatures, today: date) -> dict:
@@ -106,7 +101,7 @@ def outage_components(db: Session, cells: list[Cell], today: date) -> dict[str, 
         if need is None:
             notes.append(UNRANKED_UTILITY if utility else UNKNOWN_UTILITY)
         result[cell.h3_index] = {
-            "score": score(exposure, need),
+            "score": mean_of_present(exposure, need),
             "observedOutageExposure": observed,
             "utilityReliabilityNeed": reliability,
             "notes": notes,

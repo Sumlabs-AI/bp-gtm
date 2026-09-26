@@ -3,8 +3,14 @@
 from pydantic import BaseModel
 
 from app import geo
-from app.need.outage.eaglei import ExposureConfig
 from app.need.outage.events import EventRules
+
+
+class ExposureConfig(BaseModel):
+    window_years: int = 5
+    # A county joins the Reference Population when EAGLE-I has rows for it in at least this
+    # share of the window's calendar years (ORNL publishes coverage per state, not county).
+    min_years_share: float = 0.8
 
 
 class NeedConfig(BaseModel):

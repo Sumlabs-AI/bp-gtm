@@ -27,6 +27,8 @@ docker compose exec api python -m app.grid compute              # score the zone
 docker compose exec api python -m app.need seed                 # H3 Cells for /need (offline, seconds)
 docker compose exec api python -m app.need outage download      # outage history, ~6 GB (cached)
 docker compose exec api python -m app.need outage compute       # Outage Need on /need
+docker compose exec api python -m app.need weather download     # NWS warnings + measured temperature
+docker compose exec api python -m app.need weather compute      # Weather Need on /need
 ```
 
 Then open http://localhost:3000 (redirects to `/grid`).
