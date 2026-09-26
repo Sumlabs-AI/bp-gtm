@@ -173,7 +173,7 @@ class GridLiveConfig(BaseModel):
     price_refresh_minutes: int = 15  # MIS RT report
     rt_documents: int = 4  # re-read the last hour of 15-min files each time (fills gaps)
     dam_documents: int = 2
-    normal_state: str = "normal"
+    dam_refresh_minutes: int = 60  # picks up the daily ~12:35 publication
 
 
 grid_live = GridLiveConfig()

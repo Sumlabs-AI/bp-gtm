@@ -10,9 +10,9 @@ import pytest
 from app import geo
 from app.db import SessionLocal
 from app.grid.store import upsert_prices
-from app.models import Cell
+from app.models import Cell, GridPrice
 from app.need.enrich import enrich_load_zones
-from app.need.live.grid import grid_live, take_grid_poll
+from app.need.live.grid import grid_live, refresh_prices, take_grid_poll
 from app.need.store import seed_polygon
 
 FIXTURES = Path(__file__).resolve().parents[1] / "fixtures/ercot"
@@ -136,7 +136,7 @@ def test_realtime_spike_only_in_the_cells_zone_and_only_while_recent():
     assert live(H8, NOW + timedelta(minutes=45))["prices"]["stale"] is True
 
 
-def test_day_ahead_spike_tomorrow_in_the_cells_zone():
+def test_day_ahead_spike_in_the_upcoming_hours_of_the_cells_zone():
     poll(NOW - timedelta(minutes=2))
     tomorrow_5pm = datetime(2026, 9, 27, 22, 0, tzinfo=UTC)  # 17:00 CDT
     for h in range(3):
@@ -145,6 +145,7 @@ def test_day_ahead_spike_tomorrow_in_the_cells_zone():
     assert spike["type"] == "dam_price_spike"
     assert spike["value"] == 1202.0  # peak
     assert spike["at"] == tomorrow_5pm  # first hour at or above the threshold
+    assert spike["hours"] == 3
     assert "3 hours" in spike["message"]
     assert types(live(A8)) == []
 
@@ -168,3 +169,54 @@ def test_api_shape_keeps_official_and_derived_apart(client):
     body = client.get("/need/cells", params={"bbox": "-98.1,29.6,-95.2,30.5"}).json()
     props = {f["id"]: f["properties"] for f in body["features"]}
     assert (props[H8]["gridState"], props[H8]["activeGridStressSignals"]) == ("normal", 1)
+
+
+def test_thresholds_are_strict_and_stale_conditions_give_no_signals():
+    poll(NOW - timedelta(minutes=2), prc="3,000", margin=3000)
+    assert types(live(H8)) == []  # exactly at our thresholds: not below
+    poll(NOW - timedelta(minutes=1), prc="1,000")
+    assert types(live(H8)) == ["low_reserves"]
+    # 25 min later with no new poll: the reading is stale, so it is not a live signal.
+    stale = live(H8, NOW + timedelta(minutes=25))
+    assert stale["condition"]["stale"] is True
+    assert types(stale) == []
+
+
+def test_todays_remaining_day_ahead_hours_count_too():
+    poll(NOW - timedelta(minutes=2))
+    tonight = datetime(2026, 9, 27, 0, 0, tzinfo=UTC)  # 19:00 CDT today
+    price("LZ_HOUSTON", "DA", tonight, 1500.0)
+    price("LZ_HOUSTON", "DA", NOW - timedelta(hours=2), 3000.0)  # already past: ignored
+    [spike] = live(H8)["stressSignals"]
+    assert (spike["type"], spike["value"], spike["hours"]) == ("dam_price_spike", 1500.0, 1)
+
+
+def test_refreshing_prices_twice_is_idempotent():
+    frame = pd.DataFrame(
+        [
+            {
+                "settlement_point": "LZ_HOUSTON",
+                "market": "RT",
+                "interval_start": pd.Timestamp(NOW),
+                "price": 40.0,
+            }
+        ]
+    )
+    refresh_prices("RT", lambda market, documents: frame)
+    refresh_prices("RT", lambda market, documents: frame.assign(price=41.0))
+    with SessionLocal() as db:
+        rows = db.query(GridPrice).filter(GridPrice.settlement_point == "LZ_HOUSTON").all()
+    assert [(r.price) for r in rows] == [41.0]  # one row, latest value
+
+
+def test_map_response_carries_the_statewide_condition_once(client):
+    poll(datetime.now(UTC) - timedelta(minutes=1), state="eea1", title="EEA Level 1", eea=1)
+    body = client.get("/need/cells", params={"bbox": "-80,20,-79,21"}).json()  # no Cells here
+    assert body["features"] == []
+    assert body["grid"] == {
+        "state": "eea1",
+        "title": "EEA Level 1",
+        "eeaLevel": 1,
+        "official": True,
+        "stale": False,
+    }

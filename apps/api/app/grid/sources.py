@@ -116,11 +116,15 @@ def parse_mis_prices(market: str, csv_text: str) -> pd.DataFrame:
 def fetch_mis_recent(market: str, documents: int) -> pd.DataFrame:
     """The latest `documents` CSV publications of a live MIS price report."""
     listing = httpx.get(MIS_LIST.format(MIS_LIVE[market]), headers=_UA, timeout=60)
-    docs = [
-        d["Document"]
-        for d in listing.raise_for_status().json()["ListDocsByRptTypeRes"]["DocumentList"]
-        if d["Document"]["FriendlyName"].endswith("_csv")
-    ][:documents]
+    docs = sorted(
+        (
+            d["Document"]
+            for d in listing.raise_for_status().json()["ListDocsByRptTypeRes"]["DocumentList"]
+            if d["Document"]["FriendlyName"].endswith("_csv")
+        ),
+        key=lambda d: d["PublishDate"],
+        reverse=True,
+    )[:documents]
     frames = []
     for doc in docs:
         resp = httpx.get(MIS_DOWNLOAD.format(doc["DocID"]), headers=_UA, timeout=120)

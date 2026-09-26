@@ -232,12 +232,13 @@ Cell (res 8) ─┬─ res-6 parent ── IEM SV/TO/EW warning-days 5y ── T
   - `low_reserves` (reliability, ERCOT-wide): PRC < 3,000 MW. ERCOT's own EEA1 trigger is 2,500.
   - `tight_margin` (reliability, ERCOT-wide): ERCOT's forecast capacity − demand later today < 3,000 MW (`supply-demand.json`).
   - `rt_price_spike` (market, the Cell's Load Zone): the latest 15-min price, from the last 45 min, is ≥ $1,000/MWh (the existing `ScoringConfig.scarcity_threshold`).
-  - `dam_price_spike` (market, the Cell's Load Zone): tomorrow's day-ahead hours ≥ $1,000/MWh.
+  - `dam_price_spike` (market, the Cell's Load Zone): upcoming day-ahead hours ≥ $1,000/MWh, **from now through the end of tomorrow**, so today's remaining hours count until tomorrow's DAM publishes (~12:35). It carries `hours` (count), `value` (peak) and `at` (first hour).
+  - Reliability signals need a **fresh** condition. A stale reading (older than 20 min) gives no live signal, and the condition shows `stale: true`.
 - **Prices without credentials**: public MIS reports 12301 (NP6-905 real-time, 15 min; `LZEW` duplicates dropped) and 12331 (NP4-190 day-ahead) are **upserted into the existing `grid_prices`**, so the Grid Zones economics stay current too.
 - **Storage**: `grid_conditions` gets one row per poll (state, EEA, PRC, capacity/demand, tightest forecast margin and when). A failed poll is logged there and changes nothing. Signals are derived at read time with an explicit `now`: no signal rows, no expiry job.
 - **Stale**: condition older than 20 min; price older than 45 min.
 - **Geography**: reliability signals apply to every Cell; market signals use the Cell's Load Zone. Cells without a zone get a note.
-- **API**: `live.grid = {condition, prices, stressSignals[], notes}` in the detail; `gridState` and `activeGridStressSignals` on features. `/need` shows an **ERCOT: <state>** chip in the toolbar (red when not normal) and an "ERCOT grid" sheet section, with the official condition kept apart from "Grid stress (our reading of ERCOT data)".
+- **API**: `live.grid = {condition, prices, stressSignals[], notes}` in the detail. `gridState` and `activeGridStressSignals` on features. `GET /need/cells` also returns a top-level **`grid`** block (`state`, `title`, `eeaLevel`, `official`, `stale`), given once because it's ERCOT-wide, even when no Cell is in view. The status chip reads it. `/need` shows an **ERCOT: <state>** chip in the toolbar (red when not normal) and an "ERCOT grid" sheet section, with the official condition kept apart from "Grid stress (our reading of ERCOT data)".
 - **Worker**:
   - dashboards every 5 min
   - RT prices every 15 min (the last 4 files are re-read to fill gaps)

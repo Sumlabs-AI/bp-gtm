@@ -12,7 +12,7 @@ from app.need.config import forecast as forecast_config
 from app.need.config import need
 from app.need.live.forecast import COMPARISON
 from app.need.live.forecast_store import active_forecast, forecast_status, most_severe_level
-from app.need.live.grid import grid_live
+from app.need.live.grid import condition_summary, grid_live, latest_condition
 from app.need.live.store import active_alerts, alert_status, most_severe_category
 from app.need.outage.component import outage_components
 from app.need.store import cells_in_viewport, get_cell
@@ -120,6 +120,7 @@ class GridStressSignal(BaseModel):
     unit: str
     at: datetime | None
     message: str
+    hours: int | None = None  # day-ahead spikes: hours at or above the threshold
 
 
 class LiveGrid(BaseModel):
@@ -209,6 +210,8 @@ def list_cells(db: DB, bbox: Annotated[str, Query(description="west,south,east,n
     grid = grid_live(db, cells, now)
     return {
         "type": "FeatureCollection",
+        # ERCOT-wide, so given once (also when no Cell is in view) for the map's status chip.
+        "grid": condition_summary(latest_condition(db, now), now),
         "features": [
             {
                 "type": "Feature",

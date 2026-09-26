@@ -43,8 +43,8 @@ export function CellMap({ className }: { className?: string }) {
   // Keyed by Cell so a stale detail never shows under a newly selected Cell.
   const [detail, setDetail] = React.useState<CellDetail | null>(null)
   const shownDetail = detail?.h3 === selected ? detail : null
-  // ERCOT-wide: the same official condition on every Cell, shown once in the toolbar.
-  const gridState = data?.features[0]?.properties.gridState ?? null
+  // ERCOT-wide official condition, given once per map response (even with no Cells in view).
+  const grid = data?.grid ?? null
 
   function readViewport() {
     const map = mapRef.current
@@ -198,12 +198,19 @@ export function CellMap({ className }: { className?: string }) {
             </Button>
           ))}
           <span className="pr-1 text-muted-foreground">{STATUS_TEXT[status](data?.features.length ?? 0)}</span>
-          {gridState && (
+          {grid?.state && (
             <span
-              className={`rounded px-1.5 py-0.5 ${gridState === "normal" ? "bg-muted text-muted-foreground" : "bg-red-600 text-white"}`}
+              className={`rounded px-1.5 py-0.5 ${
+                grid.stale
+                  ? "border border-amber-500 text-amber-700"
+                  : grid.official
+                    ? "bg-red-600 text-white"
+                    : "bg-muted text-muted-foreground"
+              }`}
               title="Official ERCOT grid condition"
             >
-              ERCOT: {gridState}
+              ERCOT: {grid.title ?? grid.state}
+              {grid.stale && " (stale)"}
             </span>
           )}
         </div>

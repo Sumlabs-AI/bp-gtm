@@ -28,7 +28,16 @@ export type CellFeature = {
   }
 }
 
-export type CellCollection = { type: "FeatureCollection"; features: CellFeature[] }
+// The ERCOT-wide official condition, given once per map response (also with no Cells).
+export type GridSummary = {
+  state: string | null
+  title: string | null
+  eeaLevel: number | null
+  official: boolean
+  stale: boolean
+}
+
+export type CellCollection = { type: "FeatureCollection"; features: CellFeature[]; grid: GridSummary }
 
 export type CellDetail = {
   h3: string
@@ -205,6 +214,7 @@ export type LiveGrid = {
     unit: string
     at: string | null
     message: string
+    hours: number | null
   }[]
   notes: string[]
 }

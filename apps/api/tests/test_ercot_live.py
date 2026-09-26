@@ -25,8 +25,8 @@ def test_condition_reads_official_state_reserves_and_forecast_margin():
     assert row["source_updated_at"] == datetime(2026, 9, 26, 20, 24, 24, tzinfo=UTC)
     # Latest actual 5-minute interval, then the tightest forecast point for the rest of today.
     assert (row["capacity_mw"], row["demand_mw"]) == (102674, 77576)
-    assert row["margin_forecast_min_mw"] > 0
-    assert row["margin_forecast_min_at"] > datetime(2026, 9, 26, 20, 20, tzinfo=UTC)
+    assert row["margin_forecast_min_mw"] == 13822  # tightest forecast point tonight
+    assert row["margin_forecast_min_at"] == datetime(2026, 9, 27, 1, 0, tzinfo=UTC)  # 20:00 CDT
 
 
 def test_realtime_prices_keep_load_zones_and_hub_not_energy_weighted_duplicates():

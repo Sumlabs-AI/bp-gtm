@@ -16,6 +16,7 @@ import argparse
 import threading
 import time
 import traceback
+from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
 from zoneinfo import ZoneInfo
 
@@ -54,15 +55,9 @@ def run_weekly() -> None:
             traceback.print_exc()
 
 
-def run_alerts() -> None:
-    try:
-        live("refresh")
-    except Exception:  # never stop the loop; the next Snapshot retries
-        traceback.print_exc()
-
-
-def guarded(job):
-    """A worker job that logs its failure and never stops the loop."""
+def guarded(job: Callable[[], None]) -> Callable[[], None]:
+    """A worker job that logs its failure and never stops the loop (the next run retries,
+    and live data keeps its last good state)."""
 
     def run() -> None:
         try:
@@ -71,13 +66,6 @@ def guarded(job):
             traceback.print_exc()
 
     return run
-
-
-def run_forecast() -> None:
-    try:
-        forecast_refresh()
-    except Exception:  # never stop the loop; points keep their last good forecast
-        traceback.print_exc()
 
 
 def plan(now: datetime, next_at: dict[str, datetime]) -> tuple[list[str], datetime | None]:
@@ -98,15 +86,15 @@ def main() -> None:
         "alerts": timedelta(minutes=nws_alerts.refresh_minutes),
         "grid": timedelta(minutes=grid_live.refresh_minutes),
         "grid-prices": timedelta(minutes=grid_live.price_refresh_minutes),
-        "grid-dam": timedelta(hours=1),
+        "grid-dam": timedelta(minutes=grid_live.dam_refresh_minutes),
         "forecast": timedelta(minutes=forecast.refresh_minutes),
     }
     jobs = {
-        "alerts": run_alerts,
+        "alerts": guarded(lambda: live("refresh")),
         "grid": guarded(lambda: grid_refresh("grid")),
         "grid-prices": guarded(lambda: grid_refresh("grid-prices")),
         "grid-dam": guarded(lambda: grid_refresh("grid-dam")),
-        "forecast": run_forecast,
+        "forecast": guarded(forecast_refresh),
     }
     next_at = {name: start for name in jobs} | {"weekly": next_run(start)}
     weekly: threading.Thread | None = None
