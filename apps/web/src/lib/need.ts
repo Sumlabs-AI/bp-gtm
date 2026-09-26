@@ -21,6 +21,8 @@ export type CellFeature = {
     weatherNeed: number | null
     activeAlerts: number
     activeAlertCategory: AlertCategory | null
+    activeForecastSignals: number
+    forecastLevel: "elevated" | "high" | null
   }
 }
 
@@ -33,7 +35,7 @@ export type CellDetail = {
   loadZone: string | null
   needScore: number | null
   components: { outage?: OutageComponent; weather?: WeatherComponent }
-  live: { weather: { alerts: AlertFeed } }
+  live: { weather: { alerts: AlertFeed; forecast: ForecastFeed } }
 }
 
 // NWS Alerts: official alerts active for the Cell now. Observed, not scored; never shown
@@ -148,4 +150,33 @@ export type WeatherComponent = {
     limitations: string[]
   } | null
   notes: string[]
+}
+
+// Forecast Signals: OUR reading of NWS grid / SPC outlook data. Not NWS alerts; the UI must
+// never present them as equivalent.
+export type ForecastSignal = {
+  source: "nws_grid" | "spc_outlook"
+  condition: "wind" | "heat" | "cold" | "ice" | "severe_storm"
+  level: "elevated" | "high"
+  comparison: ">=" | "<=" | null
+  startAt: string
+  endAt: string
+  leadHours: number
+  peakValue: number | null
+  unit: string | null
+  threshold: number | null
+  label: string | null
+  sourceUpdatedAt: string
+}
+
+export type SpcFreshness = { fetchedAt: string | null; stale: boolean }
+export type GridFreshness = SpcFreshness & { sourceUpdatedAt: string | null }
+
+export type ForecastFeed = {
+  resolution: number
+  sourceCell: string
+  horizonHours: number
+  grid: GridFreshness
+  spc: SpcFreshness
+  signals: ForecastSignal[]
 }

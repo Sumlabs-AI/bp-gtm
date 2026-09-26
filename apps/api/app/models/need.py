@@ -1,7 +1,18 @@
 from datetime import date, datetime
 
 from geoalchemy2 import Geometry
-from sqlalchemy import Boolean, Date, DateTime, Float, Integer, SmallInteger, String, Text, func
+from sqlalchemy import (
+    Boolean,
+    Date,
+    DateTime,
+    Float,
+    ForeignKey,
+    Integer,
+    SmallInteger,
+    String,
+    Text,
+    func,
+)
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.ext.hybrid import hybrid_property
 from sqlalchemy.orm import Mapped, mapped_column
@@ -182,3 +193,60 @@ class NwsAlertSnapshot(Base):
     signals_kept: Mapped[int | None] = mapped_column(Integer)
     superseded: Mapped[int | None] = mapped_column(Integer)
     error: Mapped[str | None] = mapped_column(Text)
+
+
+class ForecastPoint(Base):
+    """One forecast sample point: an H3 res-6 cell covering the Markets, with its NWS grid
+    cell. Tracks its own freshness: each point is replaced only when its own fetch works."""
+
+    __tablename__ = "forecast_points"
+
+    h3_index: Mapped[str] = mapped_column(String(15), primary_key=True)  # res-6 cell
+    lat: Mapped[float] = mapped_column(Float)
+    lng: Mapped[float] = mapped_column(Float)
+    office: Mapped[str] = mapped_column(String(3))  # NWS grid office, e.g. HGX
+    grid_x: Mapped[int] = mapped_column(Integer)
+    grid_y: Mapped[int] = mapped_column(Integer)
+    last_success_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # NWS `updateTime` of the forecast last fetched successfully (not our fetch time).
+    source_updated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    last_error: Mapped[str | None] = mapped_column(Text)
+
+
+class ForecastRun(Base):
+    """One hourly forecast refresh attempt over every point, plus the SPC outlooks."""
+
+    __tablename__ = "forecast_runs"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
+    finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    points_ok: Mapped[int] = mapped_column(Integer, server_default="0")
+    points_failed: Mapped[int] = mapped_column(Integer, server_default="0")
+    spc_ok: Mapped[bool] = mapped_column(Boolean, server_default="false")
+    spc_error: Mapped[str | None] = mapped_column(Text)
+    # Per-point failures in this run: {res-6 h3: "Error: message"} (history, not overwritten).
+    point_errors: Mapped[dict[str, str]] = mapped_column(JSONB, server_default="{}")
+
+
+class ForecastSignal(Base):
+    """A Forecast Signal: our reading of NWS grid / SPC outlook data (never an NWS Alert).
+    Rows are never deleted; a newer successful fetch for the point sets `replaced_at`."""
+
+    __tablename__ = "forecast_signals"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    run_id: Mapped[int] = mapped_column(ForeignKey("forecast_runs.id"), index=True)
+    h3_index: Mapped[str] = mapped_column(String(15), index=True)  # res-6 forecast point
+    source: Mapped[str] = mapped_column(String(20))  # "nws_grid" | "spc_outlook"
+    condition: Mapped[str] = mapped_column(String(20))  # wind|heat|cold|ice|severe_storm
+    level: Mapped[str] = mapped_column(String(10))  # "elevated" | "high"
+    start_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    end_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    peak_value: Mapped[float | None] = mapped_column(Float)
+    unit: Mapped[str | None] = mapped_column(String(10))
+    threshold: Mapped[float | None] = mapped_column(Float)  # the threshold that produced it
+    label: Mapped[str | None] = mapped_column(String(10))  # SPC category, e.g. ENH
+    source_updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))  # NWS/SPC
+    fetched_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))  # ours
+    replaced_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))

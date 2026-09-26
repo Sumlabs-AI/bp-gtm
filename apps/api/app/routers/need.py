@@ -7,8 +7,11 @@ from sqlalchemy.orm import Session
 
 from app import geo
 from app.db import get_db
-from app.models import NwsAlert
+from app.models import ForecastSignal, NwsAlert
+from app.need.config import forecast as forecast_config
 from app.need.config import need
+from app.need.live.forecast import COMPARISON
+from app.need.live.forecast_store import active_forecast, forecast_status, most_severe_level
 from app.need.live.store import active_alerts, alert_status, most_severe_category
 from app.need.outage.component import outage_components
 from app.need.store import cells_in_viewport, get_cell
@@ -47,8 +50,44 @@ class AlertFeed(BaseModel):
     signals: list[AlertOut]
 
 
+class ForecastOut(BaseModel):
+    """A Forecast Signal: our reading of NWS grid / SPC outlook data, not an NWS Alert."""
+
+    source: str  # "nws_grid" | "spc_outlook"
+    condition: str
+    level: str
+    comparison: str | None  # ">=" or "<=" against `threshold` (None for SPC)
+    startAt: datetime  # noqa: N815
+    endAt: datetime  # noqa: N815
+    leadHours: float  # noqa: N815  (hours from now to start; negative when under way)
+    peakValue: float | None  # noqa: N815
+    unit: str | None
+    threshold: float | None
+    label: str | None  # SPC category (e.g. ENH)
+    sourceUpdatedAt: datetime  # noqa: N815  (when NWS/SPC issued it)
+
+
+class SpcFreshness(BaseModel):
+    fetchedAt: datetime | None  # noqa: N815  (our last successful fetch)
+    stale: bool
+
+
+class GridFreshness(SpcFreshness):
+    sourceUpdatedAt: datetime | None  # noqa: N815  (NWS forecast updateTime, not ours)
+
+
+class ForecastFeed(BaseModel):
+    resolution: int
+    sourceCell: str  # noqa: N815  (the res-6 forecast point this Cell reads)
+    horizonHours: int  # noqa: N815
+    grid: GridFreshness
+    spc: SpcFreshness
+    signals: list[ForecastOut]
+
+
 class LiveWeather(BaseModel):
     alerts: AlertFeed
+    forecast: ForecastFeed
 
 
 class Live(BaseModel):
@@ -82,6 +121,25 @@ def _alert_out(s: NwsAlert) -> AlertOut:
     )
 
 
+def _forecast_out(s: ForecastSignal, now: datetime) -> ForecastOut:
+    return ForecastOut(
+        source=s.source,
+        condition=s.condition,
+        level=s.level,
+        comparison=COMPARISON[forecast_config.conditions[s.condition].direction]
+        if s.source == "nws_grid"
+        else None,
+        startAt=s.start_at,
+        endAt=s.end_at,
+        leadHours=round((s.start_at - now).total_seconds() / 3600, 1),
+        peakValue=s.peak_value,
+        unit=s.unit,
+        threshold=s.threshold,
+        label=s.label,
+        sourceUpdatedAt=s.source_updated_at,
+    )
+
+
 def _bounds(bbox: str) -> tuple[float, float, float, float]:
     try:
         west, south, east, north = (float(v) for v in bbox.split(","))
@@ -102,6 +160,7 @@ def list_cells(db: DB, bbox: Annotated[str, Query(description="west,south,east,n
     outage = outage_components(db, cells, now.date())
     weather = weather_components(db, cells)
     alerts = active_alerts(db, cells, now)
+    forecasts = active_forecast(db, cells, now)
     return {
         "type": "FeatureCollection",
         "features": [
@@ -116,6 +175,8 @@ def list_cells(db: DB, bbox: Annotated[str, Query(description="west,south,east,n
                     "weatherNeed": (weather[c.h3_index] or {}).get("score"),
                     "activeAlerts": len(alerts[c.h3_index]),
                     "activeAlertCategory": most_severe_category(alerts[c.h3_index]),
+                    "activeForecastSignals": len(forecasts[c.h3_index]),
+                    "forecastLevel": most_severe_level(forecasts[c.h3_index]),
                 },
             }
             for c in cells
@@ -133,6 +194,9 @@ def cell_detail(db: DB, h3_index: str):
     weather = weather_components(db, [cell])[cell.h3_index]
     components = {name: c for name, c in (("outage", outage), ("weather", weather)) if c}
     fetched_at, stale = alert_status(db, now)
+    point = geo.cell_to_parent(cell.h3_index, forecast_config.resolution)
+    status = forecast_status(db, [point], now)
+    grid = status["grid"].get(point, {"fetched_at": None, "source_updated_at": None, "stale": True})
     return CellDetail(
         h3=cell.h3_index,
         resolution=cell.resolution,
@@ -146,7 +210,24 @@ def cell_detail(db: DB, h3_index: str):
                     fetchedAt=fetched_at,
                     stale=stale,
                     signals=[_alert_out(s) for s in active_alerts(db, [cell], now)[cell.h3_index]],
-                )
+                ),
+                forecast=ForecastFeed(
+                    resolution=forecast_config.resolution,
+                    sourceCell=point,
+                    horizonHours=forecast_config.horizon_hours,
+                    grid=GridFreshness(
+                        fetchedAt=grid["fetched_at"],
+                        sourceUpdatedAt=grid["source_updated_at"],
+                        stale=grid["stale"],
+                    ),
+                    spc=SpcFreshness(
+                        fetchedAt=status["spc"]["fetched_at"], stale=status["spc"]["stale"]
+                    ),
+                    signals=[
+                        _forecast_out(s, now)
+                        for s in active_forecast(db, [cell], now)[cell.h3_index]
+                    ],
+                ),
             )
         ),
     )

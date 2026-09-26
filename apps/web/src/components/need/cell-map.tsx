@@ -8,6 +8,7 @@ import "maplibre-gl/dist/maplibre-gl.css"
 import { Button } from "@/components/ui/button"
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet"
 import { OutageBreakdown } from "@/components/need/outage-breakdown"
+import { ForecastSignals } from "@/components/need/forecast-signals"
 import { NwsAlerts } from "@/components/need/nws-alerts"
 import { WeatherBreakdown } from "@/components/need/weather-breakdown"
 import { apiFetch } from "@/lib/api"
@@ -20,7 +21,14 @@ const BASEMAP = "https://tiles.openfreemap.org/styles/positron"
 if (typeof window !== "undefined") setWorkerUrl("/maplibre/maplibre-gl-worker.mjs")
 
 type Status = "zoom-in" | "loading" | "ready" | "too-many" | "error"
-type Hover = { x: number; y: number; flip: boolean; h3: string; liveCategory: string | null }
+type Hover = {
+  x: number
+  y: number
+  flip: boolean
+  h3: string
+  liveCategory: string | null
+  forecastLevel: string | null
+}
 
 export function CellMap({ className }: { className?: string }) {
   const mapRef = React.useRef<MapRef>(null)
@@ -88,6 +96,7 @@ export function CellMap({ className }: { className?: string }) {
             flip: e.point.x > e.target.getContainer().clientWidth - 220,
             h3: properties.h3,
             liveCategory: properties.activeAlertCategory ?? null,
+            forecastLevel: properties.forecastLevel ?? null,
           }
         : null
     )
@@ -140,6 +149,16 @@ export function CellMap({ className }: { className?: string }) {
                   minzoom={H3_MAP_MIN_ZOOM}
                   type="line"
                   paint={{ "line-color": "#6366f1", "line-width": 0.5, "line-opacity": 0.5 }}
+                />,
+                <Layer
+                  key="cells-forecast"
+                  id="cells-forecast"
+                  minzoom={H3_MAP_MIN_ZOOM}
+                  type="line"
+                  // Forecast Signals (our reading of NWS/SPC data): dashed amber, never the
+                  // solid red used for official NWS alerts.
+                  filter={[">", ["get", "activeForecastSignals"], 0]}
+                  paint={{ "line-color": "#f59e0b", "line-width": 1.5, "line-dasharray": [2, 2] }}
                 />,
                 <Layer
                   key="cells-alert"
@@ -196,6 +215,9 @@ export function CellMap({ className }: { className?: string }) {
             {hover.liveCategory && (
               <div className="mt-1 font-sans text-red-600">Official NWS alert: {hover.liveCategory.replace("_", " ")}</div>
             )}
+            {hover.forecastLevel && (
+              <div className="mt-1 font-sans text-amber-600">Forecast ({hover.forecastLevel}), our reading of NWS data</div>
+            )}
           </div>
         )}
       </div>
@@ -223,6 +245,7 @@ export function CellMap({ className }: { className?: string }) {
           {shownDetail && (
             <div className="flex flex-col gap-6 overflow-y-auto pb-4">
               <NwsAlerts feed={shownDetail.live.weather.alerts} />
+              <ForecastSignals feed={shownDetail.live.weather.forecast} />
               {shownDetail.components.outage && <OutageBreakdown outage={shownDetail.components.outage} />}
               {shownDetail.components.weather && <WeatherBreakdown weather={shownDetail.components.weather} />}
             </div>

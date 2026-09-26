@@ -1,5 +1,7 @@
 """Need Engine settings. Not secrets, so they live in code (like app/grid/config.py)."""
 
+from typing import Literal
+
 from pydantic import BaseModel
 
 from app import geo
@@ -88,3 +90,71 @@ class NwsAlertConfig(BaseModel):
 
 
 nws_alerts = NwsAlertConfig()
+
+
+class ForecastCondition(BaseModel):
+    variable: str  # NWS gridpoint layer
+    nws_uom: str  # the unit NWS must send it in (checked, so a change can't go unnoticed)
+    direction: Literal["ge", "le"]  # "ge": at or above is dangerous; "le": at or below
+    elevated: float  # in `unit`
+    high: float
+    unit: str
+    per_interval: bool = False  # judge each forecast interval (accumulations), not hours
+
+
+class ForecastConfig(BaseModel):
+    """Forecast Signals (M4B-2): our reading of NWS grid forecasts and SPC outlooks.
+    Fixed Texas-wide thresholds (not office-relative). No score yet."""
+
+    horizon_hours: int = 48  # Active: starting within this many hours
+    # Stored further ahead, so an unchanged NWS forecast needn't be re-read every hour.
+    storage_horizon_hours: int = 72
+    refresh_minutes: int = 60
+    stale_after_hours: int = 3
+    resolution: int = 6  # one forecast point per res-6 cell covering the Markets
+    conditions: dict[str, ForecastCondition] = {
+        "wind": ForecastCondition(
+            variable="windGust",
+            nws_uom="wmoUnit:km_h-1",
+            direction="ge",
+            elevated=46,
+            high=58,
+            unit="mph",
+        ),
+        "heat": ForecastCondition(
+            variable="heatIndex",
+            nws_uom="wmoUnit:degC",
+            direction="ge",
+            elevated=105,
+            high=110,
+            unit="°F",
+        ),
+        "cold": ForecastCondition(
+            variable="temperature",
+            nws_uom="wmoUnit:degC",
+            direction="le",
+            elevated=28,
+            high=20,
+            unit="°F",
+        ),
+        "ice": ForecastCondition(
+            variable="iceAccumulation",
+            nws_uom="wmoUnit:mm",
+            direction="ge",
+            elevated=0.1,
+            high=0.25,
+            unit="in",
+            per_interval=True,
+        ),
+    }
+    spc_urls: list[str] = [
+        "https://www.spc.noaa.gov/products/outlook/day1otlk_cat.lyr.geojson",
+        "https://www.spc.noaa.gov/products/outlook/day2otlk_cat.lyr.geojson",
+    ]
+    # SPC categorical risk -> level, lowest risk first (the order ranks them). Marginal and
+    # general thunder are not signals.
+    spc_levels: dict[str, str] = {"SLGT": "elevated", "ENH": "high", "MDT": "high", "HIGH": "high"}
+    level_order: list[str] = ["high", "elevated"]  # most severe first
+
+
+forecast = ForecastConfig()

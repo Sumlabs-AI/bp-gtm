@@ -2,7 +2,7 @@
 
 Scores **how useful backup power is** in a place, per **Cell** (H3 resolution-8 hexagon, ~0.74 km²). It is separate from lead scoring and from the ML Propensity Score, which join onto the same Cells by `h3_index`. Terms: [`CONTEXT.md`](../CONTEXT.md). Why PostGIS: [ADR 0001](../docs/adr/0001-postgis.md).
 
-Status: **Milestones 1–4A + 4B-1**. Cells exist for Harris and Travis counties, each with its ERCOT Load Zone and county. Baseline: an **Outage Need Component** and a **Weather Need Component**. Live: **NWS Alerts** (official, observed and not scored). All are drawn on `/need`. There's no combined Need Score yet (`needScore: null`, see M6). Static geography is closed: a new geography is added only when a Need signal needs it.
+Status: **Milestones 1–4A + 4B-1/2**. Cells exist for Harris and Travis counties, each with its ERCOT Load Zone and county. Baseline: **Outage** and **Weather Need Components**. Live Weather Signals come in two kinds that are never merged: official **NWS Alerts** and our derived **Forecast Signals**. Both are observed, not scored, and drawn on `/need`. There's no combined Need Score yet (`needScore: null`, see M6).
 
 ## The Cell contract (shared with ML)
 
@@ -185,6 +185,40 @@ Cell (res 8) ─┬─ res-6 parent ── IEM SV/TO/EW warning-days 5y ── T
   - center rule vs overlap (a box over a Cell corner doesn't count)
   - write failures logged as failed Snapshots
 
+## Forecast Signals (M4B-2, issue #16)
+
+"Is danger building in the next 48 h?", even when no NWS Alert has been issued. **Forecast Signals are our deterministic reading of NWS/SPC data, not NWS alerts.** Data, API and UI keep them apart: `live.weather.forecast` vs `live.weather.alerts`, a dashed amber outline vs solid red, and the heading "Forecast (our reading of NWS/SPC data)". **No score** (M4B-3 will first measure how alerts, SPC and grid signals overlap for the same event, to avoid double counting).
+
+- **Points**: one per H3 res-6 parent of the product Cells (`forecast_points`, 234 for Harris + Travis). Each point's NWS grid cell is looked up once (`/points`). A res-8 Cell reads its parent, and the API returns `resolution: 6`, `sourceCell`.
+- **NWS grid** (`/gridpoints/{office}/{x},{y}`, `"start/ISO-duration"` intervals). Thresholds are fixed Texas-wide values in `ForecastConfig`:
+
+  | Condition | Variable | Elevated | High |
+  | --- | --- | --- | --- |
+  | wind | `windGust` | ≥ 46 mph | ≥ 58 mph |
+  | heat | `heatIndex` | ≥ 105°F | ≥ 110°F |
+  | cold | `temperature` | ≤ 28°F | ≤ 20°F |
+  | ice | `iceAccumulation` (per interval) | ≥ 0.1 in | ≥ 0.25 in |
+
+  The heat index includes humidity, so Houston's humid heat, missed by M4A's dry-bulb data, is caught here.
+- **SPC outlooks** (Day 1–2 categorical): the highest category containing each point. Slight → elevated; Enhanced, Moderate, High → high. Marginal and general thunder are ignored.
+- **A Forecast Signal is a period, not an hour**: consecutive threshold-crossing hours merge into one row (start, end, peak, level, the threshold used).
+  - Hours are cut at clock hours and at interval edges, so intervals off the hour never overlap.
+  - NWS units are checked against each layer's `uom`, so an upstream unit change fails the point rather than shifting thresholds.
+  - A period already under way keeps its real start, but its peak and level count only the part not over yet.
+  - Periods are stored up to 72 h ahead; **Active** means starting within 48 h.
+- **Two clocks**: `source_updated_at` (the NWS `updateTime` / SPC `ISSUE`) vs our `fetched_at`.
+- **Replacement** (`app/need/live/forecast_store.py`):
+  - Per point, only when that point's fetch and parse succeed. SPC only when both outlooks load.
+  - **If NWS hasn't issued a new forecast (same `updateTime`), nothing is rewritten**; the point is only marked checked. This avoids hourly duplicate rows.
+  - Replaced rows keep `replaced_at`; nothing is deleted.
+  - `forecast_runs` logs every attempt: real duration, counts, SPC outcome and **per-point errors** (`point_errors`). New points are looked up inside the run, so a failed lookup is logged and skipped rather than aborting the run.
+- **Active** at `now`: not replaced, `end_at > now`, `start_at < now + 48 h`. **Stale**: a point's last success is older than 3 h (SPC reported separately).
+- **API**:
+  - detail: `live.weather.forecast = {resolution, sourceCell, horizonHours, grid: {fetchedAt, sourceUpdatedAt, stale}, spc: {fetchedAt, stale}, signals[]}`. Each signal has `comparison` (`>=`/`<=`), and grid and SPC staleness are reported and badged separately.
+  - features: `activeForecastSignals`, `forecastLevel`
+- **Worker**: hourly forecast run, alongside the 5-minute alert Snapshot and the weekly job. A run over 234 points takes ~7 s, or ~17 s when it also looks up new points.
+- First real run (2026-09-26, no NWS alert in Texas): 12 points with heat index ≥ 105°F (peak 108°F) forecast for the next afternoon.
+
 ## Commands
 
 ```bash
@@ -200,6 +234,7 @@ docker compose exec api python -m app.need weather download        # IEM warning
 docker compose exec api python -m app.need weather compute         # res-6 Storm Exposure + county Temperature Extremes
 docker compose exec api python -m app.need weather validate        # warning-days by year, Derecho/Beryl, top storm cells
 docker compose exec api python -m app.need live refresh            # one NWS alert Snapshot (the worker does this every 5 min)
+docker compose exec api python -m app.need live forecast           # Forecast Signals for all points (the worker does this hourly)
 ```
 
 Seeding reads only the committed county files, so it needs no network. To add a county, add a `Market`, run `download_counties`, commit the GeoJSON, then seed it.

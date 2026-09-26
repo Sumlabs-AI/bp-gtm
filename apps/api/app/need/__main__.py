@@ -10,6 +10,7 @@ uv run python -m app.need weather download        # IEM warnings + nClimGrid (ca
 uv run python -m app.need weather compute         # res-6 Storm + county Temperature
 uv run python -m app.need weather validate        # storm days by year, known storms
 uv run python -m app.need live refresh            # one NWS alert Snapshot (worker: every 5 min)
+uv run python -m app.need live forecast           # Forecast Signals for all points (worker: hourly)
 uv run python -m app.need export --out cells.csv        # h3_index, resolution, center (for ML)
 """
 
@@ -166,6 +167,10 @@ def live(action: str) -> None:
     from app.need.live import nws
     from app.need.live.alerts import take_snapshot
 
+    if action == "forecast":
+        forecast_refresh()
+        return
+
     with nws.client() as http, SessionLocal() as db:
         snapshot = take_snapshot(
             db,
@@ -183,6 +188,31 @@ def live(action: str) -> None:
         )
     else:
         print(f"NWS alert Snapshot FAILED (signals unchanged): {snapshot.error}", flush=True)
+
+
+def forecast_refresh() -> None:
+    from datetime import UTC, datetime
+
+    from app.need.config import forecast as config
+    from app.need.live import nws
+    from app.need.live.forecast_store import take_forecast_run
+
+    with nws.client() as http, SessionLocal() as db:
+        run = take_forecast_run(
+            db,
+            fetch_grid=lambda p: nws.fetch_gridpoint(http, p.office, p.grid_x, p.grid_y),
+            fetch_spc=lambda: nws.fetch_spc_outlooks(http, config.spc_urls),
+            now=datetime.now(UTC),
+            lookup=lambda lat, lng: nws.grid_cell(http, lat, lng),
+        )
+        db.commit()
+    seconds = (run.finished_at - run.started_at).total_seconds()
+    print(
+        f"Forecast run {run.started_at:%Y-%m-%d %H:%M}Z ({seconds:.0f}s): {run.points_ok} points "
+        f"ok, {run.points_failed} failed, {len(run.point_errors)} errors; "
+        f"SPC {'ok' if run.spc_ok else 'FAILED: ' + (run.spc_error or '')}",
+        flush=True,
+    )
 
 
 def export(out: Path) -> None:
@@ -212,7 +242,7 @@ def main() -> None:
     p = sub.add_parser("weather", help="Baseline Weather Need pipeline")
     p.add_argument("action", choices=["download", "compute", "validate"])
     p = sub.add_parser("live", help="live signals: NWS alerts (and forecast signals)")
-    p.add_argument("action", choices=["refresh"])
+    p.add_argument("action", choices=["refresh", "forecast"])
     p = sub.add_parser("export", help="write all Cells to CSV")
     p.add_argument("--out", type=Path, required=True)
     args = parser.parse_args()

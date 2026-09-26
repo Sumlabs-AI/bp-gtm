@@ -89,7 +89,7 @@ Our deterministic reading of NWS gridded forecast or SPC outlook data: a continu
 _Avoid_: forecast alert, warning, prediction
 
 **Active** (signal):
-A Live Weather Signal whose time window contains now and which came from the latest successful fetch of its source (for NWS Alerts, the latest successful Snapshot). A Cell is affected when its center is inside the signal's area.
+A Live Weather Signal that currently counts, judged at read time. An NWS Alert is Active when its time window contains now and it was in the latest successful Snapshot. A Forecast Signal is Active when it hasn't ended, starts within the next 48 hours, and hasn't been replaced by a newer successful forecast for its point. A Cell is affected when its center is inside the area (alerts) or it belongs to the signal's forecast point (forecasts).
 _Avoid_: current, open
 
 **Snapshot**:

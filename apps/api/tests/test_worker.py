@@ -18,11 +18,12 @@ def test_next_run_skips_to_next_week_once_passed():
     assert next_run(sunday_2am) == datetime(2026, 9, 27, 3, 0, tzinfo=TZ)
 
 
-def test_plan_runs_due_jobs_and_sleeps_until_the_sooner_one():
+def test_plan_runs_due_jobs_and_sleeps_until_the_soonest():
     now = datetime(2026, 9, 26, 14, 0, tzinfo=TZ)
     weekly = datetime(2026, 9, 27, 3, 0, tzinfo=TZ)
-    live = datetime(2026, 9, 26, 14, 0, tzinfo=TZ)
-    assert plan(now, weekly, live) == (["live"], None)
-    later = datetime(2026, 9, 26, 14, 5, tzinfo=TZ)
-    assert plan(now, weekly, later) == ([], later)  # live refresh is sooner than weekly
-    assert plan(weekly, weekly, weekly) == (["live", "weekly"], None)
+    soon = datetime(2026, 9, 26, 14, 5, tzinfo=TZ)
+    hour = datetime(2026, 9, 26, 15, 0, tzinfo=TZ)
+    assert plan(now, {"alerts": now, "forecast": hour, "weekly": weekly}) == (["alerts"], None)
+    assert plan(now, {"alerts": soon, "forecast": hour, "weekly": weekly}) == ([], soon)
+    everything = {"alerts": weekly, "forecast": weekly, "weekly": weekly}
+    assert plan(weekly, everything) == (["alerts", "forecast", "weekly"], None)

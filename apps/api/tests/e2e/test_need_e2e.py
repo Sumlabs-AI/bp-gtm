@@ -135,7 +135,19 @@ def test_cell_detail(client):
         "loadZone": None,  # set by enrichment, not by seeding
         "needScore": None,
         "components": {},
-        "live": {"weather": {"alerts": {"fetchedAt": None, "stale": True, "signals": []}}},
+        "live": {
+            "weather": {
+                "alerts": {"fetchedAt": None, "stale": True, "signals": []},
+                "forecast": {
+                    "resolution": 6,
+                    "sourceCell": geo.cell_to_parent(cell, 6),
+                    "horizonHours": 48,
+                    "grid": {"fetchedAt": None, "sourceUpdatedAt": None, "stale": True},
+                    "spc": {"fetchedAt": None, "stale": True},
+                    "signals": [],
+                },
+            }
+        },
     }
     # Valid H3 index, but not seeded (Austin).
     assert client.get(f"/need/cells/{geo.latlng_to_cell(30.27, -97.74)}").status_code == 404

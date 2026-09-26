@@ -48,3 +48,20 @@ def zone_resolver(http: httpx.Client) -> Callable[[list[str]], list[dict]]:
         return geometries
 
     return resolve
+
+
+def grid_cell(http: httpx.Client, lat: float, lng: float) -> tuple[str, int, int]:
+    """The NWS forecast grid cell (office, x, y) covering a point."""
+    props = http.get(f"https://api.weather.gov/points/{lat:.4f},{lng:.4f}").raise_for_status()
+    p = props.json()["properties"]
+    return p["gridId"], p["gridX"], p["gridY"]
+
+
+def fetch_gridpoint(http: httpx.Client, office: str, x: int, y: int) -> dict:
+    return (
+        http.get(f"https://api.weather.gov/gridpoints/{office}/{x},{y}").raise_for_status().json()
+    )
+
+
+def fetch_spc_outlooks(http: httpx.Client, urls: list[str]) -> list[dict]:
+    return [http.get(url).raise_for_status().json() for url in urls]
