@@ -1,6 +1,6 @@
 # Database & Migrations
 
-Postgres 17, SQLAlchemy 2.0 models, Alembic migrations in `apps/api/alembic/versions/`.
+Postgres 17 + PostGIS ([ADR 0001](../docs/adr/0001-postgis.md); image built from `docker/db/Dockerfile`), SQLAlchemy 2.0 models, Alembic migrations in `apps/api/alembic/versions/`.
 
 ## Rules
 
@@ -38,4 +38,6 @@ docker compose exec db psql -U app -d app   # SQL shell
 
 ## How it's wired
 
-`alembic/env.py` reads `DATABASE_URL` from `app.config.settings` (not from `alembic.ini`) and uses `Base.metadata` from `app.db`, after importing `app.models` so every model is registered. `compare_type=True` is on so column type changes are detected.
+`alembic/env.py` reads `DATABASE_URL` from `app.config.settings` (not from `alembic.ini`) and uses `Base.metadata` from `app.db`, after importing `app.models` so every model is registered. `compare_type=True` is on so column type changes are detected. The geoalchemy2 Alembic helpers are registered too: autogenerate renders `Geometry` columns and their GIST indexes, and ignores PostGIS's own tables (`spatial_ref_sys`). The first spatial migration (`create cells`) runs `CREATE EXTENSION IF NOT EXISTS postgis`.
+
+Switching an existing volume from the old `postgres:17-alpine` image: dump and restore, see [need-engine.md](need-engine.md#switching-an-existing-database-to-postgis).

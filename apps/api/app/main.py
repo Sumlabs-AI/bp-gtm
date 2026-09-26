@@ -2,7 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import settings
-from app.routers import grid, health, items, leads
+from app.routers import grid, health, items, leads, need
 
 app = FastAPI(title="base-power-gtm API")
 
@@ -18,3 +18,4 @@ app.include_router(health.router)
 app.include_router(items.router)
 app.include_router(grid.router)
 app.include_router(leads.router)
+app.include_router(need.router)

@@ -24,6 +24,7 @@ The database starts empty, so `/grid` shows nothing until you load prices. In an
 ```bash
 docker compose exec api python -m app.grid backfill 2025 2026   # ~1 min, public ERCOT files, no login
 docker compose exec api python -m app.grid compute              # score the zones
+docker compose exec api python -m app.need seed                 # H3 Cells for /need (offline, seconds)
 ```
 
 Then open http://localhost:3000 (redirects to `/grid`).

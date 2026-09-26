@@ -47,6 +47,10 @@ Map + ranked list of ERCOT load zones by Grid Value Score; `/grid/[zone]` explai
 
 `/leads` lists Harris County residential leads with URL-based GET filters (plain `<form method="get">`, no client state) and 50-per-page pagination; `/leads/[id]` shows score drivers, evidence, property facts and a review-status control (`PATCH /leads/{id}` from the browser, then `router.refresh()`). `/data` shows the last refresh of each source from `GET /sources`. `/leads?view=map` (`components/leads/leads-map.tsx`) fetches `GET /leads/geo` for the visible bounds on every move (debounced) with the same filters: points colored by score, or count cells when more than 5,000 leads are in view; `/leads/[id]` shows the home on a small map. Gotcha: `<Layer>`s must be direct children of `<Source>` (or set `source=` explicitly): a Fragment breaks react-map-gl's source injection. Code: `src/app/(dashboard)/{leads,data}`, `src/components/leads/`, `src/lib/leads.ts`. Backend and scoring: [residential-leads.md](residential-leads.md).
 
+## Need (`/need`)
+
+The H3 Cell map for the Need Engine: `components/need/cell-map.tsx`, types and `H3_MAP_MIN_ZOOM` in `lib/need.ts`. It is a static page, and the client component fetches `GET /need/cells?bbox=` on `moveend` above the minimum zoom. Details: [need-engine.md](need-engine.md).
+
 ## Calling the API
 
 Use `apiFetch<T>(path, init?)` from `@/lib/api`. It picks `API_URL` on the server and `NEXT_PUBLIC_API_URL` in the browser.

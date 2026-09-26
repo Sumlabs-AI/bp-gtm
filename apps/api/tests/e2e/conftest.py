@@ -42,7 +42,9 @@ def clean_tables(database):
         tables = conn.execute(
             text(
                 "SELECT string_agg(quote_ident(tablename), ', ') FROM pg_tables "
-                "WHERE schemaname = 'public' AND tablename <> 'alembic_version'"
+                "WHERE schemaname = 'public' "
+                # spatial_ref_sys is PostGIS's own SRID catalog, not app data.
+                "AND tablename NOT IN ('alembic_version', 'spatial_ref_sys')"
             )
         ).scalar_one()
         conn.execute(text(f"TRUNCATE {tables} RESTART IDENTITY CASCADE"))

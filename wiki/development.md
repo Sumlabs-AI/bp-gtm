@@ -21,6 +21,12 @@ docker compose exec api python -m app.grid backfill 2025 2026   # or: cd apps/ap
 docker compose exec api python -m app.grid compute
 ```
 
+Seed the Need Engine Cells for `/need` (offline, a few seconds; see [need-engine.md](need-engine.md)):
+
+```bash
+docker compose exec api python -m app.need seed
+```
+
 ERCOT credentials go in the repo-root `.env` (see `.env.example`); only `update` needs them.
 
 ## Run apps on the host (faster iteration)
