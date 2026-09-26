@@ -9,13 +9,27 @@ from sqlalchemy.orm import Session
 
 from app.db import get_db
 from app.grid.config import battery, scoring
-from app.grid.metrics import DRIVERS, primary_reason
+from app.grid.metrics import DRIVERS, battery_values, primary_reason
 from app.grid.zones import ZONES_BY_CODE, ZONES_GEOJSON
 from app.models import GridZoneMetrics
 
 router = APIRouter(prefix="/grid", tags=["grid"])
 
 DB = Annotated[Session, Depends(get_db)]
+
+
+class BatteryValue(BaseModel):
+    """Grid Value of one battery size in a zone (see app/grid/metrics.battery_values)."""
+
+    value: float  # $/yr, battery trading on day-ahead plans, average full year
+    ceiling: float  # same average year with perfect hindsight: the most it could earn
+    first_year: int | None  # years averaged (None: fell back to the last 12 months)
+    last_year: int | None
+    recent: float  # $/yr over the last 12 months
+    low: float | None  # worst full calendar year
+    low_year: int | None
+    high: float | None  # best full calendar year
+    high_year: int | None
 
 
 class DriverOut(BaseModel):
@@ -37,11 +51,14 @@ class ZoneSummary(BaseModel):
     grid_value_score: float
     primary_reason: str
     drivers: list[DriverOut]
+    battery_values: dict[str, BatteryValue] | None  # keyed by battery kWh
+    history_years: list[int]  # full calendar years behind the average-year values
+    period_start: datetime  # the last-12-months window (score, drivers, `recent`)
+    period_end: datetime
+    computed_at: datetime
 
 
 class ZoneDetail(ZoneSummary):
-    period_start: datetime
-    period_end: datetime
     metrics: dict[str, float]
     series: dict
     assumptions: dict
@@ -58,6 +75,11 @@ def _summary(row: GridZoneMetrics, rank: int) -> dict:
         "rank": rank,
         "grid_value_score": row.grid_value_score,
         "primary_reason": primary_reason(row.scores, scoring.weights),
+        "battery_values": battery_values(row.metrics, row.series),
+        "history_years": [y["year"] for y in row.series.get("battery_years") or []],
+        "period_start": row.period_start,
+        "period_end": row.period_end,
+        "computed_at": row.computed_at,
         "drivers": [
             {
                 "key": d.key,
@@ -96,8 +118,6 @@ def get_zone(code: str, db: DB):
         if row.settlement_point == code:
             return {
                 **_summary(row, i + 1),
-                "period_start": row.period_start,
-                "period_end": row.period_end,
                 "metrics": row.metrics,
                 "series": row.series,
                 "assumptions": {"battery": battery.model_dump(), "scoring": scoring.model_dump()},

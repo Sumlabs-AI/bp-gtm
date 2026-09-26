@@ -5,10 +5,48 @@ from dataclasses import dataclass
 import numpy as np
 import pandas as pd
 
-from app.grid.config import BatteryConfig, ScoringConfig
+from app.grid.config import LEAD_BATTERIES_KW, BatteryConfig, PlannerConfig, ScoringConfig
+from app.grid.dispatch import INTERVAL_H, ceiling, simulate
 from app.grid.sources import ERCOT_TZ
 
-INTERVAL_H = 0.25  # real-time settlement interval
+
+def battery_values(metrics: dict, series: dict) -> dict[str, dict] | None:
+    """Grid Value of each lead battery size in one zone, from its computed metrics/series:
+    {"40": {"value": 891, "ceiling": 1650, "first_year": 2019, "last_year": 2025,
+    "recent": 233, "low": 310, "low_year": 2025, "high": 1741, "high_year": 2023}, …}.
+
+    `value` is the realistic day-ahead-planner value of an average full calendar year (what
+    a battery earns over a multi-year contract, not one quiet or spiky year) and `ceiling`
+    the average perfect-hindsight one. Without full years loaded both fall back to the last
+    12 months and first/last/low/high are None. `recent` is always the last 12 months.
+    None if the zone has no battery values yet."""
+    if any(metrics.get(f"battery_value_{k}") is None for k in LEAD_BATTERIES_KW):
+        return None
+    years = series.get("battery_years") or []
+    values = {}
+    for k in LEAD_BATTERIES_KW:
+        size, ceil_key = str(k), f"ceiling_{k}"
+        hist = years if all(ceil_key in y for y in years) else []
+        if hist:
+            value = sum(y[size] for y in hist) / len(hist)
+            ceiling_value = sum(y[ceil_key] for y in hist) / len(hist)
+            low = min(hist, key=lambda y: y[size])
+            high = max(hist, key=lambda y: y[size])
+        else:
+            value = metrics[f"battery_value_{k}"]
+            ceiling_value = metrics[f"battery_ceiling_{k}"]
+        values[size] = {
+            "value": round(value),
+            "ceiling": round(ceiling_value),
+            "first_year": hist[0]["year"] if hist else None,
+            "last_year": hist[-1]["year"] if hist else None,
+            "recent": round(metrics[f"battery_value_{k}"]),
+            "low": round(low[size]) if hist else None,
+            "low_year": low["year"] if hist else None,
+            "high": round(high[size]) if hist else None,
+            "high_year": high["year"] if hist else None,
+        }
+    return values
 
 
 @dataclass(frozen=True)
@@ -27,8 +65,8 @@ DRIVERS = [
         "arbitrage_usd",
         "Battery arbitrage",
         "$/battery/yr",
-        "One Base battery would have earned about ${v:,.0f} over the last year by charging "
-        "when real-time power was cheap and discharging when it was expensive.",
+        "One Base battery would have earned about ${v:,.0f} over the last year trading on "
+        "a plan made from day-ahead prices, after losses, wear and its backup reserve.",
         "high battery arbitrage value",
     ),
     Driver(
@@ -71,39 +109,23 @@ DRIVERS = [
 DRIVERS_BY_KEY = {d.key: d for d in DRIVERS}
 
 
-def backtest_daily(prices: pd.Series, battery: BatteryConfig) -> pd.Series:
-    """Best-possible daily arbitrage value ($) with perfect hindsight.
-
-    Dynamic program over state of charge per local day, starting and ending empty.
-    Charge/discharge move one power step per 15-minute interval; efficiency losses are
-    charged on the way in. This is a historical upper bound, not a forecast.
-    """
-    step_kwh = battery.power_kw * INTERVAL_H
-    n = int(battery.capacity_kwh // step_kwh)  # number of state-of-charge steps
-    step_mwh = step_kwh / 1000
-    local = prices.tz_convert(ERCOT_TZ)
-
-    values = {}
-    for day, day_prices in local.groupby(local.index.date):
-        v = np.full(n + 1, -np.inf)
-        v[0] = 0.0  # must end the day empty
-        for p in day_prices.to_numpy()[::-1]:
-            new = v.copy()
-            new[:-1] = np.maximum(new[:-1], v[1:] - p * step_mwh / battery.round_trip_efficiency)
-            new[1:] = np.maximum(new[1:], v[:-1] + p * step_mwh)
-            v = new
-        values[pd.Timestamp(day)] = v[0]
-    return pd.Series(values, dtype=float)
+def per_year(rt: pd.Series | pd.DataFrame) -> float:
+    """Factor that scales a sum over the series' span to one year."""
+    days = max((rt.index.max() - rt.index.min()).total_seconds() / 86400, 1)
+    return 365 / days
 
 
 def zone_metrics(
-    rt: pd.Series, hub_rt: pd.Series, da: pd.Series, battery: BatteryConfig, cfg: ScoringConfig
+    rt: pd.Series,
+    hub_rt: pd.Series,
+    da: pd.Series,
+    battery: BatteryConfig,
+    planner: PlannerConfig,
+    cfg: ScoringConfig,
 ) -> tuple[dict, dict]:
     """Raw metrics and chart series for one zone. Series are indexed by UTC interval start."""
-    days = max((rt.index.max() - rt.index.min()).total_seconds() / 86400, 1)
-    per_year = 365 / days
-
-    daily = backtest_daily(rt, battery)
+    annual = per_year(rt)
+    daily = simulate(rt, da, battery, planner)
     local = rt.tz_convert(ERCOT_TZ)
     k = cfg.spread_hours * 4
     spreads = local.groupby(local.index.date).apply(
@@ -115,12 +137,13 @@ def zone_metrics(
     top10 = daily.nlargest(10).sum() / daily.sum() if daily.sum() > 0 else 0.0
 
     metrics = {
-        "arbitrage_usd": float(daily.sum() * per_year),
+        "arbitrage_usd": float(daily.sum() * annual),
         "congestion_premium": float(basis.clip(lower=0).mean()),
-        "scarcity_hours": float((rt >= cfg.scarcity_threshold).sum() * INTERVAL_H * per_year),
+        "scarcity_hours": float((rt >= cfg.scarcity_threshold).sum() * INTERVAL_H * annual),
         "surprise": float(miss.mean()),
         "negative_price_pct": float((rt < 0).mean() * 100),
         # Context, not scored:
+        "arbitrage_ceiling_usd": ceiling(rt, battery) * annual,
         "avg_price": float(rt.mean()),
         "volatility": float(rt.std()),
         "daily_spread": float(spreads.mean()),
