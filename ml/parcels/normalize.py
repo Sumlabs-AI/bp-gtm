@@ -11,6 +11,8 @@ Output: data/interim/parcels_{county}.parquet       one row per parcel, canonica
 Canonical columns:
   county, prop_id, state_cd, home_type, living_sqft, year_built, stories, lot_sqft,
   market_value, homestead, deed_year, geometry (EPSG:4326)
+type_source: where home_type comes from - "state_code" (PTAD code), "local_code" (a county's own code,
+e.g. Williamson RES), or "value_rule" (no code at all, see VALUE_RULE).
 Missing in a county -> NaN (Travis has no living sq ft, Bexar no deed year, StratMap counties have
 neither sq ft nor deed year, and Dallas' StratMap file has no year built).
 homestead = owner-occupied: Bexar's HS exemption code; elsewhere mailing address = property address.
@@ -22,6 +24,11 @@ home_type from the Texas PTAD state property category (same codes in every appra
   under ATTACHED_LOT_SQFT (townhomes are coded A1 too; a small lot is the only public tell)
   A2, M*  mobile        A4  condo        B*  multifamily        C*  vacant
   A3/A5 "details" rows and everything else -> other
+
+Many StratMap counties publish no land-use code at all (Comal, Ellis, Fort Bend, Galveston, Hays, Johnson,
+Montgomery, Parker, Rockwall; others only partly). There, a parcel counts as single-family when it has a house
+worth something on a house-sized lot and isn't a condo (VALUE_RULE). Checked against real codes on 60k parcels:
+Collin precision 96% / recall 96%, Denton 90% / 93%. Williamson has no improvement values but codes RES.
 """
 from __future__ import annotations
 
@@ -38,14 +45,29 @@ ROOT = Path(__file__).resolve().parents[1]
 INTERIM = ROOT / "data" / "interim"
 RAW = ROOT / "data" / "raw" / "parcels"
 
-STRATMAP = {"dallas": "48113", "tarrant": "48439", "collin": "48085", "denton": "48121"}
-STRATMAP_COLUMNS = ["Prop_ID", "STAT_LAND_", "LOC_LAND_U", "YEAR_BUILT", "MKT_VALUE", "SITUS_ADDR", "MAIL_ADDR"]
+STRATMAP = {
+    # DFW
+    "dallas": "48113", "tarrant": "48439", "collin": "48085", "denton": "48121", "rockwall": "48397",
+    "kaufman": "48257", "ellis": "48139", "johnson": "48251", "parker": "48367",
+    # Austin
+    "williamson": "48491", "hays": "48209", "bastrop": "48021",
+    # San Antonio
+    "comal": "48091", "guadalupe": "48187", "kendall": "48259",
+    # Houston
+    "harris": "48201", "fort_bend": "48157", "montgomery": "48339", "brazoria": "48039", "galveston": "48167",
+}
+STRATMAP_COLUMNS = ["Prop_ID", "STAT_LAND_", "LOC_LAND_U", "YEAR_BUILT", "MKT_VALUE", "IMP_VALUE", "LEGAL_DESC",
+                    "SITUS_ADDR", "MAIL_ADDR"]
+STATE_CODE = r"^[A-FJLMOSX][0-9]$"  # PTAD category shape: letter + digit
+LOCAL_RESIDENTIAL = {"williamson": {"RES"}}
+VALUE_RULE = {"min_imp_value": 30_000, "min_market_value": 50_000, "lot_sqft": (3_000, 87_120)}  # 87,120 = 2 acres
+CONDO = r"CONDO|\bUNIT\b|\bAPT|TOWNHOME|\bTH\b"
 DIRECTIONALS = {"N", "S", "E", "W", "NE", "NW", "SE", "SW"}
 
 ATTACHED_LOT_SQFT = 3_000  # below this a single-family lot is almost always a townhome / zero-lot-line
 EQUAL_AREA = 5070
 SQFT_PER_M2 = 10.7639
-COLUMNS = ["county", "prop_id", "state_cd", "home_type", "living_sqft", "year_built", "stories", "lot_sqft",
+COLUMNS = ["county", "prop_id", "state_cd", "type_source", "home_type", "living_sqft", "year_built", "stories", "lot_sqft",
            "market_value", "homestead", "deed_year", "geometry"]
 
 
@@ -86,12 +108,35 @@ def _situs_parts(addr: pd.Series) -> tuple[pd.Series, pd.Series]:
     return num, street
 
 
+def _code2(s: pd.Series) -> pd.Series:
+    return s.fillna("").astype(str).str.split(",").str[0].str.strip().str.upper().str[:2]
+
+
 def stratmap(g: gpd.GeoDataFrame, county: str) -> pd.DataFrame:
-    code = g["LOC_LAND_U"] if county == "tarrant" else g["STAT_LAND_"]
+    stat, loc = _code2(g["STAT_LAND_"]), _code2(g["LOC_LAND_U"])
+    if county == "tarrant":  # state field holds only the letter
+        stat = loc
+    code = stat.where(stat.str.match(STATE_CODE), loc.where(loc.str.match(STATE_CODE), ""))
+    source = pd.Series(np.where(code != "", "state_code", ""), index=g.index)
+
+    lot = g.geometry.to_crs(EQUAL_AREA).area * SQFT_PER_M2
+    not_condo = ~g["LEGAL_DESC"].fillna("").str.upper().str.contains(CONDO)
+    uncoded = code == ""
+    if county in LOCAL_RESIDENTIAL:
+        res = g["LOC_LAND_U"].fillna("").str.strip().str.upper().isin(LOCAL_RESIDENTIAL[county])
+        hit = uncoded & res & not_condo & lot.between(*VALUE_RULE["lot_sqft"])
+        code, source = code.mask(hit, "A1"), source.mask(uncoded, "local_code")
+    else:
+        r = VALUE_RULE
+        hit = uncoded & (_num(g["IMP_VALUE"]) >= r["min_imp_value"]) & (_num(g["MKT_VALUE"]) >= r["min_market_value"]) \
+            & lot.between(*r["lot_sqft"]) & not_condo
+        code, source = code.mask(hit, "A1"), source.mask(uncoded, "value_rule")
+
     num, street = _situs_parts(g["SITUS_ADDR"])
     return pd.DataFrame({
         "prop_id": g["Prop_ID"].astype(str).str.strip(),
-        "state_cd": code.fillna("").astype(str).str.split(",").str[0].str.strip().str[:2],
+        "state_cd": code,
+        "type_source": source,
         "living_sqft": np.nan,
         "year_built": _year(g["YEAR_BUILT"]),
         "stories": np.nan,
@@ -155,6 +200,8 @@ def normalize(county: str) -> Path:
     g = read_raw(county)
     df = stratmap(g, county) if county in STRATMAP else ADAPTERS[county](g)
     df["county"] = county
+    if "type_source" not in df:
+        df["type_source"] = "state_code"
     df["lot_sqft"] = g.geometry.to_crs(EQUAL_AREA).area * SQFT_PER_M2
     df["home_type"] = home_type(df["state_cd"], df["lot_sqft"])
     out = gpd.GeoDataFrame(df, geometry=g.geometry.values, crs=g.crs)[COLUMNS]
@@ -164,7 +211,8 @@ def normalize(county: str) -> Path:
 
     res = out[out["home_type"].str.startswith("sfr")]
     print(f"{county}: {len(out):,} parcels -> {path}")
-    print("  home_type:", out["home_type"].value_counts().to_dict())
+    print("  home_type:", out["home_type"].value_counts().to_dict(),
+          "| type_source:", out["type_source"].value_counts(normalize=True).round(2).to_dict())
     print("  single-family fill:", {c: f"{res[c].notna().mean():.0%}" for c in
                                     ["living_sqft", "year_built", "market_value", "deed_year"]},
           f"homestead {res['homestead'].mean():.0%}")

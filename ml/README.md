@@ -35,6 +35,7 @@ cp .env.example .env   # then set TYPESAFE_API_KEY
 | `train/build_table.py` | Joins label + ACS + parcels → `data/processed/train_bg.parquet` (one row per training block group) |
 | `train/model.py` | Propensity v1: LightGBM Poisson, per-city offset, spatial / temporal / leave-one-city-out evaluation |
 | `train/homes.py` | Home-level test: per-home appraised value vs block-group home value vs LightGBM on parcel features |
+| `score/homes.py` | Home propensity score for every owner-occupied single-family parcel (22 counties) + H3 res-8 cell layer |
 | `train/baselines.py` | Income / home value / past-installs baselines, scored within city on 2024-2025 installs |
 | `docs/typesafe/` | Jev docs snapshot (SDK, primitives, confidence, jev-1.13 limits) |
 | `data/` | Git-ignored. `raw/` downloads, `interim/` normalized tables, `gold/` labels, `processed/` outputs |
@@ -70,6 +71,7 @@ uv run python -m train.build_table   # -> data/processed/train_bg.parquet + chec
 uv run python -m train.baselines
 uv run python -m train.model         # ~35 s -> data/processed/model_v1*.txt, train_bg_oof.parquet
 uv run python -m train.homes         # ~40 s -> data/processed/train_home.parquet
+uv run python -m score.homes         # ~20 s -> data/processed/home_scores.parquet, h3_scores.parquet
 ```
 
 LightGBM on macOS needs OpenMP: `brew install libomp`.
@@ -224,9 +226,7 @@ held-out homes without a 2021-2023 install, check who installed in 2024-2025 (60
   About two-thirds of the gain is resolution.
 - Caveat: appraisals are a 2025 snapshot, so a 2024-2025 install could nudge its own home's value (a generator is
   a few % of a typical home's value). Small next to the gap above.
-- Per-home value needs parcel data for every county scored. Have: Travis, Bexar, Dallas, Tarrant, Collin, Denton
-  (market value in all six). Missing for the Austin, San Antonio and Houston metros: Williamson, Hays, Comal,
-  Guadalupe, Harris, Fort Bend, Montgomery (TxGIO StratMap, browser download per county).
+- Per-home value needs parcel data for every county scored: see "Home scores" below (22 counties).
 
 ### Permit history and ranking inside an area
 
@@ -244,3 +244,28 @@ is not counted) are joined to parcels the same way. Solar: 4.1% of Austin homes,
 - **Ranking inside an area works.** ROC AUC among homes of the same block group (install-weighted mean):
   home value 0.66 Austin / 0.63 San Antonio, value + solar 0.68 / 0.63; inside H3 resolution-8 cells the same
   (0.65-0.68 / 0.64). An area-level score is 0.50 there by construction.
+
+## Home scores (`score/homes.py`)
+
+**Counties (22, TxGIO StratMap 2025 unless noted):** Austin: Travis (county service), Williamson, Hays, Bastrop.
+San Antonio: Bexar (county service), Comal, Guadalupe, Kendall. DFW: Dallas, Tarrant, Collin, Denton, Rockwall,
+Kaufman, Ellis, Johnson, Parker. Houston: Harris, Fort Bend, Montgomery, Brazoria, Galveston.
+
+**Single-family without a land-use code.** Comal, Ellis, Fort Bend, Galveston, Hays, Montgomery, Parker and
+Rockwall publish no code (others only partly). There a parcel is single-family when improvement value ≥ $30k,
+market value ≥ $50k, lot 3,000 sq ft-2 acres and no condo/unit wording in the legal description
+(`parcels.normalize.VALUE_RULE`); against real codes on 60k parcels: Collin precision / recall 96% / 96%,
+Denton 90% / 93%. Williamson has no improvement values but codes `RES`. Each parcel records `type_source`.
+Eligible homes (single-family + owner-occupied) vs ACS per county: ratio 0.78 (Parker) to 1.13 (Brazoria),
+0.95-1.05 for Dallas, Bexar, Harris, Collin, Denton, Williamson, Montgomery, Fort Bend.
+
+**Tarrant has no values in StratMap** (land, improvement and market value all 0; the earlier "market value in
+all six" was wrong for Tarrant). Its homes fall back to the block group's ACS median (`value_source =
+acs_block_group`) until Tarrant Appraisal District's own export is loaded (tad.org/resources/data-downloads).
+
+**Score** = log(value) + log(2) if solar-only permit, `pct_metro` = percentile within the metro. Homes with a
+backup permit already (generator / battery / Base Power, any year; Austin, San Antonio, Fort Worth) have
+`has_backup` and are not ranked. Output: 3.89M homes in `home_scores.parquet` (county, prop_id, lat/lon, h3_8,
+GEOID, value, value_source, has_solar, has_backup, score, pct_metro, top20_metro), 37k H3 res-8 cells in
+`h3_scores.parquet` (homes, median value, appraised share, solar / backup homes, mean percentile, top-20% share;
+median 24 homes per cell).
