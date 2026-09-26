@@ -76,6 +76,18 @@ _Avoid_: heat score, climate risk
 A local calendar day on which a place was inside at least one qualifying NWS warning area. Counting days, not warnings, keeps one storm with several warnings from counting several times.
 _Avoid_: warning count (when meaning days)
 
+**Live Weather Signal**:
+One official NWS alert (e.g. a Tornado Warning) that may make backup power urgent: its event, category, severity, certainty, urgency, event time window (effective to ends) and area. Recorded as observed; not a score.
+_Avoid_: live alert score, weather event (when meaning the alert)
+
+**Active** (signal):
+A Live Weather Signal whose event window contains now (effective ≤ now < ends) and which was still present in the latest successful NWS snapshot. A Cell is affected when its center is inside the signal's area.
+_Avoid_: current, open
+
+**Snapshot**:
+One complete fetch of all active NWS alerts for Texas. Only a successful, complete Snapshot can end signals that disappeared; a failed one changes nothing, and live data becomes stale when no Snapshot has succeeded recently.
+_Avoid_: poll (when meaning the stored result), sync
+
 **Grid Need Component**:
 The ERCOT-derived part of Need Score (load, capacity, forecast load, resource outages, prices). Only signals that indicate value/urgency for residential storage belong here.
 _Avoid_: grid score, grid component, grid stress score
