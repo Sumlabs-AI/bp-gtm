@@ -32,6 +32,10 @@ _Avoid_: static need, historical need
 Current/near-term urgency for a Cell, driven by active alerts, forecasts, current outages and current ERCOT conditions. Changes rapidly. Answers "why now?".
 _Avoid_: current need, real-time need, urgency
 
+**Need Signal**:
+A human-readable reason attached to a Cell's Need (e.g. "Severe weather expected within 24 hours"). Explains Need; not Lead Evidence.
+_Avoid_: alert, reason
+
 **Outage Need Component**:
 The outage-derived part of Need Score (frequency, duration, recency, customers affected).
 _Avoid_: outage score
@@ -47,12 +51,42 @@ _Avoid_: grid score, grid component, grid stress score
 ### Propensity and Opportunity
 
 **Propensity Score**:
-Per-Cell prediction of battery adoption likelihood, owned by the ML workstream and built primarily from permit history. Answers "how likely is adoption here?", not "how needed is it?".
-_Avoid_: adoption score, ML score, permit score
+Per-Cell prediction of battery adoption likelihood, owned by the ML workstream and built primarily from permit history. Answers "how likely is adoption here?", not "how needed is it?". Not yet built; distinct from Lead Score.
+_Avoid_: adoption score, ML score, permit score, lead score
 
 **Opportunity**:
 The GTM interpretation of a Cell's Need Score together with its Propensity Score. Both dimensions stay visible; the combining formula is undefined until decided by the team.
-_Avoid_: opportunity score (until a formula exists), priority
+_Avoid_: opportunity score (until a formula exists), priority, expected value
+
+### Leads
+
+**Lead**:
+An eligible property (single-family, owner-occupied, on an active residential meter of a utility Base serves). A property, not a person.
+_Avoid_: prospect, customer, contact
+
+**Lead Score**:
+Per-Lead heuristic fit score (0–100) from weighted, explainable drivers such as home size, value, solar, pool and new owner. Rule-based lead qualification; not the ML Propensity Score and not a Need Score.
+_Avoid_: propensity, fit score (in docs), score (unqualified)
+
+**Lead Evidence**:
+A dated fact supporting a Lead's drivers or trigger (a permit, a new meter, an appraisal flag).
+_Avoid_: signal (reserved for Need Signal)
+
+**Trigger**:
+The latest Lead Evidence that makes a Lead worth a fresh look this week (new permit, new meter, new owner, newly eligible).
+_Avoid_: alert, event
+
+**Grid Value**:
+Estimated annual energy-arbitrage value ($/yr) of a battery size in a Lead's Load Zone, from the Zone Economics backtest.
+_Avoid_: value (unqualified), savings
+
+**Expected Value**:
+Lead Score / 100 × Grid Value of the recommended battery size; the default Lead ranking. A per-Lead economics ranking, not Opportunity.
+_Avoid_: priority score, opportunity
+
+**Lead Cluster**:
+A map-only aggregation of nearby Leads shown when too many are in view. Not a Cell.
+_Avoid_: grid cell, cell, bucket
 
 ### Existing economics (ERCOT)
 
