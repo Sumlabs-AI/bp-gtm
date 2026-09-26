@@ -227,3 +227,20 @@ held-out homes without a 2021-2023 install, check who installed in 2024-2025 (60
 - Per-home value needs parcel data for every county scored. Have: Travis, Bexar, Dallas, Tarrant, Collin, Denton
   (market value in all six). Missing for the Austin, San Antonio and Houston metros: Williamson, Hays, Comal,
   Guadalupe, Harris, Fort Bend, Montgomery (TxGIO StratMap, browser download per county).
+
+### Permit history and ranking inside an area
+
+Home permits dated 2023 or earlier (solar, EV charger, panel upgrade; a permit that is itself a backup install
+is not counted) are joined to parcels the same way. Solar: 4.1% of Austin homes, 3.2% of San Antonio homes.
+
+- **Solar owners add backup ~3× more often at the same home value.** Austin 2024-2025 installs per 1,000 homes,
+  no solar → solar, by value quintile: 1.1 → 2.7, 1.9 → 7.3, 2.9 → 12.7, 5.3 → 17.4, 15.7 → 41.4. San Antonio
+  top quintile 2.2 → 6.1 (lower quintiles have too few installs to read).
+- EV-charger and panel-upgrade permits are too rare in the keyword-filtered permits to conclude anything.
+  Pools are not in the Travis / Bexar parcel layers (Harris has them in HCAD extra features).
+- **Rule: log(value) + log(2) if solar** (value doubled for solar homes): Austin ROC AUC 0.766 / top 20% 59% vs
+  0.755 / 58% for value alone, above every LightGBM variant (best 0.762). San Antonio unchanged (11 of 156 test
+  installers had solar). Solar homes are few, so the overall gain is small, but it's the best-supported segment.
+- **Ranking inside an area works.** ROC AUC among homes of the same block group (install-weighted mean):
+  home value 0.66 Austin / 0.63 San Antonio, value + solar 0.68 / 0.63; inside H3 resolution-8 cells the same
+  (0.65-0.68 / 0.64). An area-level score is 0.50 there by construction.
