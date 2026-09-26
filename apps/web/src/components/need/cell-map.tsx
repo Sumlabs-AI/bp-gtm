@@ -7,7 +7,9 @@ import "maplibre-gl/dist/maplibre-gl.css"
 
 import { Button } from "@/components/ui/button"
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet"
+import { OutageBreakdown } from "@/components/need/outage-breakdown"
 import { apiFetch } from "@/lib/api"
+import { scoreColor } from "@/lib/grid"
 import { H3_MAP_MIN_ZOOM, MARKETS, type CellCollection, type CellDetail } from "@/lib/need"
 
 const BASEMAP = "https://tiles.openfreemap.org/styles/positron"
@@ -110,7 +112,16 @@ export function CellMap({ className }: { className?: string }) {
                   id="cells-fill"
                   minzoom={H3_MAP_MIN_ZOOM}
                   type="fill"
-                  paint={{ "fill-color": "#6366f1", "fill-opacity": 0.08 }}
+                  paint={{
+                    // Outage Need Component when known, else the neutral substrate tint.
+                    "fill-color": [
+                      "case",
+                      ["==", ["get", "outageNeed"], null],
+                      "#6366f1",
+                      ["interpolate", ["linear"], ["get", "outageNeed"], 0, scoreColor(0), 50, scoreColor(50), 100, scoreColor(100)],
+                    ],
+                    "fill-opacity": ["case", ["==", ["get", "outageNeed"], null], 0.08, 0.45],
+                  }}
                 />,
                 <Layer
                   key="cells-line"
@@ -161,7 +172,7 @@ export function CellMap({ className }: { className?: string }) {
         <SheetContent>
           <SheetHeader>
             <SheetTitle className="font-mono">{selected}</SheetTitle>
-            <SheetDescription>H3 Cell. Need Score arrives with the first Need Components.</SheetDescription>
+            <SheetDescription>H3 Cell. The combined Need Score arrives once more Need Components exist.</SheetDescription>
           </SheetHeader>
           {shownDetail && (
             <dl className="grid grid-cols-2 gap-x-4 gap-y-2 px-4 text-sm">
@@ -176,6 +187,11 @@ export function CellMap({ className }: { className?: string }) {
               <dt className="text-muted-foreground">Need Score</dt>
               <dd>{shownDetail.needScore ?? "—"}</dd>
             </dl>
+          )}
+          {shownDetail?.components.outage && (
+            <div className="overflow-y-auto pb-4">
+              <OutageBreakdown outage={shownDetail.components.outage} />
+            </div>
           )}
         </SheetContent>
       </Sheet>

@@ -2,10 +2,11 @@
 from app.models.grid import GridPrice, GridZoneMetrics
 from app.models.item import Item
 from app.models.leads import Lead, Meter, Permit, Property, SourceRun
-from app.models.need import Cell
+from app.models.need import Cell, CountyOutageFeatures, UtilityReliability
 
 __all__ = [
     "Cell",
+    "CountyOutageFeatures",
     "GridPrice",
     "GridZoneMetrics",
     "Item",
@@ -14,4 +15,5 @@ __all__ = [
     "Permit",
     "Property",
     "SourceRun",
+    "UtilityReliability",
 ]

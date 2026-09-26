@@ -31,6 +31,8 @@ docker compose exec api python -m app.grid compute              # score the zone
 docker compose exec api python -m app.leads refresh             # lead sources (~10 min, ~1 GB download)
 docker compose exec api python -m app.leads score               # score the leads
 docker compose exec api python -m app.need seed                 # H3 Cells for /need (offline, seconds)
+docker compose exec api python -m app.need outage download      # outage history, ~6 GB (cached)
+docker compose exec api python -m app.need outage compute       # Outage Need on /need
 ```
 
 For the per-year battery value ranges shown on leads, also load past years (~1 min per year):

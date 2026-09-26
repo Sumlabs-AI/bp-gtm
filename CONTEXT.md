@@ -25,7 +25,7 @@ Per-Cell measure of how useful/necessary battery backup is in that geography. Co
 _Avoid_: score (unqualified), risk score
 
 **Baseline Need**:
-Long-term structural Need for a Cell, driven by historical outage, weather and resilience exposure. Changes slowly.
+Long-term structural Need for a Cell, driven by historical outage, weather and resilience exposure. Changes slowly. Historical events (e.g. past Major Outage Events) explain Baseline Need; they never answer "why now".
 _Avoid_: static need, historical need
 
 **Live Need**:
@@ -37,8 +37,28 @@ A human-readable reason attached to a Cell's Need (e.g. "Severe weather expected
 _Avoid_: alert, reason
 
 **Outage Need Component**:
-The outage-derived part of Need Score (frequency, duration, recency, customers affected).
+The outage-derived part of Need Score: the mean of Observed Outage Exposure and Utility Reliability Need, or whichever of the two exists.
 _Avoid_: outage score
+
+**Observed Outage Exposure**:
+How much outage a Cell's county has actually experienced: the Texas percentile of outage hours per customer over 5 years. County-level: every Cell in a county shares it. Outage Events and Major Outage Events explain that history but are not scored.
+_Avoid_: outage history score, outage risk
+
+**Utility Reliability Need**:
+How unreliable a Cell's electric utility is in normal conditions (interruption minutes per customer, excluding major events), as a Texas percentile. Unknown where the Cell's utility is unknown.
+_Avoid_: utility score, reliability score
+
+**Outage Event**:
+A continuous period in which a meaningful share of a county's customers are without power. A **Major Outage Event** is one whose peak share or total customer-hours crosses the major threshold.
+_Avoid_: outage (when meaning the county-level event), storm
+
+**Reference Population**:
+The set a raw metric is ranked against to make a 0–100 percentile: all Texas counties or all Texas utilities with usable data, not just our Markets.
+_Avoid_: benchmark, peer group
+
+**Data Through**:
+The last date an external source's history covers. Features computed from that source are "as of" this date, never implied to be current.
+_Avoid_: last updated, as of today
 
 **Weather Need Component**:
 The weather-derived part of Need Score (historical severe weather, active alerts, forecast extremes).
