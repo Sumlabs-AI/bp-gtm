@@ -40,8 +40,12 @@ The sample dashboard page still shows **static placeholder data** from the block
 
 Map + ranked list of ERCOT load zones by Grid Value Score; `/grid/[zone]` explains one zone's drivers with charts. Data comes from `GET /grid/zones[/{code}]` — see [grid-economics.md](grid-economics.md). Both pages call `await connection()` so they're never prerendered at build time.
 
-- Map: `react-map-gl/maplibre` + OpenFreeMap `positron` basemap (no API key). Zone shapes are a static file, `public/geo/ercot-zones.geojson`, colored client-side with a MapLibre `match` expression from `scoreColor()`.
+- Map: `react-map-gl/maplibre` + OpenFreeMap `positron` basemap (no API key). Zone shapes come from the API (`GET /grid/zones.geojson`, file `apps/api/app/grid/ercot-zones.geojson`), colored client-side with a MapLibre `match` expression from `scoreColor()`.
 - **MapLibre worker gotcha:** MapLibre resolves its worker file relative to its own bundle, which Turbopack doesn't emit (→ 404, blank map). `zone-map.tsx` calls `setWorkerUrl("/maplibre/maplibre-gl-worker.mjs")`, served by `app/maplibre/[file]/route.ts` straight from `node_modules`.
+
+## Leads (`/leads`) and data sources (`/data`)
+
+`/leads` lists Harris County residential leads with URL-based GET filters (plain `<form method="get">`, no client state) and 50-per-page pagination; `/leads/[id]` shows score drivers, evidence, property facts and a review-status control (`PATCH /leads/{id}` from the browser, then `router.refresh()`). `/data` shows the last refresh of each source from `GET /sources`. `/leads?view=map` (`components/leads/leads-map.tsx`) fetches `GET /leads/geo` for the visible bounds on every move (debounced) with the same filters: points colored by score, or count cells when more than 5,000 leads are in view; `/leads/[id]` shows the home on a small map. Gotcha: `<Layer>`s must be direct children of `<Source>` (or set `source=` explicitly): a Fragment breaks react-map-gl's source injection. Code: `src/app/(dashboard)/{leads,data}`, `src/components/leads/`, `src/lib/leads.ts`. Backend and scoring: [residential-leads.md](residential-leads.md).
 
 ## Calling the API
 

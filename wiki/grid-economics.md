@@ -102,13 +102,17 @@ round-trip efficiency. These are analysis assumptions in
 `app/grid/config.py`, not published battery specifications. The backtest is
 a perfect-foresight historical upper bound for screening, not a P&L forecast.
 
+## Battery value per lead size
+
+`compute` also backtests the battery sizes we pitch to leads (`LEAD_BATTERIES_KW` in `app/grid/config.py`: 25/40/50 kWh at an assumed ~0.46 kW per kWh) and stores `battery_value_<kWh>` ($/yr) in each zone's `metrics`. Lead scoring reads these; see [residential-leads.md](residential-leads.md).
+
 ## API and map
 
 - `GET /grid/zones` returns scored zone summaries in descending rank.
 - `GET /grid/zones/{code}` adds the analysis period, raw metrics, chart
   series, and current assumptions; unknown codes return 404.
 
-The web map reads `apps/web/public/geo/ercot-zones.geojson`. Rebuild it from
+The zone shapes live in `apps/api/app/grid/ercot-zones.geojson`, served at `GET /grid/zones.geojson` (web map) and used to place leads in a zone. Rebuild it from
 `apps/api` with `uv run python scripts/build_zone_geojson.py` if its source
 geometry needs refreshing; the script writes that file.
 

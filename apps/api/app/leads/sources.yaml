@@ -1,0 +1,1029 @@
+# URL verification reflects HTTP checks on 2026-09-26. A verified landing page
+# does not imply that every linked download or query is usable; see each note.
+sources:
+  - id: hcad_harris_cama_2026
+    name: Harris Central Appraisal District public CAMA exports
+    category: property
+    geography: Harris County, Texas
+    url: https://hcad.org/hcad-online-services/pdata/
+    access: bulk_download
+    auth_required: false
+    format: ZIP archives of headered tab-delimited ASCII TXT files
+    update_cadence: Preliminary files weekly May-August; certified set around mid-August
+    key_fields:
+      - acct
+      - owner_name
+      - mail_addr
+      - site_addr
+      - state_class
+      - tot_mkt_val
+      - use_cd
+      - exempt_cat
+      - im_sq_ft
+      - heat_ar
+      - date_erected
+    license_or_terms: >-
+      Public appraisal data are subject to Texas Tax Code 25.025 restrictions
+      for qualifying protected owners. HCAD's codebook and download page do
+      not grant a separate explicit reuse license.
+    verified: true
+    verified_on: 2026-09-26
+    notes: >-
+      Page returned HTTP 200. Direct ZIP pattern is
+      https://download.hcad.org/data/CAMA/2026/{Real_acct_owner,Real_building_land,Real_jur_exempt}.zip;
+      each 2026 ZIP returned HEAD 200 (about 212, 235, and 114 MB; all
+      Last-Modified 2026-09-20). Codebook
+      https://hcad.org/assets/uploads/pdf/pdataCodebook.pdf returned HEAD
+      200. In Real_acct_owner, real_acct.txt holds owner, mailing and situs
+      address, state class, and total market value. In Real_building_land,
+      land.txt has use_cd and building_res.txt has improvement area/heat_ar
+      and date_erected. In Real_jur_exempt, jur_exempt_cd.txt supplies exemption
+      categories; join by account to derive homestead status. Do not equate
+      generic bld_ar with conditioned living area without codebook checks.
+    refresh_strategy: >-
+      Weekly HEAD all three same-year ZIPs and compare Last-Modified, ETag,
+      and Content-Length; check page for a newly certified or next-tax-year set.
+
+  - id: fbcad_fort_bend_property_2026
+    name: Fort Bend Central Appraisal District redacted property exports
+    category: property
+    geography: Fort Bend County, Texas
+    url: https://www.fbcad.org/certified-and-supplements-reports/
+    access: bulk_download
+    auth_required: false
+    format: ZIP archives of quoted comma-delimited TXT tables
+    update_cadence: Preliminary snapshots, July certification, and subsequent supplements
+    key_fields:
+      - PropertyID
+      - CurrMarketValue
+      - Situs
+      - OwnerName
+      - Address1
+      - City
+      - State
+      - Zip
+      - ExemptionList
+      - StateCode
+      - ActYrBuilt
+      - Area
+      - Class
+    license_or_terms: >-
+      FBCAD labels releases redacted; its GIS-data page disclaims warranties
+      and says confidential owner information cannot be disclosed. Respect
+      Texas Tax Code 25.025 restrictions.
+    verified: true
+    verified_on: 2026-09-26
+    notes: >-
+      Page returned HTTP 200. Direct 2026 property ZIP
+      https://www.fbcad.org/wp-content/uploads/2026/07/PropertyData-Post2026Cert-Redacted.zip
+      returned HEAD 200 (about 163 MB); residential segments ZIP
+      https://www.fbcad.org/wp-content/uploads/2026/07/WebsiteResidentialSegs.zip
+      returned HEAD 200 (about 73 MB); and certified Orion ZIP
+      https://www.fbcad.org/wp-content/uploads/2026/08/2026_07_07_1746-Orion-2026-Certified-Export-Redacted.zip
+      returned HEAD 200 (about 59 MB). Small ranged checks of ZIP directory
+      and headers identified Property, Owner, Land, Improvement, Segment, and
+      Sales TXT. Property holds market value and situs; Owner holds owner,
+      mailing address, and ExemptionList; Land holds StateCode; Segment holds
+      ActYrBuilt, Area, and Class. ExemptionList needs code interpretation to
+      identify homestead. Files are expressly redacted.
+    refresh_strategy: >-
+      Weekly compare report-page links and dates embedded in ZIP names, then
+      HEAD changed ZIPs; process new supplements with account-level overlap.
+
+  - id: collincad_collin_appraisal_2026
+    name: Collin Central Appraisal District 2026 certified appraisal data
+    category: property
+    geography: Collin County, Texas
+    url: 'https://data.texas.gov/resource/5tkr-3759.json?$limit=1'
+    access: api
+    auth_required: false
+    format: Socrata JSON; full dataset export available through portal
+    update_cadence: Certified annual dataset; separate preliminary dataset updates daily
+    key_fields:
+      - ownername
+      - owneraddrline1
+      - situsconcat
+      - exempthmstdflag
+      - propcategorycode
+      - propusecode
+      - currvalmarket
+      - imprvmainarea
+      - imprvyearbuilt
+      - datadate
+    license_or_terms: >-
+      CCAD describes public data as public domain and as-is without warranty;
+      the Socrata dataset itself did not expose a specific license in checked
+      metadata. Protected owner details may be suppressed under Texas law.
+    verified: true
+    verified_on: 2026-09-26
+    notes: >-
+      CCAD portal page https://collincad.org/open-data-portal/ returned HTTP
+      200 and points to Texas Open Data. The certified 2026 Socrata URL and
+      metadata https://data.texas.gov/api/views/5tkr-3759.json returned JSON
+      HTTP 200 using curl -k because of a local certificate-chain failure.
+      The separate daily preliminary dataset is
+      https://data.texas.gov/resource/nne4-8riu.json?$limit=1 (GET 200).
+      Listed fields occur in the combined appraisal dataset, so no cross-file
+      join is required for these attributes. Legacy MDB links are retiring;
+      the tested LiteDatabaseCurrent.zip path returned HTML, not a ZIP.
+    refresh_strategy: >-
+      Weekly compare Socrata rowsUpdatedAt and maximum datadate; page through
+      changed records and switch to the new certified dataset each tax year.
+
+  - id: dentoncad_denton_2026_real
+    name: Denton Central Appraisal District 2026 certified real-property export
+    category: property
+    geography: Denton County, Texas
+    url: https://dentoncad.net/data/_uploaded/files/datafiles/2026/
+    access: bulk_download
+    auth_required: false
+    format: ZIP of fixed-width TXT tables with XLSX layout
+    update_cadence: Annual certification; 2026 ZIP modified 2026-07-27
+    key_fields:
+      - py_owner_name
+      - py_addr_line1
+      - situs_street
+      - situs_city
+      - hs_exempt
+      - imprv_state_cd
+      - market_value
+      - py_confidential_flag
+      - yr_built
+      - imprv_det_area
+    license_or_terms: >-
+      Public exports suppress confidential ownership and certain exemption
+      details under state law; honor py_confidential_flag and Texas Tax Code
+      25.025. No explicit general reuse license was confirmed.
+    verified: true
+    verified_on: 2026-09-26
+    notes: >-
+      Year directory returned HTTP 200. Direct REAL ZIP
+      https://dentoncad.net/data/_uploaded/files/datafiles/2026/CertifiedDataReal/2026%20CERTIFIED%20DATA%20-%20REAL.zip
+      returned HEAD 200 (819,361,794 bytes); a 64 KB tail range returned 206
+      and showed APPRAISAL_INFO, APPRAISAL_IMPROVEMENT_INFO,
+      APPRAISAL_IMPROVEMENT_DETAIL, and APPRAISAL_LAND_DETAIL TXT tables.
+      Layout
+      https://dentoncad.net/data/_uploaded/files/datafiles/2026/AppraisalExportLayout/TP_Legacy8.0.32-AppraisalExportLayout(UPDATED-2:17:26).xlsx
+      returned GET 200 (about 104 KB). APPRAISAL_INFO holds owner, mailing,
+      situs, homestead flag, improvement state class, and market value;
+      APPRAISAL_IMPROVEMENT_DETAIL holds year built and improvement area.
+      Multiple owners may occur. Validate which improvement area represents
+      living area before scoring.
+    refresh_strategy: >-
+      Weekly inspect the year-directory listing and HEAD the certified ZIP;
+      compare listing modification date, Last-Modified, ETag, and file size.
+
+  - id: dcad_dallas_2026_certified
+    name: Dallas Central Appraisal District 2026 certified data files
+    category: property
+    geography: Dallas County, Texas
+    url: https://dallascad.org/DataProducts.aspx
+    access: bulk_download
+    auth_required: false
+    format: ZIP of comma-delimited CSV files with embedded reference documents
+    update_cadence: Annual certification around late July; supplemental changes afterward
+    key_fields:
+      - owner and mailing address (internal column unverified)
+      - situs address (internal column unverified)
+      - homestead exemption (internal column unverified)
+      - land use or state class (internal column unverified)
+      - market value (internal column unverified)
+      - living area (internal column unverified)
+      - year built (internal column unverified)
+    license_or_terms: >-
+      Public download page states DCAD cannot provide technical support;
+      no explicit reuse license was confirmed. Texas Tax Code 25.025 limits
+      disclosure of protected owners' home-address information.
+    verified: true
+    verified_on: 2026-09-26
+    notes: >-
+      Page returned HTTP 200. Direct certified ZIP
+      https://dallascad.org/ViewPDFs.aspx?type=3&id=%5C%5CDCAD.ORG%5CWEB%5CWEBDATA%5CWEBFORMS%5CDATA%20PRODUCTS%5CDCAD2026_CERTIFIED_07232026.zip
+      returned HEAD 200 (about 193 MB); current supplemental ZIP
+      https://dallascad.org/ViewPDFs.aspx?type=3&id=%5C%5CDCAD.ORG%5CWEB%5CWEBDATA%5CWEBFORMS%5CDATA%20PRODUCTS%5CDCAD2026_CURRENT.ZIP
+      returned HEAD 200 (about 198 MB). DCAD says each archive contains
+      reference documents, but the endpoint ignored a Range request and the
+      size cap stopped transfer. Therefore exact internal filenames and the
+      requested field-to-file mapping remain unverified; inspect the embedded
+      references before ingestion. The current supplemental ZIP is the one
+      described as containing ownership and market/taxable values.
+    refresh_strategy: >-
+      Weekly compare page link names and HEAD Content-Length/Last-Modified;
+      ingest changed supplemental archives, retaining certified baseline.
+
+  - id: tad_tarrant_residential_2026
+    name: Tarrant Appraisal District residential property data
+    category: property
+    geography: Tarrant County, Texas
+    url: https://www.tad.org/resources/data-downloads
+    access: bulk_download
+    auth_required: false
+    format: ZIP of headered pipe-delimited TXT
+    update_cadence: Residential file cadence TBD on page; full export revised daily
+    key_fields:
+      - Account_Num
+      - Owner_Name
+      - Owner_Address
+      - Situs_Address
+      - Property_Class
+      - Exemption_Code
+      - State_Use_Code
+      - Total_Value
+      - Year_Built
+      - Living_Area
+    license_or_terms: >-
+      No explicit reuse license was found on the download page; Texas Tax
+      Code 25.025 protects qualifying owners' home-address information.
+    verified: true
+    verified_on: 2026-09-26
+    notes: >-
+      Current page returned HTTP 200; legacy /data-download/ is 404. Direct
+      https://www.tad.org/content/data-download/PropertyData(Delimited)_R.ZIP
+      returned HEAD 200 (about 50.6 MB; Last-Modified 2026-09-25). A small
+      206 ranged GET confirmed PropertyData(Delimited)_R.txt and its header;
+      it contains all listed fields in one table. The 2026 True Prodigy full
+      extract
+      https://www.tad.org/content/data-download/000_Tarrant_All_Taxing_Units.zip
+      returned HEAD 200 (about 748 MB). Exemption_Code must be decoded to
+      identify homestead; Property_Class and State_Use_Code need local codes.
+      TAD's field layout
+      https://www.tad.org/content/forms/PropertyData%26PropertyLocationLayouts.pdf
+      returned HEAD 200 and defines Total_Value as total market value and
+      Living_Area as residential living area (commercial gross building area).
+    refresh_strategy: >-
+      Weekly HEAD the residential ZIP for Last-Modified/ETag/size changes;
+      check the page for revisions and consider the daily full export only
+      if the residential file proves stale.
+
+  - id: tcad_travis_2026_certified
+    name: Travis Central Appraisal District 2026 certified appraisal export
+    category: property
+    geography: Travis County, Texas
+    url: https://traviscad.org/publicinformation
+    access: bulk_download
+    auth_required: false
+    format: ZIP of fixed-width TXT tables with separate layout ZIP
+    update_cadence: Annual certification in July with supplemental exports
+    key_fields:
+      - py_owner_name
+      - py_addr_line1
+      - situs_street
+      - hs_exempt
+      - imprv_state_cd
+      - market_value
+      - yr_built
+      - imprv_det_area
+    license_or_terms: >-
+      TCAD makes the electronic roll free on its public-information page;
+      no explicit reuse license was confirmed. Apply Texas Tax Code 25.025
+      confidentiality restrictions.
+    verified: true
+    verified_on: 2026-09-26
+    notes: >-
+      Page returned HTTP 200; old /data-downloads/ is 404. Direct 2026 ZIP
+      https://traviscad.org/wp-content/largefiles/2026%20Certified%20Appraisal%20Export%20Supp%200_07182026.zip
+      returned HEAD 200 (about 557 MB; Last-Modified 2026-07-22). Layout ZIP
+      https://traviscad.org/wp-content/largefiles/Website_Legacy8.0.33-AppraisalExportLayout_06182026.zip
+      returned HEAD 200 (about 248 KB). A 64 KB tail range confirmed
+      PROP.TXT, IMP_DET.TXT, and LAND_DET.TXT. PROP holds owner, mailing,
+      situs, homestead, state class, and market value; IMP_DET holds year
+      built and improvement area. Determine the correct living-area measure
+      from the layout before use.
+    refresh_strategy: >-
+      Weekly compare public-information page link dates and HEAD the current
+      certified/supplemental ZIP for Last-Modified, ETag, and size.
+
+  - id: wcad_williamson_property_export
+    name: Williamson Central Appraisal District property data export tables
+    category: property
+    geography: Williamson County, Texas
+    url: 'https://data.wcad.org/resource/ij43-xknu.json?$limit=1'
+    access: api
+    auth_required: false
+    format: Socrata JSON or CSV tables; certified export also available
+    update_cadence: Owner/daily tables update during year; certified export in July
+    key_fields:
+      - propertyid
+      - currmarketvalue
+      - squarefootage
+      - situs
+      - fullname
+      - mailingaddress
+      - exemptionlist
+      - datadate
+      - actyrbuilt
+      - area
+      - class
+      - statecode
+      - exemptiontypedescription
+      - exemptionstatuscode
+    license_or_terms: >-
+      No explicit reuse license was confirmed on the WCAD data-download page.
+      Apply Texas Tax Code 25.025 confidentiality rules to owner information.
+    verified: true
+    verified_on: 2026-09-26
+    notes: >-
+      WCAD page https://www.wcad.org/data-downloads/ and Property API URL
+      returned HTTP 200. Related Owner
+      https://data.wcad.org/resource/bbia-wsxs.json?$limit=1, Segment
+      https://data.wcad.org/resource/4kxj-e8c3.json?$limit=1, Land
+      https://data.wcad.org/resource/2ckt-cqwj.json?$limit=1, and Exemptions
+      https://data.wcad.org/resource/nbn7-h4pp.json?$limit=1 all returned
+      JSON HTTP 200. Property holds market value and situs; Owner holds name,
+      mailing address, and optional exemptionlist; Segment holds actyrbuilt,
+      area, and class; Land holds statecode; Exemptions has
+      exemptiontypedescription and exemptionstatuscode. Property squarefootage
+      is not established as conditioned living area; select the relevant
+      Segment area by class. Official
+      layout
+      https://documents.wcad.org/DataDownloads/PropertyDataExportFileLayout.pdf
+      returned HEAD 200. Join PropertyID across tables; decode exemptions
+      before treating them as a homestead flag.
+    refresh_strategy: >-
+      Weekly compare Socrata rowsUpdatedAt and maximum datadate per table;
+      fetch changed records and track certified-versus-daily export vintage.
+
+  - id: txgio_stratmap_land_parcels
+    name: TxGIO StratMap Land Parcels
+    category: parcels
+    geography: Texas statewide; Harris, Fort Bend, Collin, Denton, Dallas, Tarrant, Travis, Williamson
+    url: https://data.geographic.texas.gov/?s=land%20parcels&pg=1
+    access: portal_only
+    auth_required: false
+    format: ZIP of shapefile or file geodatabase, plus metadata and conversion file
+    update_cadence: TxGIO aims for annual acquisition by county; some counties refresh more often
+    key_fields:
+      - prop_id
+      - geo_id
+      - owner_name
+      - situs_addr
+      - mail_addr
+      - mkt_value
+      - year_built
+      - stat_land_use
+      - loc_land_use
+      - fips
+      - county
+      - tax_year
+      - date_acq
+    license_or_terms: >-
+      TxGIO says county packages are distributed at no cost, are not survey grade,
+      and must not be used for legal purposes; the ArcGIS layer credits TxGIO,
+      counties, and vendors. No explicit reuse license was found. Do not infer
+      that protected owner identities are present; Tax Code 25.025 can restrict
+      disclosure of eligible owners' home-address information.
+    verified: false
+    verified_on: 2026-09-26
+    notes: >-
+      The official information page
+      https://geographic.texas.gov/stratmap/land-parcels.html returned HTTP
+      200; its linked DataHub download URL above returned HTTP 403 to curl,
+      so county package URLs and current YYYYMM vintages for
+      these eight counties were not confirmed. TxGIO documents shapefile and
+      geodatabase delivery and says the county year/month is in each file name
+      as YYYYMM; its files are compiled as-is from appraisal districts, may
+      have null attributes, and not every county is available. Map service
+      https://feature.geographic.texas.gov/arcgis/rest/services/Parcels/stratmap_land_parcels_48_most_recent/MapServer/0?f=pjson
+      returned HTTP 200 and exposed the listed fields, but its query operation
+      returned an ArcGIS HTTP-200 error code 400 (unsupported). This layer has
+      no homestead exemption or living-area field and is not a substitute for
+      county CAMA exports.
+    refresh_strategy: >-
+      Check the DataHub county package list weekly for a new YYYYMM file name;
+      retain the per-county date_acq and tax_year, and compare package metadata.
+      A change to the landing page alone is not evidence of refreshed parcels.
+
+  - id: puct_iou_ccn_territories
+    name: PUCT electric investor-owned utility CCN polygons
+    category: territory
+    geography: Texas statewide; includes CenterPoint and Oncor service areas
+    url: https://services6.arcgis.com/N6Lzvtb46cpxThhu/ArcGIS/rest/services/IOU/FeatureServer/300?f=json
+    access: restricted
+    auth_required: false
+    format: ArcGIS FeatureServer polygon features (JSON)
+    update_cadence: Irregular; layer edit timestamp was 2026-06-29
+    key_fields:
+      - COMPANY_NAME
+      - COMPANY_ABBREVIATION
+      - COMPANY_TYPE
+      - CCN_NO
+      - DATA_SOURCE
+      - DATA_SOURCE_DATE
+      - COMPANY_ELECTRIC_OUTAGES_MAPLINK
+      - geometry
+    license_or_terms: >-
+      ArcGIS layer ISO metadata states: "Use is limited to the individuals
+      identified in a Master Service Agreement with Platts." Public query
+      access does not authorize commercial lead scoring. PUCT also labels
+      these GIS boundaries unofficial approximations; signed county mylar
+      maps and docket amendments govern official CCN boundaries.
+    verified: true
+    verified_on: 2026-09-26
+    notes: >-
+      Layer metadata and a small query returned HTTP 200. CenterPoint Energy
+      Houston Electric LLC has CCN 30086 with source date 2023-03-14; Oncor
+      Electric Delivery Company LLC has CCNs 30026 and 30198 with source date
+      2023-03-07. The 2026 layer edit timestamp does not make each individual
+      boundary current to 2026. Use a point-in-polygon match as an initial
+      territory screen only if usage rights are secured, then verify ambiguous
+      addresses against the TDSP ESI ID extract or official CCN record. Terms:
+      https://services6.arcgis.com/N6Lzvtb46cpxThhu/arcgis/rest/services/IOU/FeatureServer/300/metadata?f=html&format=default.
+    refresh_strategy: >-
+      After securing Platts usage rights, compare editingInfo.dataLastEditDate
+      and feature count weekly; on change, compare CCN_NO, DATA_SOURCE_DATE,
+      and geometry.
+
+  - id: puct_municipal_ccn_territories
+    name: PUCT electric municipal utility CCN polygons
+    category: territory
+    geography: Texas statewide; relevant to Austin-area county coverage
+    url: https://services6.arcgis.com/N6Lzvtb46cpxThhu/ArcGIS/rest/services/MUNI/FeatureServer/320?f=json
+    access: restricted
+    auth_required: false
+    format: ArcGIS FeatureServer polygon features (JSON)
+    update_cadence: Irregular; layer edit timestamp was 2026-06-29
+    key_fields:
+      - COMPANY_NAME
+      - COMPANY_ABBREVIATION
+      - COMPANY_TYPE
+      - CCN_NO
+      - DATA_SOURCE
+      - DATA_SOURCE_DATE
+      - geometry
+    license_or_terms: >-
+      ArcGIS layer ISO metadata states: "Use is limited to the individuals
+      identified in a Master Service Agreement with Platts." Public query
+      access does not authorize commercial lead scoring. The GIS boundaries
+      are unofficial approximations; signed county maps and docket amendments
+      govern official limits.
+    verified: true
+    verified_on: 2026-09-26
+    notes: >-
+      Layer metadata returned HTTP 200. Municipal utilities must be checked
+      alongside IOUs and cooperatives; county membership alone does not
+      determine retail delivery utility. Terms:
+      https://services6.arcgis.com/N6Lzvtb46cpxThhu/arcgis/rest/services/MUNI/FeatureServer/320/metadata?f=html&format=default.
+    refresh_strategy: >-
+      After securing Platts usage rights, compare editingInfo.dataLastEditDate
+      and feature count weekly; on change, compare CCN_NO, DATA_SOURCE_DATE,
+      and polygon geometry.
+
+  - id: puct_coop_ccn_territories
+    name: PUCT electric cooperative distribution CCN polygons
+    category: territory
+    geography: Texas statewide; relevant to suburban and rural parts of target counties
+    url: https://services6.arcgis.com/N6Lzvtb46cpxThhu/ArcGIS/rest/services/COOP_DIST/FeatureServer/310?f=json
+    access: arcgis
+    auth_required: false
+    format: ArcGIS FeatureServer polygon features (JSON)
+    update_cadence: Irregular; layer edit timestamp was 2026-06-29
+    key_fields:
+      - COMPANY_NAME
+      - COMPANY_ABBREVIATION
+      - COMPANY_TYPE
+      - CCN_NO
+      - DATA_SOURCE
+      - DATA_SOURCE_DATE
+      - geometry
+    license_or_terms: >-
+      ISO metadata names Platts as the original source but did not show the
+      same explicit MSA limitation found on IOU and municipal layers; usage
+      rights remain unconfirmed. PUCT calls GIS boundaries unofficial
+      approximations; consult signed county maps and docket amendments.
+    verified: true
+    verified_on: 2026-09-26
+    notes: >-
+      Layer metadata returned HTTP 200. Cooperative areas are needed to avoid
+      classifying all homes in a county as CenterPoint, Oncor, or a municipal
+      utility.
+    refresh_strategy: >-
+      After confirming reuse rights, compare editingInfo.dataLastEditDate and
+      feature count weekly; on change, compare CCN_NO, DATA_SOURCE_DATE, and
+      polygon geometry.
+
+  - id: hifld_electric_retail_service_territories_tx
+    name: HIFLD Electric Retail Service Territories, Texas view
+    category: territory
+    geography: Texas statewide
+    url: https://services2.arcgis.com/LYMgRMwHfrWWEg3s/ArcGIS/rest/services/HIFLD_Electric_Retail_Service_Territories/FeatureServer/0?f=json
+    access: arcgis
+    auth_required: false
+    format: ArcGIS FeatureServer polygon features (JSON)
+    update_cadence: Irregular; observed layer edit timestamp was 2023-08-16
+    key_fields:
+      - NAME
+      - TYPE
+      - STATE
+      - SOURCE
+      - SOURCEDATE
+      - VAL_DATE
+      - YEAR
+      - geometry
+    license_or_terms: >-
+      Public HIFLD layer; provenance and record dates vary by utility.
+      Check source metadata before redistribution or operational use.
+    verified: true
+    verified_on: 2026-09-26
+    notes: >-
+      ArcGIS metadata returned HTTP 200 and exposed 139 Texas polygons. The
+      layer was last edited in 2023; CenterPoint and Oncor records carry YEAR
+      2020 and SOURCEDATE 2021-10-06. It is too stale for definitive
+      parcel-level TDSP assignment. Match ERCOT ESI ID address and DUNS for
+      service-point confirmation. The HIFLD layer's reuse terms were not
+      established from service metadata.
+    refresh_strategy: >-
+      Check editingInfo.dataLastEditDate and feature count weekly; refresh the
+      Texas subset only when the source changes.
+
+  - id: ercot_tdsp_esiid_extract
+    name: ERCOT MIS TDSP ESI ID Extract (EMIL ZP15-612; report type 203)
+    category: service_points
+    geography: ERCOT Texas TDSP territories, including CenterPoint and Oncor
+    url: https://www.ercot.com/misapp/servlets/IceDocListJsonWS?reportTypeId=203
+    access: bulk_download
+    auth_required: false
+    format: ZIP of headerless comma-delimited CSV; separate published text layout
+    update_cadence: Daily changes; monthly full on first Tuesday after first Monday
+    key_fields:
+      - ESIID
+      - ADDRESS
+      - ADDRESS_OVERFLOW
+      - CITY
+      - STATE
+      - ZIPCODE
+      - COUNTY
+      - DUNS
+      - STATUS
+      - PREMISE_TYPE
+      - METERED
+      - SETTLEMENT_AMS_INDICATOR
+      - TDSP_AMS_INDICATOR
+      - METERED_SERVICE_TYPE
+      - METERED_SERVICE_TYPE_DESC
+    license_or_terms: >-
+      ERCOT public-information terms at https://www.ercot.com/help/terms
+      allow public data in compilations and analyses subject to the stated
+      conditions; data are provided as-is and access must not impair ERCOT
+      systems.
+    verified: true
+    verified_on: 2026-09-26
+    notes: >-
+      The report listing returned HTTP 200 with PublishDate, DocID,
+      FriendlyName, ContentSize, and ExpiredDate. Product page:
+      https://www.ercot.com/mp/data-products/data-product-details?id=ZP15-612.
+      File URL pattern:
+      https://www.ercot.com/misdownload/servlets/mirDownload?doclookupId={DocID};
+      HEAD returned HTTP 200 for a CenterPoint daily file (DocID 1278757464)
+      and CenterPoint/Oncor monthly files (1271779092/1271778934). A small
+      CenterPoint daily ZIP confirmed headerless CSV. The full monthly ZIPs
+      were about 152 MB and 232 MB by HEAD and were not downloaded. Layout:
+      https://www.ercot.com/files/docs/2024/05/14/TDSP-ESIID-Extract_20240422.txt.
+      PREMISE_TYPE distinguishes Residential from Small/Large Non-Residential,
+      not detached homes from apartments. There is no meter-type column;
+      METERED and AMS indicators are available. The public legacy MIS listing
+      does not require authentication; ERCOT's separate api.ercot.com API
+      requires account registration and tokens.
+    refresh_strategy: >-
+      Check report type 203 daily for new DocID and PublishDate, ingest daily
+      deltas, and reconcile with each monthly full TDSP file. Persist required
+      snapshots because MIS documents expire after roughly a month.
+
+  - id: houston_weekly_sold_permits
+    name: City of Houston weekly sold-permit reports
+    category: permits
+    geography: City of Houston, including its portions of Harris and Fort Bend counties
+    url: https://www.houstonpermittingcenter.org/sold-permits-search
+    access: bulk_download
+    auth_required: false
+    format: Weekly XLSX workbook
+    update_cadence: Weekly
+    key_fields:
+      - Zip Code
+      - Permit Date
+      - Permit Type
+      - Project No
+      - Address
+      - Comments
+    license_or_terms: No explicit open-data reuse license was located on the report page.
+    verified: true
+    verified_on: 2026-09-26
+    notes: >-
+      Landing page returned HTTP 200. Sample direct URL
+      https://www.houstonpermittingcenter.org/sites/g/files/nwywnm431/files/2026-09/Sept%207-13.xlsx
+      returned HEAD 200 (32,174 bytes; Last-Modified 2026-09-14). The
+      sampled workbook had 323 rows and six solar-related Comments, but no EV
+      charger row that week. Reports cover sold permits for construction,
+      remodeling, and change of use, not every permit class; Comments is
+      free text, so classify solar/EV/new construction cautiously. The
+      three-year online sold-permit search at
+      https://cohtora.houstontx.gov/approot/soldpermits/online_permit.htm
+      also returned HTTP 200.
+    refresh_strategy: >-
+      Weekly scan dated XLSX links on the report page, compare URL and
+      Last-Modified, and ingest each new week with overlap for corrections.
+
+  - id: harris_county_issued_permits
+    name: Harris County issued permits GIS layer
+    category: permits
+    geography: Harris County permitting jurisdiction; verify unincorporated location spatially
+    url: https://www.gis.hctx.net/arcgishcpid/rest/services/Permits/IssuedPermits/FeatureServer/0?f=pjson
+    access: arcgis
+    auth_required: false
+    format: ArcGIS FeatureServer JSON or GeoJSON
+    update_cadence: Not stated; 2026-09-25 issued records were visible
+    key_fields:
+      - PROJECTNUMBER
+      - FULLADDRESS
+      - APPTYPE
+      - PROJECTSTATUS
+      - PERMITNUMBER
+      - PERMITNAME
+      - STATUS
+      - ISSUEDDATE
+      - PERMITCLASSCODE
+      - OBJECTID
+    license_or_terms: No explicit reuse license was located in the layer metadata.
+    verified: true
+    verified_on: 2026-09-26
+    notes: >-
+      Layer metadata and small queries returned HTTP 200. Distinct PERMITNAME
+      values include Solar Photovoltaic Power System, Electric Vehicle
+      Charging Systems, and Residential, New 1 Family (Standalone Structure).
+      Some records' address city is outside Houston; geocode and check county
+      permitting jurisdiction rather than filtering on city text alone.
+    refresh_strategy: >-
+      Weekly query on ISSUEDDATE and OBJECTID with an overlap window; revisit
+      recently issued records for status changes and deduplicate by permit ID.
+
+  - id: dallas_historical_building_permits
+    name: City of Dallas historical building permits through 2024
+    category: permits
+    geography: City of Dallas, including portions outside Dallas County
+    url: https://services2.arcgis.com/rwnOSbfKSwyTBcwN/arcgis/rest/services/NewPermit_2008_2024/FeatureServer/0?f=pjson
+    access: arcgis
+    auth_required: false
+    format: ArcGIS FeatureServer JSON
+    update_cadence: Static archive exported in November 2024
+    key_fields:
+      - PERMIT_No
+      - PERMIT_TYPE
+      - ACTIVITY
+      - CREATED_DATE
+      - ISSUE_DATE
+      - ADDRESS
+      - ZIP_CODE
+      - VALUE
+      - AREA
+      - WORK_DESCRIPTION
+      - LAND_USE
+      - SINGLE_FAMILY
+      - Status
+    license_or_terms: >-
+      City GIS information is informational and not survey quality; no
+      explicit open-data reuse license was confirmed for this layer.
+    verified: true
+    verified_on: 2026-09-26
+    notes: >-
+      ArcGIS layer metadata returned HTTP 200. Despite the service name,
+      source records span 1971-2024. WORK_DESCRIPTION contains solar text.
+      This archive does not cover current permits. The older Socrata dataset
+      e7gq-4sah stopped updating in August 2020.
+    refresh_strategy: >-
+      Treat as a one-time backfill; check layer edit timestamp occasionally
+      for corrections and use the current Dallas portal for later permits.
+
+  - id: dallas_current_building_permit_portal
+    name: City of Dallas DallasNow current permit search
+    category: permits
+    geography: City of Dallas, including portions outside Dallas County
+    url: https://aca-prod.accela.com/DALLASTX/Cap/CapHome.aspx?TabName=Building&module=Building
+    access: portal_only
+    auth_required: false
+    format: HTML search portal
+    update_cadence: Operational portal; publication cadence not documented
+    key_fields: []
+    license_or_terms: Portal terms require review before automated reuse; no bulk license was located.
+    verified: true
+    verified_on: 2026-09-26
+    notes: >-
+      Public search page returned HTTP 200; some features require an account.
+      Dallas migrated to DallasNow, and no current public address-level bulk
+      API was verified. Do not treat the historical ArcGIS layer as current.
+    refresh_strategy: >-
+      Review the portal weekly for an approved export or new open-data feed;
+      pursue a city records request if current address-level permits are needed.
+
+  - id: fort_worth_development_permits
+    name: City of Fort Worth development permits view
+    category: permits
+    geography: City of Fort Worth, including Tarrant County and outlying portions
+    url: https://services5.arcgis.com/3ddLCBXe1bRt7mzj/arcgis/rest/services/CFW_Open_Data_Development_Permits_View/FeatureServer/0?f=pjson
+    access: arcgis
+    auth_required: false
+    format: ArcGIS FeatureServer JSON table
+    update_cadence: Hourly during business hours, per layer description
+    key_fields:
+      - Permit_No
+      - Permit_Type
+      - Permit_SubType
+      - B1_WORK_DESC
+      - Addr_No
+      - Street_Name
+      - Street_Suffix
+      - Zip_Code
+      - File_Date
+      - Current_Status
+      - Status_Date
+      - Use_Type
+      - Specific_Use
+      - JobValue
+      - SqFt
+    license_or_terms: City open-data item lists CC BY 4.0.
+    verified: true
+    verified_on: 2026-09-26
+    notes: >-
+      Layer metadata and recent queries returned HTTP 200. Recent records
+      include solar rooftop with backup battery, and descriptions also contain
+      EV charger work. Full_Street_Address can be null despite separate address
+      components. A nominally issued view contains Pending statuses, and some
+      Status_Date values are future dates; filter status and prefer File_Date
+      for discovery.
+    refresh_strategy: >-
+      Weekly compare editingInfo.dataLastEditDate and query File_Date with
+      overlap; revisit recent Permit_No records for status changes.
+
+  - id: austin_issued_construction_permits
+    name: City of Austin issued construction permits
+    category: permits
+    geography: Austin city limits and extraterritorial jurisdiction, including Travis and Williamson
+    url: https://data.austintexas.gov/resource/3syk-w9eu.json
+    access: api
+    auth_required: false
+    format: Socrata JSON or CSV
+    update_cadence: Daily, per dataset metadata
+    key_fields:
+      - permit_number
+      - permittype
+      - permit_type_desc
+      - permit_class_mapped
+      - permit_class
+      - work_class
+      - description
+      - tcad_id
+      - applieddate
+      - issue_date
+      - original_address1
+      - original_zip
+      - total_job_valuation
+      - housing_units
+      - status_current
+      - statusdate
+    license_or_terms: >-
+      The Austin open-data item labels its license "Public Domain U.S.
+      Government" and says records are informational and continuously revised.
+    verified: true
+    verified_on: 2026-09-26
+    notes: >-
+      API returned HTTP 200; sampled 2026-09-24 records include solar and
+      residential Level 2 EV charger work. Dataset 3syk-w9eu spans 1980 to
+      present and has about 2.38 million rows. It includes extraterritorial
+      jurisdiction permits, so check the actual city/ETJ location. The portal
+      metadata is at
+      https://data.austintexas.gov/Building-and-Development/Issued-Construction-Permits/3syk-w9eu/about_data.
+    refresh_strategy: >-
+      Weekly compare Socrata rowsUpdatedAt metadata and query issue_date with
+      overlap; revisit recent permits because status and descriptions can change.
+
+  - id: plano_building_permit_portal
+    name: City of Plano eTRAKiT permit search
+    category: permits
+    geography: City of Plano, primarily Collin County with portions in Denton County
+    url: https://trakit.plano.gov/etrakit_prod/Search/permit.aspx
+    access: portal_only
+    auth_required: true
+    format: HTML permit-search portal
+    update_cadence: Unknown
+    key_fields: []
+    license_or_terms: No reusable address-level permit license or API terms were identified.
+    verified: false
+    verified_on: 2026-09-26
+    notes: >-
+      The requested search URL redirects to login.aspx, which returned HTTP
+      200; detailed permit records could not be inspected without login.
+      Plano's separate Socrata dataset ac95-z5wm at
+      https://dashboard.plano.gov/api/views/ac95-z5wm.json returned HTTP 200
+      but supplies only monthly aggregate permit counts, with last observed
+      rows updated 2025-04-01. It cannot identify solar, EV charger, or new
+      residential addresses.
+    refresh_strategy: >-
+      Recheck the portal weekly for a public export; otherwise request an
+      authorized export or open-records response before address-level use.
+
+  - id: frisco_active_construction_permits
+    name: City of Frisco active construction permit GIS subset
+    category: permits
+    geography: City of Frisco, in Collin and Denton counties
+    url: https://maps.friscotexas.gov/gis/rest/services/Public/External_Planning_and_Zoning/MapServer/1?f=pjson
+    access: arcgis
+    auth_required: false
+    format: ArcGIS MapServer JSON features
+    update_cadence: Unknown; active-only layer
+    key_fields:
+      - Permit_No
+      - Permit_Subtype
+      - Type
+      - Address
+      - Description
+      - Status
+      - Issued_Date
+      - Site_APN
+      - Project_No
+      - OBJECTID
+    license_or_terms: >-
+      Frisco's permit portal provides a no-warranty notice; no explicit
+      address-level bulk reuse license was found.
+    verified: true
+    verified_on: 2026-09-26
+    notes: >-
+      GIS metadata and a 2026 single-family sample returned HTTP 200. Distinct
+      subtype codes in this layer were CIFO, CNEW, MNEW, SCHA, and SNEW; no
+      solar or EV subtype was found. Records are active only and Issued_Date
+      is text, so closed permits may disappear. Full eTRAKiT search at
+      https://etrakit.friscotexas.gov/etrakit/Search/permit.aspx returned
+      HTTP 200, but no public address-level API was verified there.
+    refresh_strategy: >-
+      Snapshot the active GIS layer weekly, compare OBJECTID and Issued_Date,
+      and retain removed records locally; check the full portal for a broader
+      authorized export.
+
+  - id: centerpoint_live_outage_tracker
+    name: CenterPoint Energy live outage tracker
+    category: outages
+    geography: CenterPoint Houston electric service area; live ZIP, city, and county summaries
+    url: https://tracker.centerpointenergy.com/map/
+    access: portal_only
+    auth_required: false
+    format: Interactive web map and live summary
+    update_cadence: About every 5 minutes, per CenterPoint
+    key_fields:
+      - area name or ZIP
+      - customers affected
+      - outage count
+      - snapshot time
+    license_or_terms: >-
+      CenterPoint's site terms at
+      https://www.centerpointenergy.com/en-us/corporate/legal/terms-of-use
+      restrict site content and data to personal, noncommercial use and
+      prohibit commercial copying/storing without prior written consent.
+    verified: true
+    verified_on: 2026-09-26
+    notes: >-
+      A small ranged curl GET returned HTTP 206. The tracker reports current
+      conditions; a public historical ZIP/county archive and stable row API
+      were not verified. ZIP summaries are live operational data, not a
+      house-level historical outage record.
+    refresh_strategy: >-
+      Manually review availability weekly. Obtain written rights and a
+      permitted feed before any commercial collection or snapshot archive;
+      use licensed historical sources for scoring meanwhile.
+
+  - id: oncor_live_outage_map
+    name: Oncor live storm center outage map
+    category: outages
+    geography: Oncor Texas service area; live county, ZIP, and city summaries
+    url: https://stormcenter.oncor.com/default.html
+    access: portal_only
+    auth_required: false
+    format: Interactive web map and live summary
+    update_cadence: About every 10 minutes, per Oncor
+    key_fields:
+      - area name or ZIP
+      - customers affected
+      - outage count
+      - snapshot time
+    license_or_terms: >-
+      Oncor's website terms at https://www.oncor.com/us/en/home/legal.html
+      grant use/copy of site content only for personal, noncommercial, and
+      educational purposes; commercial history collection is not cleared.
+    verified: true
+    verified_on: 2026-09-26
+    notes: >-
+      A small ranged curl GET returned HTTP 206 with a browser user agent;
+      this curl environment required -k for a local TLS-chain issue. The map
+      is live only. No public historical ZIP/county bulk archive or stable
+      row API was verified.
+    refresh_strategy: >-
+      Manually review availability weekly. Obtain written rights and a
+      permitted feed before any commercial collection or snapshot archive;
+      use licensed historical sources for scoring meanwhile.
+
+  - id: eia861_utility_reliability_2024
+    name: EIA Form 861 annual utility reliability data
+    category: outages
+    geography: United States electric utilities; filter Texas utilities
+    url: https://www.eia.gov/electricity/data/eia861/zip/f8612024.zip
+    access: bulk_download
+    auth_required: false
+    format: ZIP containing XLSX tables including Reliability_2024.xlsx
+    update_cadence: Annual; 2024 was the latest final year verified
+    key_fields:
+      - utility name and EIA utility ID
+      - reporting year
+      - SAIDI
+      - SAIFI
+      - CAIDI
+      - major-event-day inclusion flag
+    license_or_terms: >-
+      U.S. EIA data are generally public domain; cite EIA as the source per
+      https://www.eia.gov/about/copyrights_reuse.php.
+    verified: true
+    verified_on: 2026-09-26
+    notes: >-
+      HEAD returned HTTP 200, Content-Length 4,568,208 bytes, and
+      Last-Modified 2025-12-04; a 1 KB ranged GET returned HTTP 206. The
+      reliability sheet reports annual utility-level indices with and without
+      major events. It has no county, ZIP, feeder, or address-level outage
+      history. A 2025 early release may exist but was not treated as final.
+    refresh_strategy: >-
+      Weekly check the EIA-861 landing page for a newly final year and compare
+      the annual ZIP Last-Modified/ETag; ingest once per final annual release.
+
+  - id: ornl_eaglei_county_outages
+    name: ORNL EAGLE-I historical county customer outages
+    category: outages
+    geography: United States counties, including all eight target Texas counties
+    url: https://api.figshare.com/v2/articles/24237376
+    access: api
+    auth_required: false
+    format: Figshare metadata JSON and annual CSV files
+    update_cadence: Historical 15-minute observations; annual file releases
+    key_fields:
+      - fips_code
+      - county
+      - state
+      - customers_out
+      - run_start_time
+    license_or_terms: >-
+      ORNL's public dataset catalog lists CC BY 4.0; retain attribution and
+      review file-level metadata before use.
+    verified: true
+    verified_on: 2026-09-26
+    notes: >-
+      Figshare article metadata returned HTTP 200 and listed annual CSV files
+      for 2014-2025. The 2025 file at
+      https://ndownloader.figshare.com/files/62164877 returned HTTP 206 for
+      a 1 KB range, confirming the listed CSV header; the full file is about
+      1.4 GB and was not downloaded. This is county-level, not ZIP-, TDSP-,
+      feeder-, or ESI ID-level history. Omitted zero-outage intervals and
+      collection gaps must not be interpreted the same way. The ORNL portal
+      https://openenergyhub.ornl.gov/explore/dataset/eaglei_outages_2014/
+      returned HTTP 200, but its catalog API has zero row records; use the
+      Figshare file metadata for downloads.
+    refresh_strategy: >-
+      Check Figshare article metadata weekly for new year, file ID, size, or
+      version; ingest only changed annual CSVs and preserve source version.
+
+  - id: census_acs5_block_group_tenure_income
+    name: Census ACS 2024 five-year block-group tenure and income
+    category: demographics
+    geography: >-
+      Texas block groups in Harris (201), Fort Bend (157), Collin (085),
+      Denton (121), Dallas (113), Tarrant (439), Travis (453), and Williamson
+      (491) counties; state FIPS 48
+    url: 'https://api.census.gov/data/2024/acs/acs5?get=NAME%2CB25003_001E%2CB25003_002E%2CB25003_001M%2CB25003_002M%2CB19013_001E%2CB19013_001M&for=block%20group%3A%2A&in=state%3A48%20county%3A201'
+    access: api
+    auth_required: true
+    format: JSON
+    update_cadence: Annual ACS five-year release; 2024 is the current verified vintage
+    key_fields:
+      - state
+      - county
+      - tract
+      - block group
+      - B25003_001E
+      - B25003_002E
+      - B25003_001M
+      - B25003_002M
+      - B19013_001E
+      - B19013_001M
+    license_or_terms: >-
+      Census Data API terms allow analysis and call for a prominent notice that
+      a product uses the Census Bureau Data API but is not endorsed or certified
+      by the Bureau; see
+      https://www.census.gov/data/developers/about/terms-of-service.html.
+    verified: false
+    verified_on: 2026-09-26
+    notes: >-
+      The exact data query without a key redirected (HTTP 302,
+      X-DataWebAPI-KeyError: 1) to the Census missing-key page, so data rows
+      could not be checked. The dataset and B25003/B19013 variable-definition
+      URLs returned HTTP 200. Supply a Census API key in the key parameter and
+      change county FIPS for each county. B25003_002E / B25003_001E estimates
+      the block-group owner-occupied share; B19013_001E is median household
+      income in 2024 inflation-adjusted dollars. These are area estimates,
+      not parcel-level tenure or income; retain margins of error and handle
+      Census suppression/sentinel values.
+    refresh_strategy: >-
+      Weekly check whether the next ACS five-year vintage metadata endpoint
+      resolves, then use a key to fetch all eight county block-group queries
+      once a new annual vintage is released; store vintage and GEOID.

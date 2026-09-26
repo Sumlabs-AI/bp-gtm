@@ -32,6 +32,23 @@ services:
       - ./apps/api:/app
     command: sh -c "alembic upgrade head && fastapi dev app/main.py --host 0.0.0.0 --port 8000"
 
+  # Weekly refresh of ERCOT prices and lead sources (Sunday 03:00 Central).
+  worker:
+    build: ./apps/api
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      DATABASE_URL: postgresql+psycopg://app:app@db:5432/app
+    depends_on:
+      db:
+        condition: service_healthy
+      api:
+        condition: service_started # api applies migrations on start
+    volumes:
+      - ./apps/api:/app # raw downloads land in apps/api/data/raw
+    command: python -m app.worker
+
   web:
     build:
       context: .

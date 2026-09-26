@@ -44,7 +44,7 @@ pnpm dev                                 # http://localhost:3000
 
 | What | Command (from the app dir) |
 | --- | --- |
-| API tests | `uv run pytest` |
+| API tests (unit + e2e; e2e needs `docker compose up -d db`) | `uv run pytest` |
 | API lint / format | `uv run ruff check . --fix && uv run ruff format .` |
 | Web lint | `pnpm lint` |
 | Web type-check + build | `pnpm build` |

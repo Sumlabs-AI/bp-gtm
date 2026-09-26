@@ -13,7 +13,8 @@ from pathlib import Path
 
 import httpx
 
-OUT = Path(__file__).resolve().parents[2] / "web/public/geo/ercot-zones.geojson"
+# Served by the API at /grid/zones.geojson and used to place leads in a load zone.
+OUT = Path(__file__).resolve().parents[1] / "app/grid/ercot-zones.geojson"
 
 LOAD_ZONES = (
     "https://services3.arcgis.com/fwwoCWVtaahwlvxO/arcgis/rest/services/"

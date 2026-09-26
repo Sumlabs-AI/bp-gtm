@@ -15,6 +15,11 @@ class BatteryConfig(BaseModel):
     round_trip_efficiency: float = 0.90
 
 
+# Battery sizes we value per lead: capacity kWh -> power kW. Base publishes the 25/50 kWh
+# sizes but not power ratings; ~0.46 kW per kWh is our assumption.
+LEAD_BATTERIES_KW = {25: 11.5, 40: 18.4, 50: 23.0}
+
+
 class ScoringConfig(BaseModel):
     lookback_days: int = 365
     # Real-time price at or above which an interval counts as scarcity ($/MWh).

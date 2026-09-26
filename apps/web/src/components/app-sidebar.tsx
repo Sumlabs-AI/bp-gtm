@@ -34,6 +34,16 @@ const data = {
       ),
     },
     {
+      title: "Leads",
+      url: "/leads",
+      icon: <UsersIcon />,
+    },
+    {
+      title: "Data sources",
+      url: "/data",
+      icon: <DatabaseIcon />,
+    },
+    {
       title: "Dashboard",
       url: "#",
       icon: (
