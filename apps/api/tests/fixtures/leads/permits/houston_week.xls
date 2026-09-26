@@ -1,0 +1,46 @@
+<html xmlns:v="urn:schemas-microsoft-com:vml"
+xmlns:o="urn:schemas-microsoft-com:office:office"
+xmlns:x="urn:schemas-microsoft-com:office:excel"
+xmlns="http://www.w3.org/TR/REC-html40">
+<HEAD>
+<meta http-equiv=Content-Type content="text/html; charset=windows-1252">
+</HEAD>
+<body>
+<table>
+<TR>
+<TD COLSPAN=6>Web eReport</TD>
+</TR>
+<TR>
+<TD COLSPAN=6>From: 2026/04/27</TD>
+</TR>
+<TR>
+<TD COLSPAN=6>To    : 2026/05/04</TD>
+</TR>
+<TD COLSPAN=6>&nbsp;</TD>
+<TR>
+<TD>Zip Code</TD>
+<TD>Permit Date</TD>
+<TD>Permit Type</TD>
+<TD>Project No</TD>
+<TD>Address</TD>
+<TD>Comments</TD>
+</TR>
+<TR>
+<TD>77007</TD>
+<TD>2026/04/30</TD>
+<TD>Building Pmt</TD>
+<TD>26019999</TD>
+<TD>10       FAKE                        ST</TD>
+<TD>NEW RESIDENTIAL SOLAR PANELS 2021 IRC</TD>
+</TR>
+<TR>
+<TD>the City of Houston's Deed Restriction Hotline at 713.437.6769.</TD>
+<TD></TD>
+<TD></TD>
+<TD></TD>
+<TD></TD>
+<TD></TD>
+</TR>
+</table>
+</body>
+</html>

@@ -1,0 +1,16 @@
+{
+  "spatialReference": {"wkid": 102740, "latestWkid": 2278},
+  "features": [
+    {
+      "attributes": {
+        "PROJECTNUMBER": "119",
+        "PROJECTNAME": "FAKE ARRAY",
+        "FULLADDRESS": "1 FAKE ST HOUSTON TX 77002",
+        "PERMITNUMBER": "H-SOLAR-SP",
+        "PERMITNAME": "Solar Photovoltaic Power System",
+        "ISSUEDDATE": 1790316000000
+      },
+      "geometry": {"x": 3110000.0, "y": 13840000.0}
+    }
+  ]
+}

@@ -1,0 +1,213 @@
+{
+  "spatialReference": {"wkid": 4326, "latestWkid": 4326},
+  "features": [
+    {
+      "attributes": {
+        "PROJECTNUMBER": "100",
+        "PROJECTNAME": "FAKE BANK",
+        "FULLADDRESS": "100 FAKE ST HUMBLE TX 77346",
+        "PERMITNUMBER": "H-SOLAR-1",
+        "PERMITNAME": "Solar Photovoltaic Power System",
+        "ISSUEDDATE": 1790316000000
+      },
+      "geometry": {"x": -95.37, "y": 29.76}
+    },
+    {
+      "attributes": {
+        "PROJECTNUMBER": "101",
+        "PROJECTNAME": "FAKE MART",
+        "FULLADDRESS": "200 FAKE RD KATY TX 77449",
+        "PERMITNUMBER": "H-EV-1",
+        "PERMITNAME": "Electric Vehicle Charging Systems",
+        "ISSUEDDATE": 1788847200000
+      },
+      "geometry": {"x": -95.72, "y": 29.78}
+    },
+    {
+      "attributes": {
+        "PROJECTNUMBER": "102",
+        "PROJECTNAME": "Residential Construction",
+        "FULLADDRESS": "300 FAKE LN CYPRESS TX 77433",
+        "PERMITNUMBER": "H-NEW-1",
+        "PERMITNAME": "Residential, New 1 Family (Standalone Structure)",
+        "ISSUEDDATE": 1777960800000
+      },
+      "geometry": {"x": -95.7, "y": 29.96}
+    },
+    {
+      "attributes": {
+        "PROJECTNUMBER": "103",
+        "PROJECTNAME": "Residential Construction",
+        "FULLADDRESS": "400 FAKE DR NEW CANEY TX 77357",
+        "PERMITNUMBER": "H-NEW-2",
+        "PERMITNAME": "Residential, New 1 Family (Attached Townhome)",
+        "ISSUEDDATE": 1777960800000
+      },
+      "geometry": {"x": -95.2, "y": 30.15}
+    },
+    {
+      "attributes": {
+        "PROJECTNUMBER": "104",
+        "PROJECTNAME": "FAKE STORE - SOLAR PANELS",
+        "FULLADDRESS": "500 FAKE HWY STE C HOCKLEY TX 77447",
+        "PERMITNUMBER": "H-SOLAR-2",
+        "PERMITNAME": "Commercial Remodel",
+        "ISSUEDDATE": 1777960800000
+      },
+      "geometry": {"x": -95.82, "y": 30.01}
+    },
+    {
+      "attributes": {
+        "PROJECTNUMBER": "105",
+        "PROJECTNAME": "Residential Construction",
+        "FULLADDRESS": "600 FAKE BLVD TX 77032",
+        "PERMITNUMBER": "H-NEW-3",
+        "PERMITNAME": "Residential, New 1 Family (Standalone Structure)",
+        "ISSUEDDATE": 1777960800000
+      },
+      "geometry": {"x": -95.3, "y": 29.9}
+    },
+    {
+      "attributes": {
+        "PROJECTNUMBER": "106",
+        "PROJECTNAME": "Model",
+        "FULLADDRESS": "700 FAKE AVE, HOUSTON 77070",
+        "PERMITNUMBER": "H-NEW-4",
+        "PERMITNAME": "Model Home New 1 Family (Detached)",
+        "ISSUEDDATE": 1777960800000
+      },
+      "geometry": {"x": -95.5, "y": 29.97}
+    },
+    {
+      "attributes": {
+        "PROJECTNUMBER": "107",
+        "PROJECTNAME": "FAKE MART EV CHARGING STATION",
+        "FULLADDRESS": "800 FAKE WAY SPRING TX 77379",
+        "PERMITNUMBER": "H-EV-2",
+        "PERMITNAME": "Miscellaneous Commercial Structure",
+        "ISSUEDDATE": 1777960800000
+      },
+      "geometry": {"x": -95.51, "y": 30.01}
+    },
+    {
+      "attributes": {
+        "PROJECTNUMBER": "108",
+        "PROJECTNAME": "FAKE HOUSE",
+        "FULLADDRESS": "900 FAKE CT SPRING TX 77379",
+        "PERMITNUMBER": "H-SOLAR-3",
+        "PERMITNAME": "Solar Photovoltaic Power System",
+        "ISSUEDDATE": 1777960800000
+      }
+    },
+    {
+      "attributes": {
+        "PROJECTNUMBER": "109",
+        "PROJECTNAME": "Residential Construction",
+        "FULLADDRESS": "1000 FAKE PL HOUSTON TX 77084",
+        "PERMITNUMBER": "H-DROP-DUPLEX",
+        "PERMITNAME": "Residential, New 2 Family (Duplex)",
+        "ISSUEDDATE": 1777960800000
+      },
+      "geometry": {"x": -95.6, "y": 29.8}
+    },
+    {
+      "attributes": {
+        "PROJECTNUMBER": "110",
+        "PROJECTNAME": "EXPERT SOLAR",
+        "FULLADDRESS": "1100 FAKE TRL HOUSTON TX 77044",
+        "PERMITNUMBER": "H-DROP-COMPANY",
+        "PERMITNAME": "Commercial Tenant Space",
+        "ISSUEDDATE": 1777960800000
+      },
+      "geometry": {"x": -95.2, "y": 29.9}
+    },
+    {
+      "attributes": {
+        "PROJECTNUMBER": "111",
+        "PROJECTNAME": "FAKE STATION",
+        "FULLADDRESS": "1200 FAKE CIR HOUSTON TX 77002",
+        "PERMITNUMBER": "H-DROP-CHARGE",
+        "PERMITNAME": "Charging Station",
+        "ISSUEDDATE": 1371708000000
+      },
+      "geometry": {"x": -95.36, "y": 29.75}
+    },
+    {
+      "attributes": {
+        "PROJECTNUMBER": "112",
+        "PROJECTNAME": "Solar Turbines",
+        "FULLADDRESS": "1300 FAKE ROW HOUSTON TX 77002",
+        "PERMITNUMBER": "H-DROP-TURBINE",
+        "PERMITNAME": "Liquefied Petroleum Gas",
+        "ISSUEDDATE": 1777960800000
+      },
+      "geometry": {"x": -95.36, "y": 29.75}
+    },
+    {
+      "attributes": {
+        "PROJECTNUMBER": "113",
+        "PROJECTNAME": "SOLARA SURGICAL",
+        "FULLADDRESS": "1350 FAKE ROW HOUSTON TX 77002",
+        "PERMITNUMBER": "H-DROP-SOLARA",
+        "PERMITNAME": "Commercial Remodel",
+        "ISSUEDDATE": 1777960800000
+      },
+      "geometry": {"x": -95.36, "y": 29.75}
+    },
+    {
+      "attributes": {
+        "PROJECTNUMBER": "114",
+        "PROJECTNAME": "Off-Grid Solar EVSE Pilot",
+        "FULLADDRESS": "1400 FAKE PATH HOUSTON TX 77011",
+        "PERMITNUMBER": "H-EV-3",
+        "PERMITNAME": "Fire & Life Safety Permit of Government Building",
+        "ISSUEDDATE": 1777960800000
+      },
+      "geometry": {"x": -95.34, "y": 29.73}
+    },
+    {
+      "attributes": {
+        "PROJECTNUMBER": "115",
+        "PROJECTNAME": "Residential Construction",
+        "FULLADDRESS": "1500 FAKE BND HOCKLEY HI 77447",
+        "PERMITNUMBER": "H-NEW-5",
+        "PERMITNAME": "Residential, New 1 Family (Standalone Structure)",
+        "ISSUEDDATE": 1777960800000
+      },
+      "geometry": {"x": -95.82, "y": 30.02}
+    },
+    {
+      "attributes": {
+        "PROJECTNUMBER": "116",
+        "PROJECTNAME": "Residential Construction",
+        "FULLADDRESS": "1600 FAKE PKWY NO. 2 HOUSTON TX 77049",
+        "PERMITNUMBER": "H-NEW-6",
+        "PERMITNAME": "Residential, New 1 Family (Shares Common Wall)",
+        "ISSUEDDATE": 1777960800000
+      },
+      "geometry": {"x": -95.2, "y": 29.8}
+    },
+    {
+      "attributes": {
+        "PROJECTNUMBER": "117",
+        "PROJECTNAME": "Residential Construction",
+        "FULLADDRESS": "1700 INTERSTATE HWY 10 HWY BAYTOWN TX 77521",
+        "PERMITNUMBER": "H-NEW-7",
+        "PERMITNAME": "Residential, New 1 Family (Standalone Structure)",
+        "ISSUEDDATE": 1777960800000
+      },
+      "geometry": {"x": -94.98, "y": 29.73}
+    },
+    {
+      "attributes": {
+        "PROJECTNUMBER": "118",
+        "PROJECTNAME": "FAKE HOUSE",
+        "FULLADDRESS": "1800 FAKE PL HOUSTON TX 77002",
+        "PERMITNUMBER": "H-SOLAR-NODATE",
+        "PERMITNAME": "Solar Photovoltaic Power System",
+        "ISSUEDDATE": null
+      },
+      "geometry": {"x": -95.36, "y": 29.75}
+    }
+  ]
+}
