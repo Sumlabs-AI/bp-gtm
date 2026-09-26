@@ -30,6 +30,7 @@ docker compose exec api python -m app.grid backfill 2025 2026   # ~1 min, public
 docker compose exec api python -m app.grid compute              # score the zones
 docker compose exec api python -m app.leads refresh             # lead sources (~10 min, ~1 GB download)
 docker compose exec api python -m app.leads score               # score the leads
+docker compose exec api python -m app.need seed                 # H3 Cells for /need (offline, seconds)
 ```
 
 For the per-year battery value ranges shown on leads, also load past years (~1 min per year):

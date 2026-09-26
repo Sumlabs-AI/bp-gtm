@@ -2,7 +2,7 @@
 
 import * as React from "react"
 import Link from "next/link"
-import { DatabaseIcon, MapIcon, RadarIcon, UsersIcon } from "lucide-react"
+import { DatabaseIcon, HexagonIcon, MapIcon, RadarIcon, UsersIcon } from "lucide-react"
 
 import { NavMain } from "@/components/nav-main"
 import { NavSecondary } from "@/components/nav-secondary"
@@ -18,6 +18,7 @@ import {
 
 const mainItems = [
   { title: "Leads", url: "/leads", icon: UsersIcon },
+  { title: "Need", url: "/need", icon: HexagonIcon },
   { title: "Grid Zones", url: "/grid", icon: MapIcon },
 ]
 const operationItems = [
