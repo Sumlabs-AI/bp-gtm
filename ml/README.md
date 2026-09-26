@@ -181,9 +181,9 @@ home value 0.68 / 0.75.
   (newer, mortgaged, middle-income homes: year built ρ 0.27, mortgage 0.25, home value 0.14), whereas generators
   follow wealth (Austin home value ρ 0.55). **Solar + storage is a different buyer from backup power**, so Fort
   Worth cannot validate the backup model; it would need its trade permits.
-- **Base Power 2026 check is circular.** 229 Base Power permits (Austin, 2026) land where the model and home value
-  point (capture AUC 0.69 / 0.68), but Base reportedly targets by a home-value table, so this mostly measures
-  Base's own targeting. Not evidence for the model.
+- **Base Power 2026 check is weak evidence.** 229 Base Power permits (Austin, 2026) land where the model and home
+  value point (capture AUC 0.69 / 0.68). Where installs happen also reflects where the installer chose to sell,
+  so this cannot separate buyer demand from sales targeting.
 - **Nothing beyond home value yet.** Model vs home-value rank correlation 0.75, two-thirds of the top-20% block
   groups shared. Within home-value quintiles the model still ranks above random (capture AUC 0.57 Austin, 0.62
   San Antonio), but a 50/50 rank blend with home value gains only +0.005-0.012 AUC. Block-group ACS features
