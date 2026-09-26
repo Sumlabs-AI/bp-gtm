@@ -9,3 +9,17 @@ Quick reference:
 - Run everything: `pnpm up` (docker compose). Web :3000, API :8000 (`/docs`), Postgres :5432.
 - Schema changes go through Alembic only — see [`wiki/database.md`](wiki/database.md).
 - `apps/web/AGENTS.md` has Next.js-specific rules (this Next.js version has breaking changes).
+
+## Agent skills
+
+### Issue tracker
+
+Issues tracked in GitHub Issues (mamalovesyou/bp-gtm) via `gh` CLI. See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+Default five-role vocabulary (needs-triage, needs-info, ready-for-agent, ready-for-human, wontfix). See `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+Single-context: root `CONTEXT.md` + `docs/adr/`. See `docs/agents/domain.md`.
