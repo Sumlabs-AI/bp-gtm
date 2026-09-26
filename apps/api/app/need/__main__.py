@@ -2,6 +2,7 @@
 
 uv run python -m app.need seed                     # every Market (idempotent)
 uv run python -m app.need seed --market harris
+uv run python -m app.need enrich                   # recompute every Cell's load zone
 uv run python -m app.need export --out cells.csv        # h3_index, resolution, center (for ML)
 """
 
@@ -13,6 +14,7 @@ from sqlalchemy import func, select
 
 from app.db import SessionLocal
 from app.models import Cell
+from app.need.enrich import enrich_load_zones
 from app.need.markets import MARKETS, MARKETS_BY_NAME
 from app.need.store import seed_polygon
 
@@ -31,6 +33,27 @@ def seed(names: list[str]) -> None:
             f"Existing:    {report.existing:,}\n"
             f"Duration:    {report.seconds:.2f}s\n"
         )
+    # New Cells get their static geography right away.
+    enrich()
+
+
+def enrich() -> None:
+    with SessionLocal() as db:
+        report = enrich_load_zones(db)
+        db.commit()
+    rows = [
+        ("Cells processed", report.processed),
+        ("Assigned", report.assigned),
+        ("Unknown", report.unknown),
+        None,
+        *report.by_zone.items(),
+        None,
+        ("Changed", report.changed),
+    ]
+    print("Load Zone Enrichment\n" + "─" * 30)
+    for row in rows:
+        print(f"{row[0] + ':':<20}{row[1]:>10,}" if row else "")
+    print(f"\n{'Duration:':<20}{report.seconds:>9.2f}s")
 
 
 def export(out: Path) -> None:
@@ -54,12 +77,15 @@ def main() -> None:
         choices=[m.name for m in MARKETS],
         help="repeatable; default: every Market",
     )
+    sub.add_parser("enrich", help="recompute every Cell's load zone")
     p = sub.add_parser("export", help="write all Cells to CSV")
     p.add_argument("--out", type=Path, required=True)
     args = parser.parse_args()
 
     if args.cmd == "seed":
         seed(args.market or [m.name for m in MARKETS])
+    elif args.cmd == "enrich":
+        enrich()
     else:
         export(args.out)
 

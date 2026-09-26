@@ -37,7 +37,7 @@ Drivers (0–100, weights in `app/leads/config.py`): home size and home value ar
 
 Each lead also gets an **estimated annual grid value** (`app/leads/value.py`):
 
-1. **Load zone:** the lead's parcel point inside the zone polygons (`app/grid/ercot-zones.geojson`, smallest polygon wins), else its TDSP (`TDSP_ZONES`).
+1. **Load zone:** the lead's parcel point inside the zone polygons (`app.grid.zones.zone_for_points`, smallest polygon wins; the same rule Need Engine Cells use), else its TDSP (`TDSP_ZONES`).
 2. **Battery values:** the zone's backtest value for 25 / 40 / 50 kWh (`battery_value_*` from `python -m app.grid compute`). Run grid `compute` before lead `score`.
 3. **Recommended size:** by heated sqft (`battery_sizing` in `app/leads/config.py`: <2,500 → 25, <4,000 → 40, else 50); a pool bumps it one size up. `sizing_reason` says why.
 4. **Expected value** = fit score / 100 × value of the recommended size. `GET /leads` sorts by it by default (`sort=priority`); also `score`, `value`, `triggered_at`.

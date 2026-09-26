@@ -5,27 +5,18 @@ Screening estimate only: energy-arbitrage value with perfect hindsight; no retai
 fees or ancillary services.
 """
 
-import geopandas as gpd
 import pandas as pd
 from sqlalchemy import text
 
 from app.db import engine
 from app.grid.config import LEAD_BATTERIES_KW
-from app.grid.zones import ZONES_GEOJSON
+from app.grid.zones import zone_for_points
 from app.leads.config import TDSP_ZONES, LeadScoringConfig
 
 
 def assign_zones(homes: pd.DataFrame) -> pd.Series:
     """Load zone per row from its lat/lon (point in zone polygon), else from its TDSP."""
-    zones = gpd.read_file(ZONES_GEOJSON)[["code", "geometry"]]
-    points = gpd.GeoDataFrame(
-        index=homes.index, geometry=gpd.points_from_xy(homes["lon"], homes["lat"]), crs=4326
-    )
-    hits = gpd.sjoin(points[points.geometry.is_valid], zones, predicate="within")
-    # Municipal territories (Austin Energy, CPS) sit inside larger zones: smallest wins.
-    hits["area"] = zones.to_crs(3081).area.reindex(hits["index_right"]).to_numpy()
-    by_point = hits.sort_values("area").groupby(level=0)["code"].first()
-    return by_point.reindex(homes.index).fillna(homes["tdsp"].map(TDSP_ZONES))
+    return zone_for_points(homes["lat"], homes["lon"]).fillna(homes["tdsp"].map(TDSP_ZONES))
 
 
 def zone_battery_values() -> dict[str, dict[str, float]]:

@@ -23,6 +23,7 @@ export type CellDetail = {
   h3: string
   resolution: number
   center: { lat: number; lng: number }
+  loadZone: string | null
   needScore: number | null
   components: Record<string, unknown>
 }
