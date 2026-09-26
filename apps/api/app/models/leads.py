@@ -42,6 +42,11 @@ class Property(Base):
     year_built: Mapped[int | None] = mapped_column(Integer)
     has_solar: Mapped[bool] = mapped_column(Boolean, server_default="false")
     has_pool: Mapped[bool] = mapped_column(Boolean, server_default="false")
+    # Main building's room counts and stories (inputs to the consumption estimate).
+    bedrooms: Mapped[int | None] = mapped_column(Integer)
+    full_baths: Mapped[int | None] = mapped_column(Integer)
+    half_baths: Mapped[int | None] = mapped_column(Integer)
+    stories: Mapped[float | None] = mapped_column(Float)
     # Point inside the parcel (WGS84), from the county parcel layer.
     lat: Mapped[float | None] = mapped_column(Float)
     lon: Mapped[float | None] = mapped_column(Float)
@@ -114,6 +119,10 @@ class Lead(Base):
     value: Mapped[float | None] = mapped_column(Float)  # $/yr for the recommended size
     # score/100 × value: the default ranking ("priority").
     expected_value: Mapped[float | None] = mapped_column(Float, index=True)
+    # Property-based estimate of the home's electricity use (app/leads/consumption.py):
+    # {annual_kwh, low_kwh, high_kwh, monthly_kwh[12], electric_heat_prob, peak_*_kw}.
+    consumption: Mapped[dict | None] = mapped_column(JSONB)
+    annual_kwh: Mapped[float | None] = mapped_column(Float)
     scored_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
 
 

@@ -53,6 +53,17 @@ def test_parse_real_zip_samples() -> None:
     assert residential["homestead"]  # RES
     assert residential["heated_sqft"] == 2328.0
     assert residential["year_built"] == 2014
+    # Room counts and stories come from the same (largest) building.
+    assert (residential["bedrooms"], residential["full_baths"], residential["half_baths"]) == (
+        4,
+        3,
+        1,
+    )
+    assert residential["stories"] == 2.0
+    assert rows.loc["0000000000003", "bedrooms"] == 3  # building 2, not building 1's 2
+    assert rows.loc["0000000000003", "stories"] == 1.5
+    assert pd.isna(rows.loc["0000000000003", "half_baths"])
+    assert pd.isna(commercial["bedrooms"])
 
     largest_second = rows.loc["0000000000003"]
     assert largest_second["heated_sqft"] == 1500.0  # building 2 exceeds building 1

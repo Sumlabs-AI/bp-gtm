@@ -22,6 +22,7 @@ dependencies = [
 [dependency-groups]
 dev = [
     "pytest>=9.1.1",
+    "python-calamine>=0.8.2",
     "ruff>=0.16.9",
 ]
 

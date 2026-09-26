@@ -15,6 +15,7 @@ from sqlalchemy import func, select, text
 from app.db import SessionLocal
 from app.leads import pipeline
 from app.leads.config import scoring
+from app.leads.consumption import load_model
 from app.leads.frames import METER_COLUMNS, PARCEL_COLUMNS, PERMIT_COLUMNS, PROPERTY_COLUMNS
 from app.leads.scoring import score_leads
 from app.models import Property
@@ -42,6 +43,10 @@ def home(account, address, zip_code, **kw):
         "year_built": 1990,
         "has_solar": False,
         "has_pool": False,
+        "bedrooms": 3,
+        "full_baths": 2,
+        "half_baths": None,
+        "stories": 1.0,
     }
     return row | kw
 
@@ -374,6 +379,33 @@ def test_value_per_battery_size_and_priority(client):
     )
     by_value = client.get("/leads", params={"sort": "value"}).json()["items"]
     assert by_value[0]["value"] == 1000
+
+
+def test_estimated_consumption_per_lead(client):
+    homes = [h | {"bedrooms": 5, "stories": 2.0} if h["account"] == "A" else h for h in WEEK1_HOMES]
+    refresh(homes, WEEK1_METERS, WEEK1_PERMITS, "v1", WEEK1)
+    parcels = [  # A in the 20%-electric block group, B in the 60% one (see conftest)
+        {"county": "harris", "account": "A", "lat": 29.76, "lon": -95.37},
+        {"county": "harris", "account": "B", "lat": 29.76, "lon": -95.20},
+    ]
+    pipeline.run_source("hcad_parcels", now=WEEK1, module=fake(parcels, PARCEL_COLUMNS, "v1"))
+    score_leads(WEEK1, scoring)
+
+    a, b = by_account(client, "A").json(), by_account(client, "B").json()
+    assert (a["bedrooms"], a["full_baths"], a["stories"]) == (5, 2, 2.0)
+    use_a, use_b = a["consumption"], b["consumption"]
+    for use in (use_a, use_b):
+        assert len(use["monthly_kwh"]) == 12
+        assert sum(use["monthly_kwh"]) == pytest.approx(use["annual_kwh"], abs=15)
+        assert use["low_kwh"] < use["annual_kwh"] < use["high_kwh"]
+        assert use["monthly_kwh"][7] > use["monthly_kwh"][1]  # August above February
+    assert use_a["annual_kwh"] > use_b["annual_kwh"]  # 4,000 vs 1,500 sqft
+    # Block-group shares 20% vs 60%, recentered on the county's single-family share.
+    target = load_model()["electric_heat_share"]
+    assert use_a["electric_heat_prob"] < target < use_b["electric_heat_prob"]
+
+    items = {i["id"]: i for i in client.get("/leads").json()["items"]}
+    assert items[a["id"]]["annual_kwh"] == use_a["annual_kwh"]
 
     # Leads per load zone, and the zone filter used by Grid Zones' "View leads" links.
     total = client.get("/leads").json()["total"]

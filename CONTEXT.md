@@ -158,6 +158,10 @@ _Avoid_: value (unqualified), savings, revenue
 The most a battery size could have earned in the Load Zone over the same period (an average full year) with perfect knowledge of every price. A benchmark for Grid Value, never a sales figure.
 _Avoid_: potential, max revenue
 
+**Estimated Consumption**:
+A property-based estimate of a Lead's home electricity use: annual kWh with a likely range, a typical-year monthly shape, peak kW and the probability of electric heat. From public data only (ResStock, RECS, Census, ERCOT profiles); not metered data, not a bill, not customer savings. Display-only in v1.
+_Avoid_: usage, bill, load (unqualified)
+
 **Expected Value**:
 Lead Score / 100 × Grid Value of the recommended battery size; the default Lead ranking. A per-Lead economics ranking, not Opportunity.
 _Avoid_: priority score, opportunity

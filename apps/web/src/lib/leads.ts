@@ -15,6 +15,15 @@ export type BatteryValue = {
   high_year: number | null
 }
 export type BatteryValues = Record<"25" | "40" | "50", BatteryValue>
+export type Consumption = {
+  annual_kwh: number
+  low_kwh: number
+  high_kwh: number
+  monthly_kwh: number[]
+  peak_summer_kw: number
+  peak_winter_kw: number
+  electric_heat_prob: number
+}
 
 export const BATTERY_SIZES = [25, 40, 50] as const
 export const STATUS_LABELS: Record<LeadStatus, string> = {
@@ -33,6 +42,10 @@ export function valueBasis(value: BatteryValue | null | undefined): string {
 
 export function formatLeadMoney(value: number): string {
   return `$${Math.round(value).toLocaleString("en-US")}`
+}
+
+export function formatKwh(value: number): string {
+  return `${Math.round(value).toLocaleString("en-US")} kWh`
 }
 
 export function leadReturnHref(value: string | string[] | undefined): string {
@@ -63,6 +76,7 @@ export type LeadItem = {
   sizing_reason: string | null
   value: number | null
   expected_value: number | null
+  annual_kwh: number | null
 }
 
 export type LeadPage = {
@@ -94,6 +108,11 @@ export type LeadDetail = LeadItem & {
   market_value: number | null
   heated_sqft: number | null
   year_built: number | null
+  bedrooms: number | null
+  full_baths: number | null
+  half_baths: number | null
+  stories: number | null
+  consumption: Consumption | null
   first_seen_at: string
   scored_at: string
   lat: number | null

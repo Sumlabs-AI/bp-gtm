@@ -1,0 +1,187 @@
+{
+  "fitted_at": "2026-09-26T18:20:30+00:00",
+  "sources": {
+    "resstock": "https://oedi-data-lake.s3.amazonaws.com/nrel-pds-building-stock/end-use-load-profiles-for-us-building-stock/2025/resstock_amy2018_release_1/metadata_and_annual_results/by_state/full/csv/state=TX/TX_upgrade0.csv.gz",
+    "recs": "https://www.eia.gov/consumption/residential/data/2020/csv/recs2020_public_v7.csv",
+    "ercot_profiles": [
+      2019,
+      2020,
+      2021,
+      2022,
+      2023,
+      2024,
+      2025
+    ]
+  },
+  "features": [
+    "intercept",
+    "log_sqft",
+    "decade",
+    "decade_sq",
+    "two_story",
+    "bedrooms",
+    "pool"
+  ],
+  "defaults": {
+    "sqft": 2255.0,
+    "year_built": 1985.0,
+    "stories": 1.0,
+    "bedrooms": 3.0
+  },
+  "electric_heat_share": 0.341,
+  "calibration": {
+    "factor": 0.8726,
+    "recs_tx_hot_humid_sfd_kwh": 15577,
+    "resstock_harris_sfd_kwh": 17851,
+    "ercot_coast_average_premise_kwh": {
+      "RESLOWR": 15934,
+      "RESHIWR": 15128
+    }
+  },
+  "fits": {
+    "electric": {
+      "samples": 1359,
+      "annual_kwh": {
+        "coef": [
+          5.92178,
+          0.510665,
+          -0.028347,
+          -0.005396,
+          0.065917,
+          0.028662,
+          0.151497
+        ],
+        "sigma": 0.3639,
+        "r2_log": 0.33,
+        "cv": {
+          "r2_log": 0.324,
+          "mape": 0.309,
+          "median_ape": 0.194
+        }
+      },
+      "peak_summer_kw": {
+        "coef": [
+          0.121258,
+          0.306195,
+          -0.010519,
+          -0.005477,
+          0.027435,
+          -0.00183,
+          0.022485
+        ],
+        "sigma": 0.4091,
+        "r2_log": 0.106,
+        "cv": {
+          "r2_log": 0.096,
+          "mape": 0.346,
+          "median_ape": 0.213
+        }
+      },
+      "peak_winter_kw": {
+        "coef": [
+          -0.586018,
+          0.445888,
+          -0.049019,
+          -0.004266,
+          0.088427,
+          0.012704,
+          0.038311
+        ],
+        "sigma": 0.3808,
+        "r2_log": 0.25,
+        "cv": {
+          "r2_log": 0.243,
+          "mape": 0.317,
+          "median_ape": 0.205
+        }
+      }
+    },
+    "other": {
+      "samples": 2563,
+      "annual_kwh": {
+        "coef": [
+          6.030077,
+          0.455584,
+          -0.017672,
+          -0.003679,
+          0.010309,
+          0.044983,
+          0.126029
+        ],
+        "sigma": 0.3641,
+        "r2_log": 0.293,
+        "cv": {
+          "r2_log": 0.288,
+          "mape": 0.311,
+          "median_ape": 0.203
+        }
+      },
+      "peak_summer_kw": {
+        "coef": [
+          -0.710199,
+          0.393693,
+          -0.024991,
+          -0.008556,
+          0.005813,
+          0.006083,
+          0.022094
+        ],
+        "sigma": 0.4804,
+        "r2_log": 0.121,
+        "cv": {
+          "r2_log": 0.115,
+          "mape": 0.463,
+          "median_ape": 0.259
+        }
+      },
+      "peak_winter_kw": {
+        "coef": [
+          -0.88906,
+          0.371039,
+          -0.016447,
+          -0.00733,
+          -0.02201,
+          -0.003445,
+          0.063062
+        ],
+        "sigma": 0.6239,
+        "r2_log": 0.064,
+        "cv": {
+          "r2_log": 0.055,
+          "mape": 0.67,
+          "median_ape": 0.333
+        }
+      }
+    }
+  },
+  "monthly_shares": {
+    "RESLOWR": [
+      0.04864,
+      0.04534,
+      0.05527,
+      0.06602,
+      0.09594,
+      0.11962,
+      0.13258,
+      0.13912,
+      0.10994,
+      0.08218,
+      0.05384,
+      0.05151
+    ],
+    "RESHIWR": [
+      0.08606,
+      0.0726,
+      0.05962,
+      0.06205,
+      0.08417,
+      0.10069,
+      0.11119,
+      0.11699,
+      0.09364,
+      0.07468,
+      0.06194,
+      0.07637
+    ]
+  }
+}

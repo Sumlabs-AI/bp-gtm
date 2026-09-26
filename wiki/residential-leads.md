@@ -44,6 +44,18 @@ Each lead also gets an **estimated annual grid value** (`app/leads/value.py`):
 
 It's a screening estimate of energy-trading value (after losses, $0.02/kWh wear and a 20% backup reserve): no retail margin, fees or ancillary services yet. In the Harris pilot every lead is in LZ_HOUSTON, so the zone doesn't change the ranking yet; it will once other TDSPs' counties are added (40 kWh, average year 2019–2025: Houston $891, North $845, West $1,058, i.e. West ≈ +19%, North ≈ −5% vs Houston; over only the last 12 months to 2026-09-20 North looked +28% and West +59%, another reason not to rank on one year). Years swing a lot: a 40 kWh battery in Houston would have made $310 in 2025 and $1,741 in 2023, and the last 12 months ($233) are among the quietest, which is why leads are valued on the average year and show the range.
 
+## Estimated consumption
+
+Each lead gets a **property-based estimate of the home's electricity use** (`leads.consumption`, `leads.annual_kwh`; `app/leads/consumption.py`): annual kWh (median) with a P10–P90 range, 12 monthly values for a typical year, summer/winter peak kW for this home (its highest day, not a diversified class average) and P(electric heat). v1 uses no bill or meter data. It's display-only: it doesn't change the fit score, sizing or priority value.
+
+- **Annual kWh and peaks:** weighted log-linear fits on NREL ResStock 2025.1 (AMY2018) simulations of Harris County single-family detached homes (3,922 samples), one set for electric-heat homes and one for the rest. Inputs, from HCAD: heated sqft, year built, stories (≥1.5 = two-story), bedrooms (clipped 1–5), pool. Missing inputs take typical values. The level is scaled to EIA RECS 2020 billed kWh for Texas hot-humid single-family homes (15,577 kWh vs ResStock's 17,851: factor 0.873). ERCOT's average COAST residential premise (15,934 kWh, 2019–2025) agrees.
+- **Heating fuel** isn't on any per-home public record, the most useful variable we're missing. P(electric heat) = the Census ACS 2024 5-year share of electric-heated homes in the home's block group (B25040, files cached in `data/raw/census/` by `app/leads/census.py`), shifted in log-odds so the county average equals ResStock's owner-occupied single-family share (34.1%). ACS counts apartments, which in Houston are more often electric. The annual estimate mixes the two fits by that probability, so the range widens when the fuel is uncertain.
+- **Monthly shape:** ERCOT backcasted load profiles for the COAST weather zone, averaged 2019–2025: RESHIWR (winter-peaking) for electric heat, RESLOWR for the rest, weighted by each fuel's share of expected use.
+- **Accuracy (be honest in the UI):** out-of-fold within ResStock, R² ≈ 0.3 on log annual kWh, median error ≈ 20%, MAPE ≈ 31%; peaks are weaker (R² 0.06–0.24). Real homes will be worse: plan on ±30–40% per home, while area totals land within ~5–10%. v2/v3 (real meter data via Smart Meter Texas, a heating-fuel append) are in [ideas/home-consumption-from-meter-data.md](../ideas/home-consumption-from-meter-data.md).
+- **Solar homes:** the estimate is the home's total consumption, not the grid import a meter shows.
+
+Refit (e.g. for a new ResStock or RECS release) with `uv run python -m scripts.fit_consumption_model` from `apps/api`. It downloads ~450 MB once into `data/raw/consumption_model/`, prints fit quality and writes `app/leads/consumption_model.json` (committed). Then re-run `score`.
+
 ## What counts as "new"
 
 The first load of each source is the **baseline**: nothing in it is announced as new. After that, a lead's `trigger`/`triggered_at` is its latest event: new solar/EV/new-home permit, new electric meter, new owner, or newly eligible. A trigger is kept until a newer one replaces it, and the reviewer's `status` (new/reviewed/qualified/excluded) survives re-scoring. `GET /leads?new_only=true` = triggered in the last 7 days.
@@ -90,3 +102,4 @@ The `worker` compose service runs the weekly job every Sunday 03:00 Central: ERC
 - Terms: HCAD and Houston permit data have no explicit reuse license; confidential owners must stay excluded. Get Base legal sign-off before exporting leads outside the team.
 - Utility outage maps (CenterPoint/Oncor) are non-commercial: don't scrape them.
 - Co-ops Base serves (CoServ, GVEC, Farmers) aren't in the ERCOT extract; they need another eligibility source.
+- ResStock is listed as CC BY 4.0 on OpenEI, but its 2025 README says "provided for research purposes only". It's fine for this internal tool; get Base legal to confirm before showing estimates to customers.

@@ -16,6 +16,7 @@ from sqlalchemy.dialects.postgresql import insert
 
 from app.db import engine
 from app.leads.config import BASE_TDSPS, LeadScoringConfig
+from app.leads.consumption import electric_heat_prob, estimate, load_model
 from app.leads.value import assign_zones, recommend_battery, zone_battery_values
 from app.models import Lead
 
@@ -67,7 +68,7 @@ def score_leads(now: datetime, cfg: LeadScoringConfig, baseline: bool = False) -
     homes = _read(
         """
         SELECT id AS property_id, address_key, market_value, heated_sqft, year_built,
-               owner_changed_at, has_solar, has_pool, lat, lon
+               owner_changed_at, has_solar, has_pool, lat, lon, bedrooms, stories
         FROM properties
         WHERE is_single_family AND homestead AND NOT confidential AND address_key IS NOT NULL
         """
@@ -125,6 +126,7 @@ def score_leads(now: datetime, cfg: LeadScoringConfig, baseline: bool = False) -
     eligible["score"] = sum(drivers[k] * w for k, w in cfg.weights.items()) / total
     eligible["load_zone"] = assign_zones(eligible)
     battery_values = zone_battery_values()
+    usage = _consumption(eligible)
 
     had_leads = not existing.empty and not baseline
     prior = existing.set_index("property_id")
@@ -212,6 +214,8 @@ def score_leads(now: datetime, cfg: LeadScoringConfig, baseline: bool = False) -
                 "sizing_reason": sizing_reason,
                 "value": value,
                 "expected_value": None if value is None else round(score / 100 * value, 0),
+                "consumption": usage[i],
+                "annual_kwh": usage[i]["annual_kwh"],
                 "drivers": {
                     k: {"score": scores[k], "value": _driver_value(k, home, scores)}
                     for k in cfg.weights
@@ -229,6 +233,24 @@ def score_leads(now: datetime, cfg: LeadScoringConfig, baseline: bool = False) -
     window = now - timedelta(days=cfg.new_window_days)
     new = sum(1 for r in rows if r["triggered_at"] is not None and r["triggered_at"] >= window)
     return summary | {"new": new}
+
+
+def _consumption(homes: pd.DataFrame) -> dict:
+    """Estimated electricity use per home (app/leads/consumption.py), as JSON-ready dicts."""
+    model = load_model()
+    usage = estimate(homes, electric_heat_prob(homes, model), model)
+    return {
+        i: {
+            "annual_kwh": float(r.annual_kwh),
+            "low_kwh": float(r.low_kwh),
+            "high_kwh": float(r.high_kwh),
+            "monthly_kwh": [float(v) for v in r.monthly_kwh],
+            "peak_summer_kw": float(r.peak_summer_kw),
+            "peak_winter_kw": float(r.peak_winter_kw),
+            "electric_heat_prob": float(r.electric_heat_prob),
+        }
+        for i, r in zip(usage.index, usage.itertuples(index=False), strict=True)
+    }
 
 
 def _driver_value(key: str, home, scores: dict[str, float]):
@@ -274,6 +296,8 @@ def _write_leads(rows: list[dict]) -> None:
                                 "sizing_reason",
                                 "value",
                                 "expected_value",
+                                "consumption",
+                                "annual_kwh",
                             )
                         },
                         "triggered_at": case(
