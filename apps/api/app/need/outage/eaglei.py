@@ -12,7 +12,7 @@ import duckdb
 import pandas as pd
 from pydantic import BaseModel
 
-from app.need.outage.events import SAMPLE, EventRules, detect_events
+from app.need.outage.events import SAMPLE_HOURS, EventRules, detect_events
 from app.need.percentile import percentile_rank
 
 FIGSHARE_ARTICLE = "https://api.figshare.com/v2/articles/24237376"
@@ -35,13 +35,13 @@ def normalize(csv_paths: list[Path], out: Path) -> int:
                    CAST(column3 AS INTEGER) AS customers_out
             FROM read_csv('{path}', header = true, all_varchar = true,
                           names = ['column0', 'column1', 'column2', 'column3', 'column4'],
-                          null_padding = true, ignore_errors = true)
+                          null_padding = true)
             WHERE starts_with(lpad(CAST(column0 AS VARCHAR), 5, '0'), '{TEXAS_FIPS_PREFIX}')"""
         for path in csv_paths
     ]
     query = " UNION ALL ".join(selects) + " ORDER BY fips, ts"
-    con = _connect()
-    con.execute(f"COPY ({query}) TO '{out}' (FORMAT parquet, COMPRESSION zstd)")
+    with _connect() as con:  # paths are ours (data/raw, data/derived), not user input
+        con.execute(f"COPY ({query}) TO '{out}' (FORMAT parquet, COMPRESSION zstd)")
     return row_count(out)
 
 
@@ -60,28 +60,32 @@ def modeled_customers(mcc_csv: Path) -> dict[str, int]:
 
 
 def row_count(parquet: Path) -> int:
-    return _connect().execute(f"SELECT count(*) FROM '{parquet}'").fetchone()[0]
+    with _connect() as con:
+        return con.execute("SELECT count(*) FROM read_parquet(?)", [str(parquet)]).fetchone()[0]
 
 
-def county_series(parquet: Path, fips: str, since=None, until=None) -> pd.DataFrame:
-    """One county's `ts` (UTC), `customers_out` rows, optionally within [since, until)."""
-    sql = f"SELECT ts::TIMESTAMP AS ts, customers_out FROM '{parquet}' WHERE fips = ?"
-    params: list = [fips]
-    if since is not None:
+def county_series(
+    parquet: Path, fips: str, window: tuple[pd.Timestamp, pd.Timestamp] | None = None
+) -> pd.DataFrame:
+    """One county's `ts` (UTC), `customers_out` rows, optionally within [start, end)."""
+    sql = "SELECT ts::TIMESTAMP AS ts, customers_out FROM read_parquet(?) WHERE fips = ?"
+    params: list[object] = [str(parquet), fips]
+    if window is not None:
         sql += " AND ts::TIMESTAMP >= ? AND ts::TIMESTAMP < ?"
-        params += [pd.Timestamp(since).tz_localize(None), pd.Timestamp(until).tz_localize(None)]
-    series = _connect().execute(sql, params).df()
+        params += [pd.Timestamp(t).tz_convert("UTC").tz_localize(None) for t in window]
+    with _connect() as con:
+        series = con.execute(sql, params).df()
     series["ts"] = pd.to_datetime(series["ts"]).dt.tz_localize("UTC")
     return series
 
 
-def _window_metrics(series: pd.DataFrame, events: pd.DataFrame, customers: int, since) -> dict:
+def _window_metrics(
+    series: pd.DataFrame, events: pd.DataFrame, customers: int, since: pd.Timestamp
+) -> dict[str, float | int]:
     valid = series[(series["ts"] >= since) & (series["customers_out"] <= customers)]
     in_window = events[events["start"] >= since]
     return {
-        "hours_per_customer": float(valid["customers_out"].sum())
-        * (SAMPLE / pd.Timedelta(hours=1))
-        / customers,
+        "hours_per_customer": float(valid["customers_out"].sum()) * SAMPLE_HOURS / customers,
         "outage_events": len(in_window),
         "major_outage_events": int(in_window["major"].sum()),
         "peak_pct_out": float(in_window["peak_customers_out"].max() / customers)
@@ -100,17 +104,21 @@ def county_features(
     the Texas percentile of 5-year outage hours per customer = Observed Outage Exposure (null
     outside the Reference Population)."""
     config = config or ExposureConfig()
-    con = _connect()
-    last_ts = con.execute(f"SELECT max(ts)::TIMESTAMP FROM '{parquet}'").fetchone()[0]
-    data_through = last_ts.date()
+    with _connect() as con:
+        last_ts = con.execute("SELECT max(ts)::TIMESTAMP FROM read_parquet(?)", [str(parquet)])
+        data_through = last_ts.fetchone()[0].date()
+        names = dict(
+            con.execute(
+                "SELECT DISTINCT fips, county FROM read_parquet(?)", [str(parquet)]
+            ).fetchall()
+        )
     window_end = pd.Timestamp(data_through + timedelta(days=1), tz="UTC")
     since_5y = window_end - pd.DateOffset(years=config.window_years)
     since_365d = window_end - pd.Timedelta(days=365)
-    names = dict(con.execute(f"SELECT DISTINCT fips, county FROM '{parquet}'").fetchall())
 
     rows = []
     for fips, n in sorted(customers.items()):
-        series = county_series(parquet, fips, since_5y, window_end)
+        series = county_series(parquet, fips, (since_5y, window_end))
         years = int(series["ts"].dt.year.nunique())
         row = {
             "county_fips": fips,

@@ -51,8 +51,13 @@ Cell ─┬─ county ── EAGLE-I 5y ── Texas percentile ── Observed 
   - Features are computed over 365 days and 5 years, ending at **Data Through** (the last EAGLE-I timestamp), not today.
   - **Score = Texas percentile of 5-year outage hours per customer, and nothing else.** That metric is size-normalized: it's a county-level SAIDI, and it cross-checks with EIA (below). Major-event counts are *not* scored. Across Texas they fall as county size grows (rank correlation −0.50 with customers): small counties log ~15 "major" events a year, because one feeder fault crosses 5% of 1,000 customers. So Major Outage Events, peak share out, last observed major outage and Data Through are **explanatory history for Baseline Need only**. "Why now" is reserved for Live Need signals.
   - Event duration is county-level ("someone in the county was out"), never one customer's outage.
-- **Utility Reliability Need** (`app/need/outage/eia.py`). EIA-861 (public domain): Texas percentile of the 5-year mean SAIDI **without** major event days (normal-conditions reliability). If fewer years exist, the ones available are used (`years_used`). SAIDI/SAIFI with major events are kept as context.
-- **Outage Need Component** (`component.py`) = mean of the two. If the utility is unknown, it's Observed Outage Exposure alone, with a note. **The equal weights are a placeholder, not a validated model.**
+- **Utility Reliability Need** (`app/need/outage/eia.py`). EIA-861 (public domain): Texas percentile of the 5-year mean SAIDI **without** major event days (normal-conditions reliability). If fewer years exist, the ones available are used (`years_used`). SAIDI/SAIFI with major events are kept as context, and the raw yearly values are stored in `utility_reliability.yearly`. Only final releases are used (early releases are `f861<year>er.zip`).
+- **Outage Need Component** (`component.py`) = mean of the sub-scores that exist, each fallback with a note:
+  - Utility unknown, or known but unranked: Observed Outage Exposure alone.
+  - County outside the Reference Population: Utility Reliability Need alone.
+  - Neither: null.
+
+  **The equal weights are a placeholder, not a validated model.** Thresholds and the utility map live in `app/need/config.py`.
 - **Cell → county / utility.** County comes from `cells.county_fips`, set by `enrich` from the Market county files using the same center rule. Utility comes from config, with no territory layer, because HIFLD territories are license-restricted:
   - `LZ_AEN` → Austin Energy (1015)
   - Harris → CenterPoint (8901)
@@ -73,6 +78,7 @@ Cell ─┬─ county ── EAGLE-I 5y ── Texas percentile ── Observed 
 
 - Pipeline: 5 files, 6.3 GB CSV → 52 MB Texas Parquet (13.4M rows). `compute` takes ~5–9 s. 253 of 254 counties are in the Reference Population; 68 of 72 utilities are ranked.
 - Validation: Harris majors include Uri (2021-02-15, peak 24.9%), the Derecho (2024-05-16, 27.5%) and Beryl (2024-07-08, 90.9%, 75 h/customer). Travis: Uri (42.7%) and the Feb 2023 ice storm (28.8%).
+- Outage Events per year (major in brackets): Harris 2021 117 (2) · 2022 77 (0) · 2023 146 (0) · 2024 283 (5) · 2025 397 (2). Travis 2021 122 (4) · 2022 152 (0) · 2023 174 (1) · 2024 185 (0) · 2025 165 (1). `outage validate` prints all of this.
 - Cross-check, minutes per customer with major events (EAGLE-I county vs EIA SAIDI):
 
   | Year | Harris | CenterPoint | Travis | Austin Energy |

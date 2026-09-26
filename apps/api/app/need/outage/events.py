@@ -11,6 +11,7 @@ import pandas as pd
 from pydantic import BaseModel
 
 SAMPLE = pd.Timedelta(minutes=15)
+SAMPLE_HOURS = SAMPLE / pd.Timedelta(hours=1)  # each sample stands for 15 minutes
 COLUMNS = ["start", "end", "samples", "peak_customers_out", "customer_hours", "major"]
 
 
@@ -47,7 +48,7 @@ def detect_events(series: pd.DataFrame, customers: int, rules: EventRules) -> pd
     )
     events = events[events["samples"] > 1].reset_index(drop=True)
     events["end"] = events["end"] + SAMPLE
-    events["customer_hours"] = events["customer_hours"] * (SAMPLE / pd.Timedelta(hours=1))
+    events["customer_hours"] = events["customer_hours"] * SAMPLE_HOURS
     events["major"] = (events["peak_customers_out"] >= rules.major_peak_share * customers) | (
         events["customer_hours"] >= rules.major_hours_per_customer * customers
     )

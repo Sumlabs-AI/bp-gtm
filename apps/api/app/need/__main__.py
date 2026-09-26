@@ -80,6 +80,12 @@ def outage(action: str) -> None:
             f"\n{'Duration:':<24}{time.perf_counter() - started:>11.1f}s"
         )
     else:
+        from app.need.config import UTILITY_BY_COUNTY, UTILITY_BY_LOAD_ZONE
+
+        utility_by_market = {
+            "48201": UTILITY_BY_COUNTY["48201"],
+            "48453": UTILITY_BY_LOAD_ZONE["LZ_AEN"],
+        }
         for market in MARKETS:
             events = pipeline.major_events(market.geoid)
             print(f"\n{market.label}: {len(events)} Major Outage Events")
@@ -88,11 +94,10 @@ def outage(action: str) -> None:
                     f"  {e.start:%Y-%m-%d %H:%M} → {e.end:%Y-%m-%d %H:%M}  "
                     f"peak {e.peak_pct_out:6.1%}  {e.hours_per_customer:5.2f} h/customer"
                 )
-            hours = pipeline.yearly_hours_per_customer(market.geoid)
-            print(
-                "  EAGLE-I minutes/customer by year: "
-                + ", ".join(f"{y}: {h * 60:,.0f}" for y, h in hours.items())
-            )
+            table = pipeline.yearly_events(market.geoid)
+            table["eaglei_min_per_customer"] = pipeline.yearly_hours_per_customer(market.geoid) * 60
+            table["eia_saidi_with_med"] = pipeline.utility_saidi(utility_by_market[market.geoid])
+            print(table.round(0).astype("Int64").to_string())
 
 
 def export(out: Path) -> None:

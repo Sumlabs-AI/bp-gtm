@@ -9,7 +9,13 @@ from sqlalchemy.orm import Session
 from app.models import CountyOutageFeatures, UtilityReliability
 
 
-def _replace(db: Session, model, df: pd.DataFrame, now: datetime) -> int:
+def _replace(
+    db: Session,
+    model: type[CountyOutageFeatures] | type[UtilityReliability],
+    df: pd.DataFrame,
+    now: datetime,
+) -> int:
+    """Replace every row of a feature table; `computed_at` is stamped with `now`."""
     columns = [c.name for c in model.__table__.columns if c.name != "computed_at"]
     rows = df[columns].astype(object).where(df[columns].notna(), None).to_dict("records")
     db.execute(delete(model))

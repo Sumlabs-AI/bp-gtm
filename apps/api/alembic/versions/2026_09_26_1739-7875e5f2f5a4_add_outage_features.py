@@ -9,6 +9,7 @@ from typing import Sequence, Union
 
 from alembic import op
 import sqlalchemy as sa
+from sqlalchemy.dialects import postgresql
 
 
 # revision identifiers, used by Alembic.
@@ -54,6 +55,7 @@ def upgrade() -> None:
     sa.Column('saidi_w_med_5y', sa.Float(), nullable=True),
     sa.Column('saifi_w_med_5y', sa.Float(), nullable=True),
     sa.Column('reliability_need', sa.Float(), nullable=True),
+    sa.Column('yearly', postgresql.JSONB(astext_type=sa.Text()), nullable=False),
     sa.Column('computed_at', sa.DateTime(timezone=True), nullable=False),
     sa.PrimaryKeyConstraint('utility_id', name=op.f('pk_utility_reliability'))
     )

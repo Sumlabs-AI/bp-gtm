@@ -10,23 +10,25 @@ from datetime import date
 from sqlalchemy.orm import Session
 
 from app.models import Cell, CountyOutageFeatures, UtilityReliability
+from app.need.config import UTILITY_BY_COUNTY, UTILITY_BY_LOAD_ZONE
 from app.need.outage.store import load_features
 
-# Cell -> EIA utility id from data we already have (no licensed territory layer):
-# Austin Energy's territory is LZ_AEN; Harris County is CenterPoint. Anything else: unknown.
-UTILITY_BY_LOAD_ZONE = {"LZ_AEN": 1015}  # Austin Energy
-UTILITY_BY_COUNTY = {"48201": 8901}  # CenterPoint Energy (Harris)
-UNKNOWN_UTILITY_NOTE = "Utility unknown: score uses Observed Outage Exposure only"
+UNKNOWN_UTILITY = "Utility unknown: score uses Observed Outage Exposure only"
+UNRANKED_UTILITY = (
+    "Utility has no Texas reliability percentile: score uses Observed Outage Exposure only"
+)
+NO_EXPOSURE = "County outside the Reference Population: score uses Utility Reliability Need only"
 
 
 def utility_for(cell: Cell) -> int | None:
+    """Load Zone first (Austin Energy's territory), then county."""
     return UTILITY_BY_LOAD_ZONE.get(cell.load_zone) or UTILITY_BY_COUNTY.get(cell.county_fips)
 
 
 def score(exposure: float | None, reliability: float | None) -> float | None:
-    if exposure is None:
-        return None
-    return round(exposure if reliability is None else (exposure + reliability) / 2, 1)
+    """Mean of the sub-scores that exist; None when neither does."""
+    present = [s for s in (exposure, reliability) if s is not None]
+    return round(sum(present) / len(present), 1) if present else None
 
 
 def _observed(c: CountyOutageFeatures, today: date) -> dict:
@@ -62,6 +64,7 @@ def _reliability(u: UtilityReliability) -> dict:
         "score": u.reliability_need,
         "utility": {"id": u.utility_id, "name": u.utility_name},
         "source": "EIA-861",
+        "dataThrough": f"{u.data_through_year}-12-31",
         "dataThroughYear": u.data_through_year,
         "yearsUsed": u.years_used,
         "metrics": {
@@ -69,6 +72,10 @@ def _reliability(u: UtilityReliability) -> dict:
             "saifiWithoutMed5y": u.saifi_wo_med_5y,
             "saidiWithMed5y": u.saidi_w_med_5y,
             "saifiWithMed5y": u.saifi_w_med_5y,
+        },
+        "yearly": {
+            year: {"saidiWithoutMed": v["saidi_wo_med"], "saidiWithMed": v["saidi_w_med"]}
+            for year, v in u.yearly.items()
         },
     }
 
@@ -84,18 +91,24 @@ def outage_components(db: Session, cells: list[Cell], today: date) -> dict[str, 
     result: dict[str, dict | None] = {}
     for cell in cells:
         county = counties.get(cell.county_fips)
-        if county is None:
+        utility_id = utility_for(cell)
+        utility = utilities.get(utility_id)
+        if county is None and utility is None:
             result[cell.h3_index] = None
             continue
-        utility = utilities.get(utility_for(cell))
+        observed = _observed(county, today) if county else None
         reliability = _reliability(utility) if utility else None
-        exposure = county.observed_exposure
+        exposure = observed["score"] if observed else None
+        need = reliability["score"] if reliability else None
+        notes = []
+        if exposure is None:
+            notes.append(NO_EXPOSURE)
+        if need is None:
+            notes.append(UNRANKED_UTILITY if utility else UNKNOWN_UTILITY)
         result[cell.h3_index] = {
-            "score": score(exposure, reliability["score"] if reliability else None),
-            "observedOutageExposure": _observed(county, today),
+            "score": score(exposure, need),
+            "observedOutageExposure": observed,
             "utilityReliabilityNeed": reliability,
-            "notes": []
-            if reliability and reliability["score"] is not None
-            else [UNKNOWN_UTILITY_NOTE],
+            "notes": notes,
         }
     return result

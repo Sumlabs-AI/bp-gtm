@@ -2,6 +2,7 @@ from datetime import date, datetime
 
 from geoalchemy2 import Geometry
 from sqlalchemy import Boolean, Date, DateTime, Float, Integer, SmallInteger, String
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db import Base
@@ -74,4 +75,6 @@ class UtilityReliability(Base):
     saidi_w_med_5y: Mapped[float | None] = mapped_column(Float)  # incl. major event days
     saifi_w_med_5y: Mapped[float | None] = mapped_column(Float)
     reliability_need: Mapped[float | None] = mapped_column(Float)  # Texas percentile
+    # Raw yearly values behind the means: {"2024": {"saidi_wo_med": 150.2, "saidi_w_med": …}}.
+    yearly: Mapped[dict] = mapped_column(JSONB)
     computed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))

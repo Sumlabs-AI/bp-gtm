@@ -18,7 +18,6 @@ from app.need.markets import county_for_points
 
 @dataclass
 class EnrichmentReport:
-    attribute: str
     processed: int
     assigned: int
     unknown: int
@@ -43,7 +42,6 @@ def _enrich(
         db.execute(update(Cell), rows.to_dict("records"))
     counts = Counter(v for v in cells["value"] if v is not None)
     return EnrichmentReport(
-        attribute=attribute,
         processed=len(cells),
         assigned=sum(counts.values()),
         unknown=len(cells) - sum(counts.values()),

@@ -57,6 +57,7 @@ def utility(uid: int, name: str, need: float) -> dict:
         "saidi_w_med_5y": 1500.0,
         "saifi_w_med_5y": 2.0,
         "reliability_need": need,
+        "yearly": {"2024": {"saidi_wo_med": 150.0, "saidi_w_med": 1500.0}},
     }
 
 
@@ -144,3 +145,45 @@ def test_no_features_means_no_outage_component(client):
         "features"
     ][0]
     assert feature["properties"]["outageNeed"] is None
+
+
+def test_missing_county_exposure_falls_back_to_utility_reliability(client):
+    # Harris outside the Reference Population (no percentile), CenterPoint ranked.
+    with SessionLocal() as db:
+        seed_polygon(db, square(*HOUSTON))
+        enrich_load_zones(db)
+        enrich_counties(db)
+        now = datetime.now(UTC)
+        save_county_features(db, pd.DataFrame([county("48201", "Harris", None, None)]), now)
+        save_utility_reliability(db, pd.DataFrame([utility(8901, "CenterPoint Energy", 74.0)]), now)
+        db.commit()
+    component = outage(client, *HOUSTON)
+    assert component["score"] == 74.0
+    assert component["observedOutageExposure"]["score"] is None
+    assert component["notes"] == [
+        "County outside the Reference Population: score uses Utility Reliability Need only"
+    ]
+
+
+def test_known_but_unranked_utility_is_not_called_unknown(client):
+    with SessionLocal() as db:
+        seed_polygon(db, square(*HOUSTON))
+        enrich_load_zones(db)
+        enrich_counties(db)
+        now = datetime.now(UTC)
+        save_county_features(db, pd.DataFrame([county("48201", "Harris", 94.0, LAST_MAJOR)]), now)
+        unranked = {**utility(8901, "CenterPoint Energy", 0.0), "reliability_need": None}
+        save_utility_reliability(db, pd.DataFrame([unranked]), now)
+        db.commit()
+    component = outage(client, *HOUSTON)
+    assert component["score"] == 94.0
+    assert component["utilityReliabilityNeed"]["utility"]["id"] == 8901
+    assert component["notes"] == [
+        "Utility has no Texas reliability percentile: score uses Observed Outage Exposure only"
+    ]
+
+
+def test_utility_detail_includes_yearly_values_and_data_through(client, cells):
+    reliability = outage(client, *HOUSTON)["utilityReliabilityNeed"]
+    assert reliability["dataThrough"] == "2024-12-31"
+    assert reliability["yearly"] == {"2024": {"saidiWithoutMed": 150.0, "saidiWithMed": 1500.0}}

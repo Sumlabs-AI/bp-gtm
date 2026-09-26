@@ -12,17 +12,15 @@ import httpx
 import pandas as pd
 
 from app.db import SessionLocal
+from app.need.config import outage_events as rules
+from app.need.config import outage_exposure as exposure
 from app.need.outage import eaglei, eia
-from app.need.outage.eaglei import ExposureConfig
-from app.need.outage.events import EventRules, detect_events
+from app.need.outage.events import SAMPLE_HOURS, detect_events
 from app.need.outage.store import save_county_features, save_utility_reliability
 
 DATA = Path(__file__).resolve().parents[3] / "data"
 RAW_EAGLEI, RAW_EIA = DATA / "raw/eaglei", DATA / "raw/eia861"
 PARQUET = DATA / "derived/eaglei_tx.parquet"
-
-rules = EventRules()
-exposure = ExposureConfig()
 
 
 def _fetch(client: httpx.Client, url: str, path: Path, size: int | None = None) -> bool:
@@ -50,6 +48,7 @@ def download() -> None:
             new = _fetch(client, f["download_url"], RAW_EAGLEI / f["name"], f["size"])
             print(f"EAGLE-I {f['name']}: {'downloaded' if new else 'cached'}")
 
+        # Final releases only: early-release files are named f861<year>er.zip and never match.
         found = 0
         for year in range(date.today().year - 1, date.today().year - 10, -1):
             path = RAW_EIA / f"f861{year}.zip"
@@ -62,7 +61,7 @@ def download() -> None:
                     print(f"EIA-861 {year}: {'downloaded' if new else 'cached'}")
                     found += 1
                     break
-                except httpx.HTTPStatusError:
+                except httpx.HTTPError:  # missing year, or a transient network failure
                     continue
             if found == exposure.window_years:
                 break
@@ -85,6 +84,9 @@ class ComputeReport:
 
 def compute() -> ComputeReport:
     csvs = sorted(RAW_EAGLEI.glob("eaglei_outages_*.csv"))[-exposure.window_years :]
+    zips = sorted(RAW_EIA.glob("f861*.zip"))[-exposure.window_years :]
+    if not csvs or not zips:
+        raise SystemExit("No EAGLE-I/EIA-861 files: run `python -m app.need outage download`.")
     if not PARQUET.exists() or PARQUET.stat().st_mtime < max(p.stat().st_mtime for p in csvs):
         PARQUET.parent.mkdir(parents=True, exist_ok=True)
         print(f"Normalizing {len(csvs)} EAGLE-I files to Texas Parquet…", flush=True)
@@ -92,7 +94,6 @@ def compute() -> ComputeReport:
     customers = eaglei.modeled_customers(RAW_EAGLEI / "MCC.csv")
     counties = eaglei.county_features(PARQUET, customers, rules, exposure)
 
-    zips = sorted(RAW_EIA.glob("f861*.zip"))[-exposure.window_years :]
     utilities = eia.utility_reliability(
         pd.concat([eia.parse_reliability(z) for z in zips]), exposure.window_years
     )
@@ -128,4 +129,19 @@ def yearly_hours_per_customer(fips: str) -> pd.Series:
     customers = eaglei.modeled_customers(RAW_EAGLEI / "MCC.csv")[fips]
     series = eaglei.county_series(PARQUET, fips)
     series = series[series["customers_out"] <= customers]
-    return series.groupby(series["ts"].dt.year)["customers_out"].sum() * 0.25 / customers
+    return series.groupby(series["ts"].dt.year)["customers_out"].sum() * SAMPLE_HOURS / customers
+
+
+def yearly_events(fips: str) -> pd.DataFrame:
+    """Outage Events and Major Outage Events per calendar year."""
+    customers = eaglei.modeled_customers(RAW_EAGLEI / "MCC.csv")[fips]
+    events = detect_events(eaglei.county_series(PARQUET, fips), customers, rules)
+    by_year = events.groupby(events["start"].dt.year)
+    return pd.DataFrame({"events": by_year.size(), "major": by_year["major"].sum()})
+
+
+def utility_saidi(utility_id: int) -> pd.Series:
+    """EIA SAIDI with major events, minutes per customer by year (for the cross-check)."""
+    zips = sorted(RAW_EIA.glob("f861*.zip"))[-exposure.window_years :]
+    yearly = pd.concat([eia.parse_reliability(z) for z in zips])
+    return yearly[yearly["utility_id"] == utility_id].set_index("year")["saidi_w_med"]

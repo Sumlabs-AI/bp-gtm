@@ -37,7 +37,7 @@ A human-readable reason attached to a Cell's Need (e.g. "Severe weather expected
 _Avoid_: alert, reason
 
 **Outage Need Component**:
-The outage-derived part of Need Score (frequency, duration, recency, customers affected). Combines Observed Outage Exposure and Utility Reliability Need.
+The outage-derived part of Need Score: the mean of Observed Outage Exposure and Utility Reliability Need, or whichever of the two exists.
 _Avoid_: outage score
 
 **Observed Outage Exposure**:

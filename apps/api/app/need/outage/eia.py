@@ -60,6 +60,10 @@ def parse_reliability(zip_path: Path, state: str = "TX") -> pd.DataFrame:
     ).reset_index(drop=True)
 
 
+def _num(value: float) -> float | None:
+    return None if pd.isna(value) else float(value)
+
+
 def utility_reliability(yearly: pd.DataFrame, window_years: int = 5) -> pd.DataFrame:
     """Per utility: means over the last `window_years` years present in the data (fewer if a
     utility reported fewer, counted in years_used), and Utility Reliability Need = Texas
@@ -74,6 +78,14 @@ def utility_reliability(yearly: pd.DataFrame, window_years: int = 5) -> pd.DataF
         **{f"{m}_5y": (m, "mean") for m in METRICS},
         years_used=("saidi_wo_med", "count"),
     ).reset_index()
+    yearly = {
+        uid: {
+            str(r.year): {"saidi_wo_med": _num(r.saidi_wo_med), "saidi_w_med": _num(r.saidi_w_med)}
+            for r in rows.itertuples()
+        }
+        for uid, rows in grouped
+    }
+    result["yearly"] = result["utility_id"].map(yearly)
     result["data_through_year"] = last
     result["reliability_need"] = percentile_rank(result["saidi_wo_med_5y"])
     return result

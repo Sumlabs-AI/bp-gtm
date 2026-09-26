@@ -1,4 +1,4 @@
-from datetime import date
+from datetime import UTC, datetime
 from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -46,7 +46,7 @@ def list_cells(db: DB, bbox: Annotated[str, Query(description="west,south,east,n
     cells = cells_in_viewport(db, *_bounds(bbox), limit=need.viewport_max_cells)
     if cells is None:
         raise HTTPException(400, "Viewport contains too many H3 cells. Zoom in to continue.")
-    outage = outage_components(db, cells, date.today())
+    outage = outage_components(db, cells, datetime.now(UTC).date())
     return {
         "type": "FeatureCollection",
         "features": [
@@ -70,7 +70,7 @@ def cell_detail(db: DB, h3_index: str):
     cell = get_cell(db, h3_index) if geo.is_cell(h3_index) else None
     if cell is None:
         raise HTTPException(404, f"Unknown cell {h3_index}")
-    outage = outage_components(db, [cell], date.today())[cell.h3_index]
+    outage = outage_components(db, [cell], datetime.now(UTC).date())[cell.h3_index]
     return CellDetail(
         h3=cell.h3_index,
         resolution=cell.resolution,

@@ -26,8 +26,8 @@ function Row({ label, value }: { label: string; value: React.ReactNode }) {
 }
 
 export function OutageBreakdown({ outage }: { outage: OutageComponent }) {
-  const observed = outage.observedOutageExposure
   const utility = outage.utilityReliabilityNeed
+  const observed = outage.observedOutageExposure
   return (
     <section className="flex flex-col gap-4 px-4 text-sm">
       <div className="flex items-center justify-between">
@@ -35,6 +35,7 @@ export function OutageBreakdown({ outage }: { outage: OutageComponent }) {
         <Score value={outage.score} />
       </div>
 
+      {observed && (
       <div className="flex flex-col gap-2 rounded-lg border p-3">
         <div className="flex items-center justify-between">
           <span className="font-medium">Observed Outage Exposure</span>
@@ -54,11 +55,14 @@ export function OutageBreakdown({ outage }: { outage: OutageComponent }) {
         <p className="text-xs">
           {observed.daysSinceLastObservedMajorOutage !== null
             ? `Last observed major outage: ${observed.daysSinceLastObservedMajorOutage} days ago`
-            : "No major outage observed in the last 5 years"}
+            : observed.yearsObserved > 0
+              ? "No major outage observed in the last 5 years"
+              : "No outage history for this county"}
           <span className="text-muted-foreground"> · history through {historyThrough(observed.dataThrough)}</span>
         </p>
         <p className="text-[11px] text-muted-foreground">{observed.source}</p>
       </div>
+      )}
 
       <div className="flex flex-col gap-2 rounded-lg border p-3">
         <div className="flex items-center justify-between">

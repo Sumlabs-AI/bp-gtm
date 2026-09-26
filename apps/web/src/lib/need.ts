@@ -32,7 +32,7 @@ export type CellDetail = {
 // Reliability Need (EIA-861), each a Texas percentile (0-100, higher = more need).
 export type OutageComponent = {
   score: number | null
-  observedOutageExposure: {
+  observedOutageExposure: null | {
     score: number | null
     county: { fips: string; name: string | null }
     source: string
@@ -58,8 +58,10 @@ export type OutageComponent = {
     score: number | null
     utility: { id: number; name: string }
     source: string
+    dataThrough: string
     dataThroughYear: number
     yearsUsed: number
+    yearly: Record<string, { saidiWithoutMed: number | null; saidiWithMed: number | null }>
     metrics: {
       saidiWithoutMed5y: number | null
       saifiWithoutMed5y: number | null
