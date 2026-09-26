@@ -15,8 +15,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "base-power-gtm",
-  description: "base-power-gtm",
+  title: { default: "Base Radar", template: "%s | Base Radar" },
+  description: "Residential lead prioritization and ERCOT grid context for Base Power.",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
