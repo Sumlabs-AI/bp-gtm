@@ -27,9 +27,10 @@ def gust(start: datetime, hours: int, mph: float, updated: datetime) -> dict:
         "properties": {
             "updateTime": updated.isoformat(),
             "windGust": {
+                "uom": "wmoUnit:km_h-1",
                 "values": [
                     {"validTime": f"{start.isoformat()}/PT{hours}H", "value": mph * 1.609344}
-                ]
+                ],
             },
         }
     }
@@ -107,7 +108,12 @@ def windy(at: datetime, updated: datetime) -> dict:
 
 
 def calm(updated: datetime) -> dict:
-    return {"properties": {"updateTime": updated.isoformat(), "windGust": {"values": []}}}
+    return {
+        "properties": {
+            "updateTime": updated.isoformat(),
+            "windGust": {"uom": "wmoUnit:km_h-1", "values": []},
+        }
+    }
 
 
 def test_signals_apply_to_res8_cells_through_their_res6_point():
@@ -169,7 +175,11 @@ def test_api_keeps_forecast_separate_from_alerts(client):
     assert (forecast["resolution"], forecast["sourceCell"]) == (6, H6)
     assert forecast["horizonHours"] == 48
     assert forecast["grid"]["stale"] is False
+    assert forecast["grid"]["fetchedAt"] is not None
+    assert forecast["grid"]["sourceUpdatedAt"] is not None  # NWS issue time, apart from ours
+    assert forecast["spc"] == {"fetchedAt": forecast["spc"]["fetchedAt"], "stale": False}
     [signal] = forecast["signals"]
+    assert signal["comparison"] == ">="
     assert (signal["source"], signal["condition"], signal["level"]) == ("nws_grid", "wind", "high")
     assert signal["threshold"] == 46 and signal["unit"] == "mph"
     assert 19 <= signal["leadHours"] <= 20
@@ -179,3 +189,25 @@ def test_api_keeps_forecast_separate_from_alerts(client):
     assert (props[H8]["activeForecastSignals"], props[H8]["forecastLevel"]) == (1, "high")
     assert (props[A8]["activeForecastSignals"], props[A8]["forecastLevel"]) == (0, None)
     assert props[H8]["activeAlerts"] == 0
+
+
+def test_active_means_starting_within_48_hours():
+    far = gust(T0 + timedelta(hours=50), 3, 62, T0)  # stored, but outside the horizon now
+    run(T0, {H6: far, A6: calm(T0)}, [])
+    assert active(T0) == []
+    assert active(T0 + timedelta(hours=3)) == [("nws_grid", "wind")]  # now within 48 h
+
+
+def test_unchanged_nws_forecast_is_not_rewritten():
+    run(T0, {H6: windy(T0, T0), A6: calm(T0)}, [])
+    run(T0 + timedelta(hours=1), {H6: windy(T0, T0), A6: calm(T0)}, [])  # same updateTime
+    with SessionLocal() as db:
+        assert db.query(ForecastSignal).filter(ForecastSignal.source == "nws_grid").count() == 1
+        point = db.get(ForecastPoint, H6)
+        assert point.last_success_at == T0 + timedelta(hours=1)  # but it was checked
+
+
+def test_per_point_errors_are_logged_on_the_run():
+    result = run(T0, {H6: RuntimeError("HTTP 500"), A6: calm(T0)}, [])
+    assert result.point_errors == {H6: "RuntimeError: HTTP 500"}
+    assert result.finished_at >= result.started_at

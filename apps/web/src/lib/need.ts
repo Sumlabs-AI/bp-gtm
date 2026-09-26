@@ -158,6 +158,7 @@ export type ForecastSignal = {
   source: "nws_grid" | "spc_outlook"
   condition: "wind" | "heat" | "cold" | "ice" | "severe_storm"
   level: "elevated" | "high"
+  comparison: ">=" | "<=" | null
   startAt: string
   endAt: string
   leadHours: number
@@ -168,13 +169,14 @@ export type ForecastSignal = {
   sourceUpdatedAt: string
 }
 
-export type Freshness = { fetchedAt: string | null; sourceUpdatedAt?: string | null; stale: boolean }
+export type SpcFreshness = { fetchedAt: string | null; stale: boolean }
+export type GridFreshness = SpcFreshness & { sourceUpdatedAt: string | null }
 
 export type ForecastFeed = {
   resolution: number
   sourceCell: string
   horizonHours: number
-  grid: Freshness
-  spc: Freshness
+  grid: GridFreshness
+  spc: SpcFreshness
   signals: ForecastSignal[]
 }

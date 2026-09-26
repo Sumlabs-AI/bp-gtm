@@ -195,20 +195,21 @@ def forecast_refresh() -> None:
 
     from app.need.config import forecast as config
     from app.need.live import nws
-    from app.need.live.forecast_store import sync_points, take_forecast_run
+    from app.need.live.forecast_store import take_forecast_run
 
     with nws.client() as http, SessionLocal() as db:
-        added = sync_points(db, lambda lat, lng: nws.grid_cell(http, lat, lng))
         run = take_forecast_run(
             db,
             fetch_grid=lambda p: nws.fetch_gridpoint(http, p.office, p.grid_x, p.grid_y),
             fetch_spc=lambda: nws.fetch_spc_outlooks(http, config.spc_urls),
             now=datetime.now(UTC),
+            lookup=lambda lat, lng: nws.grid_cell(http, lat, lng),
         )
         db.commit()
+    seconds = (run.finished_at - run.started_at).total_seconds()
     print(
-        f"Forecast run {run.started_at:%Y-%m-%d %H:%M}Z: {run.points_ok} points ok, "
-        f"{run.points_failed} failed{f' ({added} new)' if added else ''}; "
+        f"Forecast run {run.started_at:%Y-%m-%d %H:%M}Z ({seconds:.0f}s): {run.points_ok} points "
+        f"ok, {run.points_failed} failed, {len(run.point_errors)} errors; "
         f"SPC {'ok' if run.spc_ok else 'FAILED: ' + (run.spc_error or '')}",
         flush=True,
     )

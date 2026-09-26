@@ -10,6 +10,7 @@ from app.db import get_db
 from app.models import ForecastSignal, NwsAlert
 from app.need.config import forecast as forecast_config
 from app.need.config import need
+from app.need.live.forecast import COMPARISON
 from app.need.live.forecast_store import active_forecast, forecast_status, most_severe_level
 from app.need.live.store import active_alerts, alert_status, most_severe_category
 from app.need.outage.component import outage_components
@@ -55,6 +56,7 @@ class ForecastOut(BaseModel):
     source: str  # "nws_grid" | "spc_outlook"
     condition: str
     level: str
+    comparison: str | None  # ">=" or "<=" against `threshold` (None for SPC)
     startAt: datetime  # noqa: N815
     endAt: datetime  # noqa: N815
     leadHours: float  # noqa: N815  (hours from now to start; negative when under way)
@@ -65,18 +67,21 @@ class ForecastOut(BaseModel):
     sourceUpdatedAt: datetime  # noqa: N815  (when NWS/SPC issued it)
 
 
-class Freshness(BaseModel):
+class SpcFreshness(BaseModel):
     fetchedAt: datetime | None  # noqa: N815  (our last successful fetch)
-    sourceUpdatedAt: datetime | None = None  # noqa: N815  (NWS forecast updateTime)
     stale: bool
+
+
+class GridFreshness(SpcFreshness):
+    sourceUpdatedAt: datetime | None  # noqa: N815  (NWS forecast updateTime, not ours)
 
 
 class ForecastFeed(BaseModel):
     resolution: int
     sourceCell: str  # noqa: N815  (the res-6 forecast point this Cell reads)
     horizonHours: int  # noqa: N815
-    grid: Freshness
-    spc: Freshness
+    grid: GridFreshness
+    spc: SpcFreshness
     signals: list[ForecastOut]
 
 
@@ -121,6 +126,9 @@ def _forecast_out(s: ForecastSignal, now: datetime) -> ForecastOut:
         source=s.source,
         condition=s.condition,
         level=s.level,
+        comparison=COMPARISON[forecast_config.conditions[s.condition].direction]
+        if s.source == "nws_grid"
+        else None,
         startAt=s.start_at,
         endAt=s.end_at,
         leadHours=round((s.start_at - now).total_seconds() / 3600, 1),
@@ -207,12 +215,12 @@ def cell_detail(db: DB, h3_index: str):
                     resolution=forecast_config.resolution,
                     sourceCell=point,
                     horizonHours=forecast_config.horizon_hours,
-                    grid=Freshness(
+                    grid=GridFreshness(
                         fetchedAt=grid["fetched_at"],
                         sourceUpdatedAt=grid["source_updated_at"],
                         stale=grid["stale"],
                     ),
-                    spc=Freshness(
+                    spc=SpcFreshness(
                         fetchedAt=status["spc"]["fetched_at"], stale=status["spc"]["stale"]
                     ),
                     signals=[

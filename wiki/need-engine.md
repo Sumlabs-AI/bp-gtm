@@ -201,16 +201,22 @@ Cell (res 8) ─┬─ res-6 parent ── IEM SV/TO/EW warning-days 5y ── T
 
   The heat index includes humidity, so Houston's humid heat, missed by M4A's dry-bulb data, is caught here.
 - **SPC outlooks** (Day 1–2 categorical): the highest category containing each point. Slight → elevated; Enhanced, Moderate, High → high. Marginal and general thunder are ignored.
-- **A Forecast Signal is a period, not an hour**: consecutive threshold-crossing hours merge into one row (start, end, peak, level, the threshold used). Only periods not yet over and starting within 48 h are kept, and a period already under way keeps its real start.
+- **A Forecast Signal is a period, not an hour**: consecutive threshold-crossing hours merge into one row (start, end, peak, level, the threshold used).
+  - Hours are cut at clock hours and at interval edges, so intervals off the hour never overlap.
+  - NWS units are checked against each layer's `uom`, so an upstream unit change fails the point rather than shifting thresholds.
+  - A period already under way keeps its real start, but its peak and level count only the part not over yet.
+  - Periods are stored up to 72 h ahead; **Active** means starting within 48 h.
 - **Two clocks**: `source_updated_at` (the NWS `updateTime` / SPC `ISSUE`) vs our `fetched_at`.
 - **Replacement** (`app/need/live/forecast_store.py`):
   - Per point, only when that point's fetch and parse succeed. SPC only when both outlooks load.
-  - Replaced rows keep `replaced_at`; nothing is deleted. `forecast_runs` logs every attempt.
+  - **If NWS hasn't issued a new forecast (same `updateTime`), nothing is rewritten**; the point is only marked checked. This avoids hourly duplicate rows.
+  - Replaced rows keep `replaced_at`; nothing is deleted.
+  - `forecast_runs` logs every attempt: real duration, counts, SPC outcome and **per-point errors** (`point_errors`). New points are looked up inside the run, so a failed lookup is logged and skipped rather than aborting the run.
 - **Active** at `now`: not replaced, `end_at > now`, `start_at < now + 48 h`. **Stale**: a point's last success is older than 3 h (SPC reported separately).
 - **API**:
-  - detail: `live.weather.forecast = {resolution, sourceCell, horizonHours, grid: {fetchedAt, sourceUpdatedAt, stale}, spc: {…}, signals[]}`
+  - detail: `live.weather.forecast = {resolution, sourceCell, horizonHours, grid: {fetchedAt, sourceUpdatedAt, stale}, spc: {fetchedAt, stale}, signals[]}`. Each signal has `comparison` (`>=`/`<=`), and grid and SPC staleness are reported and badged separately.
   - features: `activeForecastSignals`, `forecastLevel`
-- **Worker**: hourly forecast run, alongside the 5-minute alert Snapshot and the weekly job. A run over 234 points takes ~12 s.
+- **Worker**: hourly forecast run, alongside the 5-minute alert Snapshot and the weekly job. A run over 234 points takes ~7 s, or ~17 s when it also looks up new points.
 - First real run (2026-09-26, no NWS alert in Texas): 12 points with heat index ≥ 105°F (peak 108°F) forecast for the next afternoon.
 
 ## Commands

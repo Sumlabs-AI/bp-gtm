@@ -23,8 +23,17 @@ def mph_to_kmh(mph: float) -> float:
 def gridpoint(**layers: list[tuple[str, str, float | None]]) -> dict:
     """layers: variable -> [(start ISO, duration, value in NWS units)]."""
     props = {"updateTime": "2026-05-16T11:30:00+00:00"}
+    uom = {
+        "windGust": "wmoUnit:km_h-1",
+        "heatIndex": "wmoUnit:degC",
+        "temperature": "wmoUnit:degC",
+        "iceAccumulation": "wmoUnit:mm",
+    }
     for name, values in layers.items():
-        props[name] = {"values": [{"validTime": f"{s}/{d}", "value": v} for s, d, v in values]}
+        props[name] = {
+            "uom": uom[name],
+            "values": [{"validTime": f"{s}/{d}", "value": v} for s, d, v in values],
+        }
     return {"properties": props}
 
 
@@ -96,14 +105,17 @@ def test_ice_is_judged_per_forecast_interval():
     assert ice["level"] == "high" and ice["unit"] == "in"
 
 
-def test_only_periods_starting_within_48_hours_and_in_progress_keep_their_start():
+def test_periods_are_kept_up_to_the_storage_horizon_and_in_progress_keep_their_start():
     g = gridpoint(
         windGust=[
             ("2026-05-16T09:00:00+00:00", "PT5H", mph_to_kmh(60)),  # started before now
-            ("2026-05-18T14:00:00+00:00", "PT2H", mph_to_kmh(60)),  # starts in 50 h: out
+            ("2026-05-18T14:00:00+00:00", "PT2H", mph_to_kmh(60)),  # +50 h: stored, not Active
+            ("2026-05-19T14:00:00+00:00", "PT2H", mph_to_kmh(60)),  # +74 h: beyond storage
         ]
     )
-    [wind] = by(grid_signals(g, NOW), "wind")
+    winds = by(grid_signals(g, NOW), "wind")
+    assert [w["start_at"].day for w in winds] == [16, 18]
+    wind = winds[0]
     assert wind["start_at"] == datetime(2026, 5, 16, 9, tzinfo=UTC)
     assert wind["end_at"] == datetime(2026, 5, 16, 14, tzinfo=UTC)
 
@@ -164,3 +176,44 @@ def test_spc_takes_the_highest_category_covering_each_point():
 def test_recorded_quiet_spc_outlook_gives_no_signals():
     day1 = json.loads((FIXTURES / "spc-day1-cat.json").read_text())  # TSTM + MRGL only
     assert spc_signals([day1], {"houston": (29.76, -95.37)}) == []
+
+
+def test_intervals_not_on_the_hour_never_overlap():
+    g = gridpoint(
+        windGust=[
+            ("2026-05-17T10:30:00+00:00", "PT90M", mph_to_kmh(60)),
+            ("2026-05-17T12:00:00+00:00", "PT1H", mph_to_kmh(60)),
+        ]
+    )
+    [wind] = by(grid_signals(g, NOW), "wind")  # one period, not two overlapping ones
+    assert (wind["start_at"], wind["end_at"]) == (
+        datetime(2026, 5, 17, 10, 30, tzinfo=UTC),
+        datetime(2026, 5, 17, 13, tzinfo=UTC),
+    )
+
+
+def test_multi_day_durations_are_understood():
+    g = gridpoint(temperature=[("2026-05-16T13:00:00+00:00", "P1DT2H", f_to_c(25))])
+    [cold] = by(grid_signals(g, NOW), "cold")
+    assert cold["end_at"] == datetime(2026, 5, 17, 15, tzinfo=UTC)
+
+
+def test_unknown_duration_or_unit_fails_loudly():
+    with pytest.raises(ValueError, match="duration"):
+        grid_signals(gridpoint(windGust=[("2026-05-17T10:00:00+00:00", "P1Y", 100)]), NOW)
+    g = gridpoint(windGust=[("2026-05-17T10:00:00+00:00", "PT1H", 100)])
+    g["properties"]["windGust"]["uom"] = "wmoUnit:m_s-1"
+    with pytest.raises(ValueError, match="unit"):
+        grid_signals(g, NOW)
+
+
+def test_level_reflects_the_part_not_over_yet():
+    g = gridpoint(
+        windGust=[
+            ("2026-05-16T09:00:00+00:00", "PT2H", mph_to_kmh(65)),  # past: high
+            ("2026-05-16T11:00:00+00:00", "PT4H", mph_to_kmh(50)),  # now and later: elevated
+        ]
+    )
+    [wind] = by(grid_signals(g, NOW), "wind")
+    assert wind["start_at"] == datetime(2026, 5, 16, 9, tzinfo=UTC)  # real start kept
+    assert (wind["level"], wind["peak_value"]) == ("elevated", pytest.approx(50))

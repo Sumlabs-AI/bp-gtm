@@ -1,18 +1,18 @@
 """add forecast signals
 
-Revision ID: 4633300a2ddc
+Revision ID: d9ca3838700e
 Revises: de8c18ea4e47
-Create Date: 2026-09-26 20:07:32.896365
+Create Date: 2026-09-26 20:16:12.547364
 
 """
 from typing import Sequence, Union
 
 from alembic import op
 import sqlalchemy as sa
-
+from sqlalchemy.dialects import postgresql
 
 # revision identifiers, used by Alembic.
-revision: str = '4633300a2ddc'
+revision: str = 'd9ca3838700e'
 down_revision: Union[str, Sequence[str], None] = 'de8c18ea4e47'
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
@@ -41,6 +41,7 @@ def upgrade() -> None:
     sa.Column('points_failed', sa.Integer(), server_default='0', nullable=False),
     sa.Column('spc_ok', sa.Boolean(), server_default='false', nullable=False),
     sa.Column('spc_error', sa.Text(), nullable=True),
+    sa.Column('point_errors', postgresql.JSONB(astext_type=sa.Text()), server_default='{}', nullable=False),
     sa.PrimaryKeyConstraint('id', name=op.f('pk_forecast_runs'))
     )
     op.create_index(op.f('ix_forecast_runs_started_at'), 'forecast_runs', ['started_at'], unique=False)

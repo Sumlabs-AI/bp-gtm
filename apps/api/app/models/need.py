@@ -225,6 +225,8 @@ class ForecastRun(Base):
     points_failed: Mapped[int] = mapped_column(Integer, server_default="0")
     spc_ok: Mapped[bool] = mapped_column(Boolean, server_default="false")
     spc_error: Mapped[str | None] = mapped_column(Text)
+    # Per-point failures in this run: {res-6 h3: "Error: message"} (history, not overwritten).
+    point_errors: Mapped[dict[str, str]] = mapped_column(JSONB, server_default="{}")
 
 
 class ForecastSignal(Base):

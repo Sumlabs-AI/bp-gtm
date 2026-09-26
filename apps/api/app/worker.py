@@ -52,7 +52,7 @@ def run_weekly() -> None:
             traceback.print_exc()
 
 
-def run_live() -> None:
+def run_alerts() -> None:
     try:
         live("refresh")
     except Exception:  # never stop the loop; the next Snapshot retries
@@ -85,7 +85,7 @@ def main() -> None:
         "alerts": timedelta(minutes=nws_alerts.refresh_minutes),
         "forecast": timedelta(minutes=forecast.refresh_minutes),
     }
-    jobs = {"alerts": run_live, "forecast": run_forecast}
+    jobs = {"alerts": run_alerts, "forecast": run_forecast}
     weekly: threading.Thread | None = None
     print(f"Next weekly refresh: {next_at['weekly']:%a %Y-%m-%d %H:%M %Z}", flush=True)
     while True:

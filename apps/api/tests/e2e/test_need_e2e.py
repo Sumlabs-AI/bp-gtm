@@ -143,7 +143,7 @@ def test_cell_detail(client):
                     "sourceCell": geo.cell_to_parent(cell, 6),
                     "horizonHours": 48,
                     "grid": {"fetchedAt": None, "sourceUpdatedAt": None, "stale": True},
-                    "spc": {"fetchedAt": None, "sourceUpdatedAt": None, "stale": True},
+                    "spc": {"fetchedAt": None, "stale": True},
                     "signals": [],
                 },
             }
