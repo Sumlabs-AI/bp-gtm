@@ -12,6 +12,7 @@ import { BaselineNeedBlock } from "@/components/need/baseline-need"
 import { ForecastSignals } from "@/components/need/forecast-signals"
 import { LiveGridSection } from "@/components/need/live-grid"
 import { NwsAlerts } from "@/components/need/nws-alerts"
+import { PropensityBlock } from "@/components/need/propensity"
 import { WeatherBreakdown } from "@/components/need/weather-breakdown"
 import { apiFetch } from "@/lib/api"
 import { scoreColor } from "@/lib/grid"
@@ -264,6 +265,7 @@ export function CellMap({ className }: { className?: string }) {
           {shownDetail && (
             <div className="flex flex-col gap-6 overflow-y-auto pb-4">
               {shownDetail.baseline && <BaselineNeedBlock baseline={shownDetail.baseline} />}
+              <PropensityBlock propensity={shownDetail.propensity} />
               <NwsAlerts feed={shownDetail.live.weather.alerts} />
               <ForecastSignals feed={shownDetail.live.weather.forecast} />
               <LiveGridSection grid={shownDetail.live.grid} />

@@ -136,6 +136,7 @@ def test_cell_detail(client):
         "loadZone": None,  # set by enrichment, not by seeding
         "needScore": None,
         "baseline": None,  # not computed for this bare Cell
+        "propensity": None,
         "components": {},
         "live": {
             "weather": {

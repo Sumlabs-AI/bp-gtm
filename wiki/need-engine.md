@@ -5,9 +5,12 @@ Scores **how useful backup power is** in a place, per **Cell** (H3 resolution-8 
 Status: **Milestones 1–6**. Cells exist for Harris and Travis counties, each with its ERCOT Load Zone and county.
 - **Baseline Need** (M6) combines the Baseline Outage and Weather Need Components.
 - **Live** signals are observed, not scored: weather (official NWS Alerts vs derived Forecast Signals) and grid (official ERCOT Grid Condition vs derived Grid Stress Signals).
-- `needScore` stays null until Live Need scoring exists. Baseline Need is **not** Propensity and **not** the GTM Opportunity.
+- **ML contract** (M7): `export-ml` writes the static features (res 8 + res-6 reference) and `import-propensity` loads the ML workstream's Propensity Scores; see [ml-contract.md](ml-contract.md).
+- `needScore` stays null until Live Need scoring exists. Baseline Need is **not** Propensity and **not** the GTM Opportunity; Propensity is shown beside it, never combined here.
 
 ## The Cell contract (shared with ML)
+
+The full handoff (features out, predictions in) is in [ml-contract.md](ml-contract.md).
 
 | | |
 | --- | --- |
@@ -286,6 +289,8 @@ docker compose exec api python -m app.need weather download        # IEM warning
 docker compose exec api python -m app.need weather compute         # res-6 Storm Exposure + county Temperature Extremes
 docker compose exec api python -m app.need weather validate        # warning-days by year, Derecho/Beryl, top storm cells
 docker compose exec api python -m app.need baseline compute        # Baseline Need (after outage + weather compute)
+docker compose exec api python -m app.need export-ml --out-dir data/ml           # need_features + res-6 reference Parquet for ML
+docker compose exec api python -m app.need import-propensity data/ml/propensity.parquet  # load the ML workstream's predictions
 docker compose exec api python -m app.need live refresh            # one NWS alert Snapshot (the worker does this every 5 min)
 docker compose exec api python -m app.need live forecast           # Forecast Signals for all points (the worker does this hourly)
 docker compose exec api python -m app.need live grid               # ERCOT condition + reserves (worker: every 5 min)

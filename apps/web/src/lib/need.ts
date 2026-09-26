@@ -18,6 +18,7 @@ export type CellFeature = {
     h3: string
     needScore: number | null
     baselineNeed: number | null
+    propensityScore: number | null
     outageNeed: number | null
     weatherNeed: number | null
     activeAlerts: number
@@ -47,6 +48,7 @@ export type CellDetail = {
   loadZone: string | null
   needScore: number | null
   baseline: BaselineNeed | null
+  propensity: Propensity | null
   components: { outage?: OutageComponent; weather?: WeatherComponent }
   live: { weather: { alerts: AlertFeed; forecast: ForecastFeed }; grid: LiveGrid }
 }
@@ -117,9 +119,10 @@ export type OutageComponent = {
 }
 
 // Map colouring: which Need Component shades the Cells.
-export type ColorBy = "baselineNeed" | "outageNeed" | "weatherNeed"
+export type ColorBy = "baselineNeed" | "propensityScore" | "outageNeed" | "weatherNeed"
 export const COLOR_BY: { key: ColorBy; label: string }[] = [
   { key: "baselineNeed", label: "Baseline Need" },
+  { key: "propensityScore", label: "Propensity" },
   { key: "outageNeed", label: "Outage Need" },
   { key: "weatherNeed", label: "Weather Need" },
 ]
@@ -234,4 +237,14 @@ export type BaselineNeed = {
   method: string
   limitations: string[]
   notes: string[]
+}
+
+// Propensity Score: the ML workstream's latest prediction for the Cell (0-100). Not Need,
+// not Opportunity; shown beside Baseline Need, never combined here.
+export type Propensity = {
+  score: number
+  modelVersion: string
+  featureVersion: string
+  scoredAt: string
+  importedAt: string
 }
