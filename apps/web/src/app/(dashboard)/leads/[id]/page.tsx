@@ -2,7 +2,7 @@ import type { Metadata } from "next"
 import Link from "next/link"
 import { notFound } from "next/navigation"
 import { connection } from "next/server"
-import { ExternalLinkIcon } from "lucide-react"
+import { ChevronRightIcon, ExternalLinkIcon, HistoryIcon } from "lucide-react"
 
 import { LeadLocationMap } from "@/components/leads/lead-location-map"
 import { PriorityHelp } from "@/components/leads/priority-help"
@@ -170,11 +170,13 @@ export default async function LeadDetailPage(props: PageProps<"/leads/[id]">) {
                     </div>
                   ))}
                 </div>
-                <details className="text-xs text-muted-foreground">
-                  <summary className="w-fit cursor-pointer rounded-sm focus-visible:outline-2 focus-visible:outline-ring">
+                <details className="group rounded-lg border text-xs text-muted-foreground">
+                  <summary className="flex cursor-pointer list-none items-center gap-2 rounded-lg px-3 py-2.5 text-sm font-medium text-foreground hover:bg-muted/50 focus-visible:outline-2 focus-visible:outline-ring [&::-webkit-details-marker]:hidden">
+                    <HistoryIcon className="size-4 text-muted-foreground" aria-hidden />
                     Past years and how this is estimated
+                    <ChevronRightIcon className="ml-auto size-4 text-muted-foreground transition-transform group-open:rotate-90" aria-hidden />
                   </summary>
-                  <div className="mt-3 flex flex-col gap-3 leading-relaxed">
+                  <div className="flex flex-col gap-3 border-t px-3 py-3 leading-relaxed">
                     {BATTERY_SIZES.map((size) => {
                       const batteryValue = lead.battery_values?.[size]
                       return (
