@@ -12,6 +12,7 @@ from app.need.config import forecast as forecast_config
 from app.need.config import need
 from app.need.live.forecast import COMPARISON
 from app.need.live.forecast_store import active_forecast, forecast_status, most_severe_level
+from app.need.live.grid import grid_live
 from app.need.live.store import active_alerts, alert_status, most_severe_category
 from app.need.outage.component import outage_components
 from app.need.store import cells_in_viewport, get_cell
@@ -85,6 +86,49 @@ class ForecastFeed(BaseModel):
     signals: list[ForecastOut]
 
 
+class GridConditionOut(BaseModel):
+    """The ERCOT Grid Condition: official, as ERCOT declares it."""
+
+    state: str | None
+    title: str | None
+    eeaLevel: int | None  # noqa: N815
+    prcMw: int | None  # noqa: N815
+    official: bool  # True only when ERCOT declares something other than normal
+    sourceUpdatedAt: datetime | None  # noqa: N815
+    fetchedAt: datetime | None  # noqa: N815
+    stale: bool
+
+
+class LatestPrice(BaseModel):
+    price: float
+    intervalStart: datetime  # noqa: N815
+
+
+class GridPrices(BaseModel):
+    loadZone: str | None  # noqa: N815
+    latestRt: LatestPrice | None  # noqa: N815
+    stale: bool
+
+
+class GridStressSignal(BaseModel):
+    """Our reading of ERCOT data crossing one of our thresholds (not an ERCOT declaration)."""
+
+    type: str  # low_reserves | tight_margin | rt_price_spike | dam_price_spike
+    category: str  # "reliability" | "market"
+    value: float
+    threshold: float
+    unit: str
+    at: datetime | None
+    message: str
+
+
+class LiveGrid(BaseModel):
+    condition: GridConditionOut
+    prices: GridPrices
+    stressSignals: list[GridStressSignal]  # noqa: N815
+    notes: list[str]
+
+
 class LiveWeather(BaseModel):
     alerts: AlertFeed
     forecast: ForecastFeed
@@ -92,6 +136,7 @@ class LiveWeather(BaseModel):
 
 class Live(BaseModel):
     weather: LiveWeather
+    grid: LiveGrid
 
 
 class CellDetail(BaseModel):
@@ -161,6 +206,7 @@ def list_cells(db: DB, bbox: Annotated[str, Query(description="west,south,east,n
     weather = weather_components(db, cells)
     alerts = active_alerts(db, cells, now)
     forecasts = active_forecast(db, cells, now)
+    grid = grid_live(db, cells, now)
     return {
         "type": "FeatureCollection",
         "features": [
@@ -177,6 +223,8 @@ def list_cells(db: DB, bbox: Annotated[str, Query(description="west,south,east,n
                     "activeAlertCategory": most_severe_category(alerts[c.h3_index]),
                     "activeForecastSignals": len(forecasts[c.h3_index]),
                     "forecastLevel": most_severe_level(forecasts[c.h3_index]),
+                    "gridState": grid[c.h3_index]["condition"]["state"],
+                    "activeGridStressSignals": len(grid[c.h3_index]["stressSignals"]),
                 },
             }
             for c in cells
@@ -228,6 +276,7 @@ def cell_detail(db: DB, h3_index: str):
                         for s in active_forecast(db, [cell], now)[cell.h3_index]
                     ],
                 ),
-            )
+            ),
+            grid=LiveGrid(**grid_live(db, [cell], now)[cell.h3_index]),
         ),
     )

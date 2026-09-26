@@ -146,7 +146,22 @@ def test_cell_detail(client):
                     "spc": {"fetchedAt": None, "stale": True},
                     "signals": [],
                 },
-            }
+            },
+            "grid": {
+                "condition": {
+                    "state": None,
+                    "title": None,
+                    "eeaLevel": None,
+                    "prcMw": None,
+                    "official": False,
+                    "sourceUpdatedAt": None,
+                    "fetchedAt": None,
+                    "stale": True,
+                },
+                "prices": {"loadZone": None, "latestRt": None, "stale": True},
+                "stressSignals": [],
+                "notes": ["No Load Zone for this Cell: price signals unavailable"],
+            },
         },
     }
     # Valid H3 index, but not seeded (Austin).

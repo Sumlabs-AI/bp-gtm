@@ -124,3 +124,8 @@ to keep the file small. These boundaries are approximate. `LZ_LCRA` and
 
 Prices and scores resolve to load zones, not streets or addresses. Do not
 make street-level claims from these values or the approximate map geometry.
+
+
+## Live prices without credentials
+
+The Need Engine's worker also upserts **public MIS** real-time (report 12301, every 15 min) and day-ahead (12331) zone prices into `grid_prices`, so `compute` sees recent days even without ERCOT API credentials. See [need-engine.md](need-engine.md#live-grid-m5-issue-18).

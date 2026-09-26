@@ -11,6 +11,9 @@ uv run python -m app.need weather compute         # res-6 Storm + county Tempera
 uv run python -m app.need weather validate        # storm days by year, known storms
 uv run python -m app.need live refresh            # one NWS alert Snapshot (worker: every 5 min)
 uv run python -m app.need live forecast           # Forecast Signals for all points (worker: hourly)
+uv run python -m app.need live grid               # ERCOT condition + reserves (worker: 5 min)
+uv run python -m app.need live grid-prices        # RT zone prices from MIS (worker: 15 min)
+uv run python -m app.need live grid-dam           # day-ahead zone prices from MIS (worker: hourly)
 uv run python -m app.need export --out cells.csv        # h3_index, resolution, center (for ML)
 """
 
@@ -170,6 +173,9 @@ def live(action: str) -> None:
     if action == "forecast":
         forecast_refresh()
         return
+    if action in ("grid", "grid-prices", "grid-dam"):
+        grid_refresh(action)
+        return
 
     with nws.client() as http, SessionLocal() as db:
         snapshot = take_snapshot(
@@ -215,6 +221,35 @@ def forecast_refresh() -> None:
     )
 
 
+def grid_refresh(action: str) -> None:
+    """grid: poll ERCOT dashboards; grid-prices: RT prices; grid-dam: day-ahead prices."""
+    from datetime import UTC, datetime
+
+    from app.grid.sources import fetch_mis_recent
+    from app.need.live import ercot
+    from app.need.live.grid import refresh_prices, take_grid_poll
+
+    if action == "grid":
+        with SessionLocal() as db:
+            row = take_grid_poll(db, ercot.fetch_dashboards, datetime.now(UTC))
+            db.commit()
+        if row.succeeded:
+            print(
+                f"ERCOT condition {row.fetched_at:%H:%M}Z: {row.title} (EEA {row.eea_level}), "
+                f"PRC {row.prc_mw:,} MW, tightest forecast margin "
+                f"{row.margin_forecast_min_mw or 0:,} MW",
+                flush=True,
+            )
+        else:
+            print(f"ERCOT condition poll FAILED (nothing changed): {row.error}", flush=True)
+        return
+    market = "RT" if action == "grid-prices" else "DA"
+    print(
+        f"ERCOT {market} prices: {refresh_prices(market, fetch_mis_recent):,} rows upserted",
+        flush=True,
+    )
+
+
 def export(out: Path) -> None:
     columns = ("h3_index", "resolution", "center_lat", "center_lng")
     with SessionLocal() as db, out.open("w", newline="") as f:
@@ -242,7 +277,7 @@ def main() -> None:
     p = sub.add_parser("weather", help="Baseline Weather Need pipeline")
     p.add_argument("action", choices=["download", "compute", "validate"])
     p = sub.add_parser("live", help="live signals: NWS alerts (and forecast signals)")
-    p.add_argument("action", choices=["refresh", "forecast"])
+    p.add_argument("action", choices=["refresh", "forecast", "grid", "grid-prices", "grid-dam"])
     p = sub.add_parser("export", help="write all Cells to CSV")
     p.add_argument("--out", type=Path, required=True)
     args = parser.parse_args()

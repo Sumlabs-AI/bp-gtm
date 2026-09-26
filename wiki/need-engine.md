@@ -2,7 +2,11 @@
 
 Scores **how useful backup power is** in a place, per **Cell** (H3 resolution-8 hexagon, ~0.74 km²). It is separate from lead scoring and from the ML Propensity Score, which join onto the same Cells by `h3_index`. Terms: [`CONTEXT.md`](../CONTEXT.md). Why PostGIS: [ADR 0001](../docs/adr/0001-postgis.md).
 
-Status: **Milestones 1–4A + 4B-1/2**. Cells exist for Harris and Travis counties, each with its ERCOT Load Zone and county. Baseline: **Outage** and **Weather Need Components**. Live Weather Signals come in two kinds that are never merged: official **NWS Alerts** and our derived **Forecast Signals**. Both are observed, not scored, and drawn on `/need`. There's no combined Need Score yet (`needScore: null`, see M6).
+Status: **Milestones 1–5 (no scores for Live yet)**. Cells exist for Harris and Travis counties, each with its ERCOT Load Zone and county. Baseline: **Outage** and **Weather Need Components**. Live, all observed and not scored, drawn on `/need`:
+- weather: official **NWS Alerts** vs derived **Forecast Signals**
+- grid: official **ERCOT Grid Condition** vs derived **Grid Stress Signals**
+
+There's no combined Need Score yet (`needScore: null`); Live Need scoring comes after, from the collected data.
 
 ## The Cell contract (shared with ML)
 
@@ -219,6 +223,27 @@ Cell (res 8) ─┬─ res-6 parent ── IEM SV/TO/EW warning-days 5y ── T
 - **Worker**: hourly forecast run, alongside the 5-minute alert Snapshot and the weekly job. A run over 234 points takes ~7 s, or ~17 s when it also looks up new points.
 - First real run (2026-09-26, no NWS alert in Texas): 12 points with heat index ≥ 105°F (peak 108°F) forecast for the next afternoon.
 
+## Live grid (M5, issue #18)
+
+"Is the ERCOT grid stressed now, or about to be?" **Grid is live-only**: there's no Baseline Grid score, because six Load Zones can't make a meaningful percentile and long-term reliability is already in Outage history. Zone economics (Grid Zones page) stays a separate economics view. **No score here.**
+
+- **ERCOT Grid Condition** (official, as ERCOT declares it: Normal / Conservation / EEA 1–3), from the public `daily-prc.json` dashboard. `official: true` only when ERCOT declares something other than normal.
+- **Grid Stress Signals** (our thresholds, `GridLiveConfig`), tagged `reliability` or `market`:
+  - `low_reserves` (reliability, ERCOT-wide): PRC < 3,000 MW. ERCOT's own EEA1 trigger is 2,500.
+  - `tight_margin` (reliability, ERCOT-wide): ERCOT's forecast capacity − demand later today < 3,000 MW (`supply-demand.json`).
+  - `rt_price_spike` (market, the Cell's Load Zone): the latest 15-min price, from the last 45 min, is ≥ $1,000/MWh (the existing `ScoringConfig.scarcity_threshold`).
+  - `dam_price_spike` (market, the Cell's Load Zone): tomorrow's day-ahead hours ≥ $1,000/MWh.
+- **Prices without credentials**: public MIS reports 12301 (NP6-905 real-time, 15 min; `LZEW` duplicates dropped) and 12331 (NP4-190 day-ahead) are **upserted into the existing `grid_prices`**, so the Grid Zones economics stay current too.
+- **Storage**: `grid_conditions` gets one row per poll (state, EEA, PRC, capacity/demand, tightest forecast margin and when). A failed poll is logged there and changes nothing. Signals are derived at read time with an explicit `now`: no signal rows, no expiry job.
+- **Stale**: condition older than 20 min; price older than 45 min.
+- **Geography**: reliability signals apply to every Cell; market signals use the Cell's Load Zone. Cells without a zone get a note.
+- **API**: `live.grid = {condition, prices, stressSignals[], notes}` in the detail; `gridState` and `activeGridStressSignals` on features. `/need` shows an **ERCOT: <state>** chip in the toolbar (red when not normal) and an "ERCOT grid" sheet section, with the official condition kept apart from "Grid stress (our reading of ERCOT data)".
+- **Worker**:
+  - dashboards every 5 min
+  - RT prices every 15 min (the last 4 files are re-read to fill gaps)
+  - day-ahead hourly
+- First real run (2026-09-26 15:35 CDT): Normal, PRC 18,497 MW, tightest forecast margin 13,825 MW. No stress.
+
 ## Commands
 
 ```bash
@@ -235,6 +260,9 @@ docker compose exec api python -m app.need weather compute         # res-6 Storm
 docker compose exec api python -m app.need weather validate        # warning-days by year, Derecho/Beryl, top storm cells
 docker compose exec api python -m app.need live refresh            # one NWS alert Snapshot (the worker does this every 5 min)
 docker compose exec api python -m app.need live forecast           # Forecast Signals for all points (the worker does this hourly)
+docker compose exec api python -m app.need live grid               # ERCOT condition + reserves (worker: every 5 min)
+docker compose exec api python -m app.need live grid-prices        # real-time zone prices, public MIS (worker: 15 min)
+docker compose exec api python -m app.need live grid-dam           # day-ahead zone prices, public MIS (worker: hourly)
 ```
 
 Seeding reads only the committed county files, so it needs no network. To add a county, add a `Market`, run `download_counties`, commit the GeoJSON, then seed it.

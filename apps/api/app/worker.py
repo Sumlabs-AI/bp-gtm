@@ -6,6 +6,8 @@
 Each week: ERCOT prices (current-year files) -> grid scores, then every lead source ->
 lead scores. Every source run is logged in source_runs (see /sources).
 Every few minutes: one NWS alert Snapshot (NWS Alerts, logged in nws_alert_snapshots).
+Every few minutes: an ERCOT dashboard poll (grid_conditions); every 15 min: real-time zone
+prices; hourly: day-ahead prices (both into grid_prices).
 Hourly: a forecast run (Forecast Signals, logged in forecast_runs). Failures never stop the
 loop and never erase the last good data.
 """
@@ -20,8 +22,8 @@ from zoneinfo import ZoneInfo
 from app.grid.__main__ import backfill, compute
 from app.leads.__main__ import refresh, score
 from app.leads.pipeline import SOURCES
-from app.need.__main__ import forecast_refresh, live
-from app.need.config import forecast, nws_alerts
+from app.need.__main__ import forecast_refresh, grid_refresh, live
+from app.need.config import forecast, grid_live, nws_alerts
 
 TZ = ZoneInfo("America/Chicago")
 RUN_WEEKDAY = 6  # Sunday
@@ -59,6 +61,18 @@ def run_alerts() -> None:
         traceback.print_exc()
 
 
+def guarded(job):
+    """A worker job that logs its failure and never stops the loop."""
+
+    def run() -> None:
+        try:
+            job()
+        except Exception:
+            traceback.print_exc()
+
+    return run
+
+
 def run_forecast() -> None:
     try:
         forecast_refresh()
@@ -80,12 +94,21 @@ def main() -> None:
         return
     start = datetime.now(UTC)
     # Quick live jobs first; the weekly job runs in its own thread.
-    next_at = {"alerts": start, "forecast": start, "weekly": next_run(start)}
     every = {
         "alerts": timedelta(minutes=nws_alerts.refresh_minutes),
+        "grid": timedelta(minutes=grid_live.refresh_minutes),
+        "grid-prices": timedelta(minutes=grid_live.price_refresh_minutes),
+        "grid-dam": timedelta(hours=1),
         "forecast": timedelta(minutes=forecast.refresh_minutes),
     }
-    jobs = {"alerts": run_alerts, "forecast": run_forecast}
+    jobs = {
+        "alerts": run_alerts,
+        "grid": guarded(lambda: grid_refresh("grid")),
+        "grid-prices": guarded(lambda: grid_refresh("grid-prices")),
+        "grid-dam": guarded(lambda: grid_refresh("grid-dam")),
+        "forecast": run_forecast,
+    }
+    next_at = {name: start for name in jobs} | {"weekly": next_run(start)}
     weekly: threading.Thread | None = None
     print(f"Next weekly refresh: {next_at['weekly']:%a %Y-%m-%d %H:%M %Z}", flush=True)
     while True:
