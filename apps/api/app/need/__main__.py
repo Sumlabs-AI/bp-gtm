@@ -6,6 +6,9 @@ uv run python -m app.need enrich                   # recompute every Cell's load
 uv run python -m app.need outage download         # EAGLE-I + EIA-861 (cached, multi-GB)
 uv run python -m app.need outage compute          # Parquet -> county/utility features
 uv run python -m app.need outage validate         # known storms + SAIDI cross-check
+uv run python -m app.need weather download        # IEM warnings + nClimGrid (cached)
+uv run python -m app.need weather compute         # res-6 Storm + county Temperature
+uv run python -m app.need weather validate        # storm days by year, known storms
 uv run python -m app.need export --out cells.csv        # h3_index, resolution, center (for ML)
 """
 
@@ -100,6 +103,62 @@ def outage(action: str) -> None:
             print(table.round(0).astype("Int64").to_string())
 
 
+def weather(action: str) -> None:
+    from app.need.weather import pipeline  # heavy imports (geopandas) only when needed
+
+    if action == "download":
+        pipeline.download()
+        return
+    started = time.perf_counter()
+    if action == "compute":
+        report = pipeline.compute()
+        print(
+            f"Baseline Weather Need\n{'─' * 30}\n"
+            f"{'SV/TO/EW warnings:':<24}{report.warnings:>12,}\n"
+            f"{'Texas res-6 cells:':<24}{report.grid_cells:>12,}\n"
+            f"{'Storm data through:':<24}{report.storm_data_through!s:>12}\n"
+            f"{'Counties (temperature):':<24}{report.counties:>12,}\n"
+            f"{'Temp. data through:':<24}{report.temperature_data_through!s:>12}\n"
+            f"\n{'Duration:':<24}{time.perf_counter() - started:>11.1f}s"
+        )
+        return
+    import pandas as pd
+
+    from app import geo
+    from app.need.markets import county_for_points
+
+    hits, storms = pipeline.build_storms()
+    temperature = pipeline.build_temperature().set_index("county_fips")
+    centers = pd.DataFrame(
+        [(h, *geo.cell_to_center(h)) for h in storms["h3_index"]], columns=["h3", "lat", "lng"]
+    )
+    centers["county"] = county_for_points(centers["lat"], centers["lng"])
+    for market in MARKETS:
+        cells = set(centers.loc[centers["county"] == market.geoid, "h3"])
+        mine = hits[hits["h3_index"].isin(cells)]
+        by_year = mine.groupby(pd.to_datetime(mine["day"]).dt.year)["day"].nunique()
+        print(f"\n{market.label}: {len(cells)} res-6 cells; warning-days (any cell) by year:")
+        print("  " + ", ".join(f"{y}: {n}" for y, n in by_year.items()))
+        for label, day in (("Derecho", "2024-05-16"), ("Beryl", "2024-07-08")):
+            hit = (mine["day"].astype(str) == day).any()
+            print(f"  {label} {day}: {'warned' if hit else 'no SV/TO/EW warning'}")
+        s = storms[storms["h3_index"].isin(cells)]
+        print(
+            f"  Storm Exposure across its cells: min {s.storm_exposure.min():.0f}, "
+            f"median {s.storm_exposure.median():.0f}, max {s.storm_exposure.max():.0f}"
+        )
+        t = temperature.loc[market.geoid]
+        print(
+            f"  Temperature (5 y through {t.data_through}): {t.heat_days_100f_5y} days >= 100F, "
+            f"{t.heat_days_95f_5y} >= 95F, {t.cold_days_28f_5y} <= 28F, "
+            f"{t.cold_days_32f_5y} <= 32F -> exposure {t.temperature_exposure:.1f}"
+        )
+    top = storms.nlargest(10, "warning_days_5y").merge(centers, left_on="h3_index", right_on="h3")
+    print("\nTop 10 Texas res-6 cells by warning-days (5 y):")
+    for r in top.itertuples():
+        print(f"  {r.h3_index}  {r.lat:6.2f},{r.lng:8.2f}  {r.warning_days_5y} days")
+
+
 def export(out: Path) -> None:
     columns = ("h3_index", "resolution", "center_lat", "center_lng")
     with SessionLocal() as db, out.open("w", newline="") as f:
@@ -124,6 +183,8 @@ def main() -> None:
     sub.add_parser("enrich", help="recompute every Cell's load zone")
     p = sub.add_parser("outage", help="Baseline Outage Need pipeline")
     p.add_argument("action", choices=["download", "compute", "validate"])
+    p = sub.add_parser("weather", help="Baseline Weather Need pipeline")
+    p.add_argument("action", choices=["download", "compute", "validate"])
     p = sub.add_parser("export", help="write all Cells to CSV")
     p.add_argument("--out", type=Path, required=True)
     args = parser.parse_args()
@@ -134,6 +195,8 @@ def main() -> None:
         enrich()
     elif args.cmd == "outage":
         outage(args.action)
+    elif args.cmd == "weather":
+        weather(args.action)
     else:
         export(args.out)
 

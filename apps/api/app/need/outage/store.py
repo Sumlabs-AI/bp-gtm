@@ -3,33 +3,19 @@
 from datetime import datetime
 
 import pandas as pd
-from sqlalchemy import delete, insert, select
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.models import CountyOutageFeatures, UtilityReliability
-
-
-def _replace(
-    db: Session,
-    model: type[CountyOutageFeatures] | type[UtilityReliability],
-    df: pd.DataFrame,
-    now: datetime,
-) -> int:
-    """Replace every row of a feature table; `computed_at` is stamped with `now`."""
-    columns = [c.name for c in model.__table__.columns if c.name != "computed_at"]
-    rows = df[columns].astype(object).where(df[columns].notna(), None).to_dict("records")
-    db.execute(delete(model))
-    if rows:
-        db.execute(insert(model), [{**r, "computed_at": now} for r in rows])
-    return len(rows)
+from app.need.components import replace_rows
 
 
 def save_county_features(db: Session, df: pd.DataFrame, now: datetime) -> int:
-    return _replace(db, CountyOutageFeatures, df, now)
+    return replace_rows(db, CountyOutageFeatures, df, now)
 
 
 def save_utility_reliability(db: Session, df: pd.DataFrame, now: datetime) -> int:
-    return _replace(db, UtilityReliability, df, now)
+    return replace_rows(db, UtilityReliability, df, now)
 
 
 def load_features(

@@ -10,20 +10,13 @@ from pathlib import Path
 
 import duckdb
 import pandas as pd
-from pydantic import BaseModel
 
+from app.need.config import ExposureConfig
 from app.need.outage.events import SAMPLE_HOURS, EventRules, detect_events
 from app.need.percentile import percentile_rank
 
 FIGSHARE_ARTICLE = "https://api.figshare.com/v2/articles/24237376"
 TEXAS_FIPS_PREFIX = "48"
-
-
-class ExposureConfig(BaseModel):
-    window_years: int = 5
-    # A county joins the Reference Population when EAGLE-I has rows for it in at least this
-    # share of the window's calendar years (ORNL publishes coverage per state, not county).
-    min_years_share: float = 0.8
 
 
 def normalize(csv_paths: list[Path], out: Path) -> int:

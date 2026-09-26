@@ -78,3 +78,47 @@ class UtilityReliability(Base):
     # Raw yearly values behind the means: {"2024": {"saidi_wo_med": 150.2, "saidi_w_med": …}}.
     yearly: Mapped[dict] = mapped_column(JSONB)
     computed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+
+
+class StormFeatures(Base):
+    """Storm Exposure inputs for one statewide H3 res-6 cell (~36 km², the Reference
+    Population), from IEM SV/TO/EW warning polygons. A res-8 Cell reads its res-6 parent.
+    Rebuilt by `python -m app.need weather compute`."""
+
+    __tablename__ = "storm_features"
+
+    h3_index: Mapped[str] = mapped_column(String(15), primary_key=True)  # res-6 cell
+    resolution: Mapped[int] = mapped_column(SmallInteger)
+    data_through: Mapped[date] = mapped_column(Date)
+    warning_days_5y: Mapped[int] = mapped_column(Integer)
+    warning_days_365d: Mapped[int] = mapped_column(Integer)
+    severe_thunderstorm_warnings_5y: Mapped[int] = mapped_column(Integer)
+    tornado_warnings_5y: Mapped[int] = mapped_column(Integer)
+    extreme_wind_warnings_5y: Mapped[int] = mapped_column(Integer)
+    # NWS office that issued most of the cell's warnings (issuance-practice notes).
+    issuing_office: Mapped[str | None] = mapped_column(String(3))
+    storm_exposure: Mapped[float | None] = mapped_column(Float)  # Texas res-6 percentile
+    computed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+
+
+class CountyTemperatureFeatures(Base):
+    """Temperature Extremes Exposure inputs for one Texas county, from measured nClimGrid
+    daily temperature (not NWS advisories). Rebuilt by `python -m app.need weather compute`."""
+
+    __tablename__ = "county_temperature_features"
+
+    county_fips: Mapped[str] = mapped_column(String(5), primary_key=True)
+    county_name: Mapped[str | None] = mapped_column(String(60))
+    data_through: Mapped[date] = mapped_column(Date)
+    heat_days_100f_5y: Mapped[int] = mapped_column(Integer)  # scored
+    heat_days_95f_5y: Mapped[int] = mapped_column(Integer)  # context
+    cold_days_28f_5y: Mapped[int] = mapped_column(Integer)  # scored
+    cold_days_32f_5y: Mapped[int] = mapped_column(Integer)  # context
+    heat_days_100f_365d: Mapped[int] = mapped_column(Integer)
+    heat_days_95f_365d: Mapped[int] = mapped_column(Integer)
+    cold_days_28f_365d: Mapped[int] = mapped_column(Integer)
+    cold_days_32f_365d: Mapped[int] = mapped_column(Integer)
+    heat_100f_pctl: Mapped[float | None] = mapped_column(Float)
+    cold_28f_pctl: Mapped[float | None] = mapped_column(Float)
+    temperature_exposure: Mapped[float | None] = mapped_column(Float)
+    computed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))

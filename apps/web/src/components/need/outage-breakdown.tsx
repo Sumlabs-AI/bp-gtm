@@ -1,30 +1,9 @@
-import { scoreColor } from "@/lib/grid"
+import { historyThrough, Row, Score } from "@/components/need/score-parts"
 import type { OutageComponent } from "@/lib/need"
 
 const number = (value: number | null, digits = 0) =>
   value === null ? "—" : value.toLocaleString("en-US", { maximumFractionDigits: digits })
 const percent = (value: number | null) => (value === null ? "—" : `${(value * 100).toFixed(1)}%`)
-const historyThrough = (iso: string) =>
-  new Date(`${iso}T00:00:00`).toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" })
-
-function Score({ value }: { value: number | null }) {
-  if (value === null) return <span className="text-muted-foreground">—</span>
-  return (
-    <span className="rounded-md px-2 py-0.5 font-semibold tabular-nums" style={{ background: scoreColor(value) }}>
-      {value.toFixed(0)}
-    </span>
-  )
-}
-
-function Row({ label, value }: { label: string; value: React.ReactNode }) {
-  return (
-    <>
-      <dt className="text-muted-foreground">{label}</dt>
-      <dd className="text-right tabular-nums">{value}</dd>
-    </>
-  )
-}
-
 export function OutageBreakdown({ outage }: { outage: OutageComponent }) {
   const utility = outage.utilityReliabilityNeed
   const observed = outage.observedOutageExposure
