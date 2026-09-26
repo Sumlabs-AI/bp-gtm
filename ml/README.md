@@ -34,6 +34,7 @@ cp .env.example .env   # then set TYPESAFE_API_KEY
 | `acs/FEATURES.md` | Generated data dictionary for `bg_acs_<vintage>.parquet` |
 | `train/build_table.py` | Joins label + ACS + parcels → `data/processed/train_bg.parquet` (one row per training block group) |
 | `train/model.py` | Propensity v1: LightGBM Poisson, per-city offset, spatial / temporal / leave-one-city-out evaluation |
+| `train/homes.py` | Home-level test: per-home appraised value vs block-group home value vs LightGBM on parcel features |
 | `train/baselines.py` | Income / home value / past-installs baselines, scored within city on 2024-2025 installs |
 | `docs/typesafe/` | Jev docs snapshot (SDK, primitives, confidence, jev-1.13 limits) |
 | `data/` | Git-ignored. `raw/` downloads, `interim/` normalized tables, `gold/` labels, `processed/` outputs |
@@ -68,6 +69,7 @@ Training table and baselines (after the three pipelines above):
 uv run python -m train.build_table   # -> data/processed/train_bg.parquet + checks
 uv run python -m train.baselines
 uv run python -m train.model         # ~35 s -> data/processed/model_v1*.txt, train_bg_oof.parquet
+uv run python -m train.homes         # ~40 s -> data/processed/train_home.parquet
 ```
 
 LightGBM on macOS needs OpenMP: `brew install libomp`.
@@ -190,3 +192,28 @@ home value 0.68 / 0.75.
   cannot beat a home-value rule; the next test is home-level (parcel) features against per-home value.
 - **Label fix:** permits at the same address and date were deduplicated in unstable sort order, so adding rows
   could swap a built permit for a withdrawn one. Ties now keep the built permit (Austin 2021-2025: +25 installs).
+
+## Home-level test (`train/homes.py`)
+
+Owner-occupied single-family parcels (homestead flag) in the training block groups: 105k homes in Austin (Travis),
+231k in San Antonio (Bexar). Install permits are placed on parcels by their coordinates: 85% (Austin) / 88%
+(San Antonio) land on one of these homes, the rest on single-family homes without homestead (7-9%) or other home
+types. Same spatial folds as the block-group model: train on 2021-2023 installs in 4/5 of the blocks, rank the
+held-out homes without a 2021-2023 install, check who installed in 2024-2025 (601 Austin, 156 San Antonio homes).
+
+| | Austin ROC AUC / top 10% / top 20% | San Antonio ROC AUC / top 10% / top 20% |
+| --- | --- | --- |
+| area home value (ACS block-group median) | 0.70 / 25% / 43% | 0.78 / 36% / 59% |
+| **home's own appraised value** | **0.76 / 37% / 58%** | **0.82 / 49% / 69%** |
+| LightGBM, home features | 0.75 / 35% / 54% | 0.82 / 50% / 69% |
+| LightGBM, home + area features | 0.75 / 36% / 54% | 0.82 / 49% / 67% |
+
+- **Ranking homes by their own appraised value beats ranking by area**: the top 20% of homes hold 58% of Austin's
+  2024-2025 installers instead of 43%, 69% instead of 59% in San Antonio.
+- **LightGBM again only ties the single column**, even with year built, lot, sq ft, stories, deed year and the
+  block-group ACS features.
+- Caveat: appraisals are a 2025 snapshot, so a 2024-2025 install could nudge its own home's value (a generator is
+  a few % of a typical home's value). Small next to the gap above.
+- Per-home value needs parcel data for every county scored. Have: Travis, Bexar, Dallas, Tarrant, Collin, Denton
+  (market value in all six). Missing for the Austin, San Antonio and Houston metros: Williamson, Hays, Comal,
+  Guadalupe, Harris, Fort Bend, Montgomery (TxGIO StratMap, browser download per county).
