@@ -135,6 +135,7 @@ def test_cell_detail(client):
         "center": {"lat": center_lat, "lng": center_lng},
         "loadZone": None,  # set by enrichment, not by seeding
         "needScore": None,
+        "baseline": None,  # not computed for this bare Cell
         "components": {},
         "live": {
             "weather": {

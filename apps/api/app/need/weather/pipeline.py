@@ -22,6 +22,7 @@ from app.need.weather.temperature import county_temperature_features
 DATA = Path(__file__).resolve().parents[3] / "data"
 RAW_IEM, RAW_NCLIM, RAW_CENSUS = DATA / "raw/iem", DATA / "raw/nclimgrid", DATA / "raw/census"
 TEXAS = RAW_CENSUS / "texas.geojson"
+TEXAS_COUNTIES = RAW_CENSUS / "tx-counties.geojson"
 
 IEM_URL = (
     "https://mesonet.agron.iastate.edu/cgi-bin/request/gis/watchwarn.py"
@@ -86,12 +87,29 @@ def download() -> None:
                 else:
                     print(f"nClimGrid {stem}: not published yet")
 
-    if not TEXAS.exists():
+    if not TEXAS.exists() or not TEXAS_COUNTIES.exists():
         counties = gpd.read_file(COUNTIES_URL)
-        texas = counties[counties["STATEFP"] == "48"].to_crs(4326).dissolve()[["geometry"]]
+        counties = counties[counties["STATEFP"] == "48"].to_crs(4326)[["GEOID", "geometry"]]
         RAW_CENSUS.mkdir(parents=True, exist_ok=True)
-        texas.to_file(TEXAS, driver="GeoJSON")
-        print("Texas outline: downloaded")
+        counties.to_file(TEXAS_COUNTIES, driver="GeoJSON")
+        counties.dissolve()[["geometry"]].to_file(TEXAS, driver="GeoJSON")
+        print("Texas outline and counties: downloaded")
+
+
+def county_of_cells(cells: list[str]) -> dict[str, str | None]:
+    """H3 cells -> Census county GEOID containing their center (statewide; None offshore)."""
+    if not TEXAS_COUNTIES.exists():
+        raise SystemExit("No Texas counties file: run `python -m app.need weather download`.")
+    counties = gpd.read_file(TEXAS_COUNTIES)
+    centers = [geo.cell_to_center(h) for h in cells]
+    points = gpd.GeoDataFrame(
+        {"h3": cells},
+        geometry=gpd.points_from_xy([c[1] for c in centers], [c[0] for c in centers]),
+        crs=4326,
+    )
+    hits = gpd.sjoin(points, counties, predicate="within").drop_duplicates("h3")
+    found = dict(zip(hits["h3"], hits["GEOID"], strict=True))
+    return {h: found.get(h) for h in cells}
 
 
 def load_warnings() -> pd.DataFrame:

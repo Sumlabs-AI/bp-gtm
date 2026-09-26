@@ -7,15 +7,14 @@ export default function NeedPage() {
       <div className="flex flex-col gap-2">
         <h2 className="text-2xl font-semibold tracking-tight">Where is backup power needed?</h2>
         <p className="max-w-3xl text-sm text-muted-foreground">
-          The Need Engine scores H3 Cells (~0.7 km² hexagons). Cells cover Harris and Travis
-          counties for now. Colour by Outage Need (county/utility level) or Weather Need (storms at
-          ~6 km, temperature by county), each a Texas percentile. Grid comes next. Click a Cell to
-          see why.
+          Baseline Need: how much structural reason a place has to benefit from backup power
+          (outage history and weather exposure combined, Texas percentile). Live panels show what
+          is happening now. It is not a purchase likelihood. Click a Cell to see why.
         </p>
         <div className="flex flex-wrap gap-2">
           <Badge variant="outline">Resolution: H3 8</Badge>
           <Badge variant="outline">Markets: Houston, Austin</Badge>
-          <Badge variant="outline">Outage Need: county + utility level</Badge>
+          <Badge variant="outline">Colour: Baseline / Outage / Weather Need</Badge>
         </div>
       </div>
       <CellMap className="h-[640px]" />

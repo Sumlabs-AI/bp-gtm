@@ -29,6 +29,7 @@ docker compose exec api python -m app.need outage download   # optional: ~6 GB, 
 docker compose exec api python -m app.need outage compute    # Outage Need colours on /need
 docker compose exec api python -m app.need weather download  # optional: ~60 MB warnings + temperature
 docker compose exec api python -m app.need weather compute   # Weather Need colours on /need
+docker compose exec api python -m app.need baseline compute  # Baseline Need (default colour on /need)
 docker compose exec api python -m app.need live refresh      # live NWS alerts now (the worker repeats every 5 min)
 docker compose exec api python -m app.need live forecast     # 48 h forecast signals (the worker repeats hourly)
 ```

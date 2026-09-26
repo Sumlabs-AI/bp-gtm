@@ -177,3 +177,13 @@ class GridLiveConfig(BaseModel):
 
 
 grid_live = GridLiveConfig()
+
+
+class BaselineConfig(BaseModel):
+    """Baseline Need (M6). Re-run `python -m app.need baseline compute` after changing."""
+
+    # Inputs within this many points: the Dominant Driver is "both".
+    driver_margin: float = 10.0
+
+
+baseline = BaselineConfig()

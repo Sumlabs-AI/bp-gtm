@@ -35,6 +35,7 @@ docker compose exec api python -m app.need outage download      # outage history
 docker compose exec api python -m app.need outage compute       # Outage Need on /need
 docker compose exec api python -m app.need weather download     # NWS warnings + measured temperature
 docker compose exec api python -m app.need weather compute      # Weather Need on /need
+docker compose exec api python -m app.need baseline compute     # Baseline Need (default on /need)
 ```
 
 For the per-year battery value ranges shown on leads, also load past years (~1 min per year):

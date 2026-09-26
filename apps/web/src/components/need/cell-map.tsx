@@ -8,6 +8,7 @@ import "maplibre-gl/dist/maplibre-gl.css"
 import { Button } from "@/components/ui/button"
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet"
 import { OutageBreakdown } from "@/components/need/outage-breakdown"
+import { BaselineNeedBlock } from "@/components/need/baseline-need"
 import { ForecastSignals } from "@/components/need/forecast-signals"
 import { LiveGridSection } from "@/components/need/live-grid"
 import { NwsAlerts } from "@/components/need/nws-alerts"
@@ -38,7 +39,7 @@ export function CellMap({ className }: { className?: string }) {
   const [data, setData] = React.useState<CellCollection | null>(null)
   const [status, setStatus] = React.useState<Status>("loading")
   const [hover, setHover] = React.useState<Hover | null>(null)
-  const [colorBy, setColorBy] = React.useState<ColorBy>("outageNeed")
+  const [colorBy, setColorBy] = React.useState<ColorBy>("baselineNeed")
   const [selected, setSelected] = React.useState<string | null>(null)
   // Keyed by Cell so a stale detail never shows under a newly selected Cell.
   const [detail, setDetail] = React.useState<CellDetail | null>(null)
@@ -244,7 +245,7 @@ export function CellMap({ className }: { className?: string }) {
         <SheetContent>
           <SheetHeader>
             <SheetTitle className="font-mono">{selected}</SheetTitle>
-            <SheetDescription>H3 Cell. The combined Need Score arrives once more Need Components exist.</SheetDescription>
+            <SheetDescription>H3 Cell. Baseline Need first, then live signals and the component details.</SheetDescription>
           </SheetHeader>
           {shownDetail && (
             <dl className="grid grid-cols-2 gap-x-4 gap-y-2 px-4 text-sm">
@@ -262,6 +263,7 @@ export function CellMap({ className }: { className?: string }) {
           )}
           {shownDetail && (
             <div className="flex flex-col gap-6 overflow-y-auto pb-4">
+              {shownDetail.baseline && <BaselineNeedBlock baseline={shownDetail.baseline} />}
               <NwsAlerts feed={shownDetail.live.weather.alerts} />
               <ForecastSignals feed={shownDetail.live.weather.forecast} />
               <LiveGridSection grid={shownDetail.live.grid} />
