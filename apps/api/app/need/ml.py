@@ -122,7 +122,7 @@ FROM cells c
 JOIN cell_parents cp ON cp.h3_index = c.h3_index
 LEFT JOIN cell_utilities cu ON cu.h3_index = c.h3_index
 LEFT JOIN county_outage_features o ON o.county_fips = c.county_fips
-LEFT JOIN utility_reliability u ON u.utility_id = cu.utility_id
+LEFT JOIN utility_reliability_features u ON u.utility_id = cu.utility_id
 LEFT JOIN storm_features s ON s.h3_index = cp.h3_res6
 LEFT JOIN county_temperature_features t ON t.county_fips = c.county_fips
 LEFT JOIN cell_baseline_needs b ON b.h3_index = c.h3_index
