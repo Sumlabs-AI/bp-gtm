@@ -5,6 +5,30 @@ export type LeadSignal = "solar" | "ev_charger" | "new_home" | "new_owner" | "ne
 export type BatteryKwh = 25 | 40 | 50
 export type BatteryValues = Record<"25" | "40" | "50", number>
 
+export const BATTERY_SIZES = [25, 40, 50] as const
+export const STATUS_LABELS: Record<LeadStatus, string> = {
+  new: "Unreviewed",
+  reviewed: "Reviewed",
+  qualified: "Qualified",
+  excluded: "Excluded",
+}
+export const PRIORITY_HELP = "Fit ÷ 100 × historical annual grid value for the suggested battery. Fit is not a purchase probability. Grid value assumes perfect hindsight over the last 12 months and excludes retail margin, fees, and ancillary services. This ranking metric is not forecast revenue or customer savings."
+
+export function formatLeadMoney(value: number): string {
+  return `$${Math.round(value).toLocaleString("en-US")}`
+}
+
+export function leadReturnHref(value: string | string[] | undefined): string {
+  const href = Array.isArray(value) ? value[0] : value
+  if (!href || (href !== "/leads" && !href.startsWith("/leads?"))) return "/leads"
+  const params = new URLSearchParams(href.split("?").slice(1).join("?"))
+  const filters = new URLSearchParams()
+  for (const key of ["status", "min_score", "signals", "new_only", "zip", "sort", "offset", "view"]) {
+    for (const item of params.getAll(key)) filters.append(key, item)
+  }
+  return `/leads${filters.size ? `?${filters}` : ""}`
+}
+
 export type LeadItem = {
   id: number
   address: string | null
@@ -89,6 +113,7 @@ export const SIGNAL_LABELS: Record<LeadSignal, string> = {
 }
 
 export function signalLabel(signal: string): string {
+  if (signal === "newly_eligible") return "Newly eligible"
   return SIGNAL_LABELS[signal as LeadSignal] ?? signal
 }
 
