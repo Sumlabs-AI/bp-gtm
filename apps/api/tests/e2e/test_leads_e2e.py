@@ -4,6 +4,7 @@ Adapters are faked (canonical frames, no network) so the scenario is exact:
 week 1 is the baseline; week 2 brings a new owner, a new EV permit and a new home.
 """
 
+import json
 from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
 
@@ -305,16 +306,32 @@ def test_map_points_and_cells(client, monkeypatch):
 
 
 def test_value_per_battery_size_and_priority(client):
+    VALUES = {25: 560, 40: 900, 50: 1120}  # last 12 months
+    YEARS = {
+        2024: {"25": 700, "40": 1100, "50": 1400},
+        2025: {"25": 300, "40": 480, "50": 600},
+    }
     with SessionLocal() as db:  # grid compute output for the Houston zone
         db.execute(
             text(
                 "INSERT INTO grid_zone_metrics (settlement_point, period_start, period_end, "
                 "grid_value_score, metrics, scores, series) "
-                "VALUES ('LZ_HOUSTON', :t, :t, 10, :m, '{}', '{}')"
+                "VALUES ('LZ_HOUSTON', :t, :t, 10, :m, '{}', :s)"
             ),
             {
                 "t": WEEK1,
-                "m": '{"battery_value_25": 560, "battery_value_40": 900, "battery_value_50": 1120}',
+                "m": json.dumps(
+                    {f"battery_value_{k}": v for k, v in VALUES.items()}
+                    | {f"battery_ceiling_{k}": 2 * v for k, v in VALUES.items()}
+                ),
+                "s": json.dumps(
+                    {
+                        "battery_years": [
+                            {"year": y} | v | {f"ceiling_{k}": 2 * x for k, x in v.items()}
+                            for y, v in YEARS.items()
+                        ]
+                    }
+                ),
             },
         )
         db.commit()
@@ -327,11 +344,27 @@ def test_value_per_battery_size_and_priority(client):
     a = by_account(client, "A").json()  # point inside LZ_HOUSTON
     b = by_account(client, "B").json()  # no point: zone from its CenterPoint meter
     assert a["load_zone"] == b["load_zone"] == "LZ_HOUSTON"
-    assert a["battery_values"] == {"25": 560, "40": 900, "50": 1120}
-    assert (a["recommended_kwh"], a["value"]) == (50, 1120)  # 4,000 sqft
+    # Valued on the average full year, not the last 12 months.
+    assert a["battery_values"]["50"] == {
+        "value": 1000,
+        "ceiling": 2000,
+        "first_year": 2024,
+        "last_year": 2025,
+        "recent": 1120,
+        "low": 600,
+        "low_year": 2025,
+        "high": 1400,
+        "high_year": 2024,
+    }
+    assert {k: v["value"] for k, v in a["battery_values"].items()} == {
+        "25": 500,
+        "40": 790,
+        "50": 1000,
+    }
+    assert (a["recommended_kwh"], a["value"]) == (50, 1000)  # 4,000 sqft
     assert a["sizing_reason"] == "4,000 sqft home → 50 kWh"
-    assert (b["recommended_kwh"], b["value"]) == (40, 900)  # 1,500 sqft + pool
-    assert a["expected_value"] == round(a["score"] / 100 * 1120)
+    assert (b["recommended_kwh"], b["value"]) == (40, 790)  # 1,500 sqft + pool
+    assert a["expected_value"] == round(a["score"] / 100 * 1000)
     kinds = {d["key"]: d["kind"] for d in a["drivers"]}
     assert kinds["home_size"] == "percentile" and kinds["solar"] == "flag"
 
@@ -340,4 +373,12 @@ def test_value_per_battery_size_and_priority(client):
         (i["expected_value"] for i in by_priority), reverse=True
     )
     by_value = client.get("/leads", params={"sort": "value"}).json()["items"]
-    assert by_value[0]["value"] == 1120
+    assert by_value[0]["value"] == 1000
+
+    # Leads per load zone, and the zone filter used by Grid Zones' "View leads" links.
+    total = client.get("/leads").json()["total"]
+    assert client.get("/leads/summary").json()["by_zone"] == {"LZ_HOUSTON": total}
+    assert client.get("/leads", params={"zone": "LZ_HOUSTON"}).json()["total"] == total
+    assert client.get("/leads", params={"zone": "LZ_NORTH"}).json()["total"] == 0
+    houston = {"bbox": "-96,29,-95,30.5", "zone": "LZ_NORTH"}
+    assert client.get("/leads/geo", params=houston).json()["total"] == 0

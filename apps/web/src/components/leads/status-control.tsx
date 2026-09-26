@@ -4,56 +4,73 @@ import { useState } from "react"
 import { useRouter } from "next/navigation"
 
 import { Button } from "@/components/ui/button"
-import { Label } from "@/components/ui/label"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Field, FieldError, FieldGroup, FieldLabel } from "@/components/ui/field"
+import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { apiFetch } from "@/lib/api"
-import type { LeadDetail, LeadStatus } from "@/lib/leads"
+import { STATUS_LABELS, type LeadDetail, type LeadStatus } from "@/lib/leads"
 
 const statuses: LeadStatus[] = ["new", "reviewed", "qualified", "excluded"]
+const items = statuses.map((value) => ({ value, label: STATUS_LABELS[value] }))
 
 export function StatusControl({ id, status }: { id: number; status: LeadStatus }) {
   const router = useRouter()
   const [selected, setSelected] = useState<LeadStatus>(status)
+  const [savedStatus, setSavedStatus] = useState<LeadStatus>(status)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [message, setMessage] = useState<string | null>(null)
 
   async function save() {
     setSaving(true)
     setError(null)
+    setMessage(null)
     try {
-      await apiFetch<LeadDetail>(`/leads/${id}`, {
+      const updated = await apiFetch<LeadDetail>(`/leads/${id}`, {
         method: "PATCH",
         body: JSON.stringify({ status: selected }),
       })
+      setSavedStatus(updated.status)
+      setSelected(updated.status)
+      setMessage(`Status saved as ${STATUS_LABELS[updated.status]}.`)
       router.refresh()
-    } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "Could not update status.")
+    } catch {
+      setError("Could not save the status. Try again.")
     } finally {
       setSaving(false)
     }
   }
 
   return (
-    <div className="flex flex-col gap-2">
-      <Label htmlFor="lead-status">Lead status</Label>
-      <div className="flex items-center gap-2">
-        <Select value={selected} onValueChange={(value) => value && setSelected(value as LeadStatus)}>
-          <SelectTrigger id="lead-status" aria-label="Lead status" className="min-w-32">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {statuses.map((option) => (
-              <SelectItem key={option} value={option}>
-                {option[0].toUpperCase() + option.slice(1)}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-        <Button onClick={save} disabled={saving || selected === status}>
-          {saving ? "Saving…" : "Save"}
-        </Button>
-      </div>
-      {error && <p role="alert" className="text-xs text-destructive">{error}</p>}
-    </div>
+    <FieldGroup>
+      <Field data-disabled={saving}>
+        <FieldLabel htmlFor="lead-status">Review status</FieldLabel>
+        <div className="flex flex-wrap items-center gap-2">
+          <Select items={items} value={selected} disabled={saving} onValueChange={(value) => {
+            if (!value) return
+            setSelected(value as LeadStatus)
+            setError(null)
+            setMessage(null)
+          }}>
+            <SelectTrigger id="lead-status" className="min-w-32">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectGroup>
+                {items.map((option) => (
+                  <SelectItem key={option.value} value={option.value}>
+                    {option.label}
+                  </SelectItem>
+                ))}
+              </SelectGroup>
+            </SelectContent>
+          </Select>
+          <Button onClick={save} disabled={saving || selected === savedStatus}>
+            {saving ? "Saving…" : "Save status"}
+          </Button>
+        </div>
+        {error && <FieldError>{error}</FieldError>}
+        {message && <p role="status" className="text-sm text-muted-foreground">{message}</p>}
+      </Field>
+    </FieldGroup>
   )
 }
