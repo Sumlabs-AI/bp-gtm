@@ -5,6 +5,7 @@ description = "FastAPI backend"
 requires-python = ">=3.13"
 dependencies = [
     "alembic>=1.20.0",
+    "duckdb>=1.5.5",
     "fastapi[standard]>=0.141.1",
     "geoalchemy2>=0.20.0",
     "geopandas>=1.1.4",

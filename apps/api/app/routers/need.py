@@ -1,3 +1,4 @@
+from datetime import date
 from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -7,6 +8,7 @@ from sqlalchemy.orm import Session
 from app import geo
 from app.db import get_db
 from app.need.config import need
+from app.need.outage.component import outage_components
 from app.need.store import cells_in_viewport, get_cell
 
 router = APIRouter(prefix="/need", tags=["need"])
@@ -44,6 +46,7 @@ def list_cells(db: DB, bbox: Annotated[str, Query(description="west,south,east,n
     cells = cells_in_viewport(db, *_bounds(bbox), limit=need.viewport_max_cells)
     if cells is None:
         raise HTTPException(400, "Viewport contains too many H3 cells. Zoom in to continue.")
+    outage = outage_components(db, cells, date.today())
     return {
         "type": "FeatureCollection",
         "features": [
@@ -51,7 +54,11 @@ def list_cells(db: DB, bbox: Annotated[str, Query(description="west,south,east,n
                 "type": "Feature",
                 "id": c.h3_index,
                 "geometry": geo.cell_to_polygon(c.h3_index),
-                "properties": {"h3": c.h3_index, "needScore": None},
+                "properties": {
+                    "h3": c.h3_index,
+                    "needScore": None,
+                    "outageNeed": (outage[c.h3_index] or {}).get("score"),
+                },
             }
             for c in cells
         ],
@@ -63,11 +70,12 @@ def cell_detail(db: DB, h3_index: str):
     cell = get_cell(db, h3_index) if geo.is_cell(h3_index) else None
     if cell is None:
         raise HTTPException(404, f"Unknown cell {h3_index}")
+    outage = outage_components(db, [cell], date.today())[cell.h3_index]
     return CellDetail(
         h3=cell.h3_index,
         resolution=cell.resolution,
         center=LatLng(lat=cell.center_lat, lng=cell.center_lng),
         loadZone=cell.load_zone,
         needScore=None,
-        components={},
+        components={"outage": outage} if outage else {},
     )

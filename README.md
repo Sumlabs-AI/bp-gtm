@@ -25,6 +25,8 @@ The database starts empty, so `/grid` shows nothing until you load prices. In an
 docker compose exec api python -m app.grid backfill 2025 2026   # ~1 min, public ERCOT files, no login
 docker compose exec api python -m app.grid compute              # score the zones
 docker compose exec api python -m app.need seed                 # H3 Cells for /need (offline, seconds)
+docker compose exec api python -m app.need outage download      # outage history, ~6 GB (cached)
+docker compose exec api python -m app.need outage compute       # Outage Need on /need
 ```
 
 Then open http://localhost:3000 (redirects to `/grid`).

@@ -25,7 +25,7 @@ Per-Cell measure of how useful/necessary battery backup is in that geography. Co
 _Avoid_: score (unqualified), risk score
 
 **Baseline Need**:
-Long-term structural Need for a Cell, driven by historical outage, weather and resilience exposure. Changes slowly.
+Long-term structural Need for a Cell, driven by historical outage, weather and resilience exposure. Changes slowly. Historical events (e.g. past Major Outage Events) explain Baseline Need; they never answer "why now".
 _Avoid_: static need, historical need
 
 **Live Need**:
@@ -41,7 +41,7 @@ The outage-derived part of Need Score (frequency, duration, recency, customers a
 _Avoid_: outage score
 
 **Observed Outage Exposure**:
-How much outage a Cell's county has actually experienced, from customer-out counts over time, as a Texas percentile. County-level: every Cell in a county shares it.
+How much outage a Cell's county has actually experienced: the Texas percentile of outage hours per customer over 5 years. County-level: every Cell in a county shares it. Outage Events and Major Outage Events explain that history but are not scored.
 _Avoid_: outage history score, outage risk
 
 **Utility Reliability Need**:

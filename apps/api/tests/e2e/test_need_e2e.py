@@ -162,7 +162,7 @@ def test_enrichment_assigns_each_cell_its_load_zone(client):
     report = enrich()
     assert report.processed == houston + austin + gulf
     assert (report.assigned, report.unknown) == (houston + austin, gulf)
-    assert sum(report.by_zone.values()) == report.assigned
+    assert sum(report.by_value.values()) == report.assigned
     gulf_cell = client.get(f"/need/cells/{geo.latlng_to_cell(*GULF)}").json()
     assert gulf_cell["loadZone"] is None
 
@@ -186,7 +186,7 @@ def test_enrichment_recomputes_every_run(client):
 
     again = enrich()
     assert again.changed == 0
-    assert (again.assigned, again.by_zone) == (first.assigned, first.by_zone)
+    assert (again.assigned, again.by_value) == (first.assigned, first.by_value)
 
     # A stale zone (e.g. from an older zone file) is corrected, not kept.
     cell = geo.latlng_to_cell(LAT, LNG)
