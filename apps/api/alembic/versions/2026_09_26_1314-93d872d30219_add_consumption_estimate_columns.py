@@ -1,7 +1,7 @@
 """add consumption estimate columns
 
 Revision ID: 93d872d30219
-Revises: c463800be556
+Revises: 4573bd0a859b
 Create Date: 2026-09-26 13:14:30.879907
 
 """
@@ -13,7 +13,7 @@ from sqlalchemy.dialects import postgresql
 
 # revision identifiers, used by Alembic.
 revision: str = '93d872d30219'
-down_revision: Union[str, Sequence[str], None] = 'c463800be556'
+down_revision: Union[str, Sequence[str], None] = '4573bd0a859b'
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
