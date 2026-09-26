@@ -23,6 +23,10 @@ PROPERTY_COLUMNS = [
     "year_built",  # int
     "has_solar",  # bool: appraisal record lists solar PV panels
     "has_pool",  # bool: residential pool/spa on the appraisal record (a large electric load)
+    "bedrooms",  # int, main building (a household-size proxy for the consumption estimate)
+    "full_baths",  # int
+    "half_baths",  # int
+    "stories",  # float, e.g. 1, 1.5, 2
 ]
 
 # One row per parcel: where the property is. Source: county parcel GIS layers.

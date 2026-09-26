@@ -25,6 +25,7 @@ _ARCHIVES = (
     ("Real_jur_exempt.zip", "jur_exempt_cd.txt"),
 )
 _REDACTED_OWNERS = {"CURRENT OWNER", "CONFIDENTIAL", "CONFIDENTIAL OWNER"}
+_FIXTURES = {"RMB": "bedrooms", "RMF": "full_baths", "RMH": "half_baths", "STY": "stories"}
 
 
 def _base_url(client: httpx.Client) -> str:
@@ -134,8 +135,25 @@ def parse(paths: list[Path]) -> pd.DataFrame:
             ["acct", "heat_ar", "bld_num"], ascending=[True, False, True], na_position="last"
         )
         .drop_duplicates("acct")
-        .set_index("acct")[["heat_ar", "date_erected"]]
+        .set_index("acct")[["bld_num", "heat_ar", "date_erected"]]
     )
+
+    # Room counts and stories of that same building (fixtures: RMB bedrooms, RMF/RMH full/half
+    # baths, STY stories).
+    fixtures = _read(
+        archives["Real_building_land.zip"], "fixtures.txt", ["acct", "bld_num", "type", "units"]
+    )
+    fixtures = fixtures[fixtures["type"].str.strip().isin(_FIXTURES)]
+    fixtures = fixtures.assign(
+        acct=fixtures["acct"].str.strip(),
+        bld_num=pd.to_numeric(fixtures["bld_num"], errors="coerce"),
+        type=fixtures["type"].str.strip().map(_FIXTURES),
+        units=pd.to_numeric(fixtures["units"], errors="coerce"),
+    )
+    fixtures = fixtures.merge(
+        buildings["bld_num"].reset_index(), on=["acct", "bld_num"]
+    ).pivot_table(index="acct", columns="type", values="units", aggfunc="first")
+    buildings = buildings.join(fixtures.reindex(columns=list(_FIXTURES.values())))
 
     # Extra features: solar PV (any "Solar ..." description) and residential pools/spas
     # (codes RRP*), a proxy for a large electric load.
@@ -193,4 +211,7 @@ def parse(paths: list[Path]) -> pd.DataFrame:
         .where(result["year_built"].between(1800, date.today().year + 1))
         .astype("Int64")
     )
+    for column in ("bedrooms", "full_baths", "half_baths"):
+        result[column] = result[column].round().astype("Int64")
+    result["stories"] = result["stories"].where(result["stories"] > 0).astype(float)
     return result[_PROPERTY_COLUMNS]

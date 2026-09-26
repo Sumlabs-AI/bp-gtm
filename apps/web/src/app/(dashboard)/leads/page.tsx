@@ -14,7 +14,7 @@ import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { apiFetch } from "@/lib/api"
 import type { ZoneSummary } from "@/lib/grid"
-import { BATTERY_SIZES, SIGNAL_LABELS, STATUS_LABELS, formatLeadMoney, signalLabel, valueBasis, type LeadItem, type LeadPage, type LeadSignal, type LeadStatus, type LeadSummary } from "@/lib/leads"
+import { BATTERY_SIZES, SIGNAL_LABELS, STATUS_LABELS, formatKwh, formatLeadMoney, signalLabel, valueBasis, type LeadItem, type LeadPage, type LeadSignal, type LeadStatus, type LeadSummary } from "@/lib/leads"
 import { cn } from "@/lib/utils"
 
 export const metadata = { title: "Leads" }
@@ -226,6 +226,7 @@ export default async function LeadsPage(props: PageProps<"/leads">) {
                       <TableCell className="min-w-44 max-w-60 whitespace-normal">
                         <Link href={detailHref(lead.id)} className="font-medium text-primary hover:underline">{lead.address ?? `Lead ${lead.id}`}</Link>
                         <span className="block text-xs text-muted-foreground">{[lead.city, lead.zip].filter(Boolean).join(" · ") || "Location unavailable"}</span>
+                        <span className="block text-xs text-muted-foreground tabular-nums">{lead.annual_kwh === null ? "Est. use unavailable" : `Est. use ≈ ${formatKwh(Math.round(lead.annual_kwh / 120) * 10)}/mo`}</span>
                         <span className="line-clamp-1 text-xs text-muted-foreground" title={lead.reasons}>{lead.reasons}</span>
                       </TableCell>
                       <TableCell className="tabular-nums"><span className="block font-semibold">{lead.expected_value === null ? "Unavailable" : formatLeadMoney(lead.expected_value)}</span><span className="text-xs text-muted-foreground">Fit {lead.score.toFixed(0)} / 100</span></TableCell>
@@ -244,6 +245,7 @@ export default async function LeadsPage(props: PageProps<"/leads">) {
                   <CardHeader>
                     <div className="flex flex-wrap items-start justify-between gap-2"><CardTitle><Link href={detailHref(lead.id)} className="text-primary hover:underline">{lead.address ?? `Lead ${lead.id}`}</Link></CardTitle><Badge variant="outline">{STATUS_LABELS[lead.status]}</Badge></div>
                     <p className="text-xs text-muted-foreground">{[lead.city, lead.zip].filter(Boolean).join(" · ") || "Location unavailable"}</p>
+                    <p className="text-xs text-muted-foreground tabular-nums">{lead.annual_kwh === null ? "Est. use unavailable" : `Est. use ≈ ${formatKwh(Math.round(lead.annual_kwh / 120) * 10)}/mo`}</p>
                     <p className="line-clamp-1 text-xs text-muted-foreground">{lead.reasons}</p>
                   </CardHeader>
                   <CardContent className="flex flex-col gap-3">

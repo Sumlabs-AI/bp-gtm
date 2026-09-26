@@ -38,6 +38,19 @@ class LeadItem(BaseModel):
     sizing_reason: str | None
     value: float | None  # $/yr for the recommended battery
     expected_value: float | None  # score/100 × value: the default ranking
+    annual_kwh: float | None  # estimated electricity use (median), see Consumption
+
+
+class Consumption(BaseModel):
+    """Property-based estimate of the home's electricity use; not metered data."""
+
+    annual_kwh: float  # median estimate, kWh per year
+    low_kwh: float  # P10–P90 range
+    high_kwh: float
+    monthly_kwh: list[float]  # Jan–Dec of a typical year, sums to annual_kwh
+    peak_summer_kw: float  # the home's own highest daily demand, not diversified
+    peak_winter_kw: float
+    electric_heat_prob: float  # 0–1
 
 
 class LeadPage(BaseModel):
@@ -69,6 +82,11 @@ class LeadDetail(LeadItem):
     market_value: float | None
     heated_sqft: float | None
     year_built: int | None
+    bedrooms: int | None
+    full_baths: int | None
+    half_baths: int | None
+    stories: float | None
+    consumption: Consumption | None
     first_seen_at: datetime
     scored_at: datetime
     lat: float | None
@@ -126,6 +144,7 @@ def _item(lead: Lead, prop: Property) -> dict:
         "sizing_reason": lead.sizing_reason,
         "value": lead.value,
         "expected_value": lead.expected_value,
+        "annual_kwh": lead.annual_kwh,
     }
 
 
@@ -311,6 +330,11 @@ def _detail(db: Session, lead_id: int) -> dict:
         "market_value": prop.market_value,
         "heated_sqft": prop.heated_sqft,
         "year_built": prop.year_built,
+        "bedrooms": prop.bedrooms,
+        "full_baths": prop.full_baths,
+        "half_baths": prop.half_baths,
+        "stories": prop.stories,
+        "consumption": lead.consumption,
         "lat": prop.lat,
         "lon": prop.lon,
         "first_seen_at": lead.first_seen_at,

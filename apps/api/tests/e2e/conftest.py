@@ -6,10 +6,12 @@ and migrated automatically.
 
 from pathlib import Path
 
+import geopandas as gpd
 import psycopg
 import pytest
 from alembic.config import Config
 from fastapi.testclient import TestClient
+from shapely.geometry import box
 from sqlalchemy import text
 
 from alembic import command
@@ -46,6 +48,19 @@ def clean_tables(database):
             )
         ).scalar_one()
         conn.execute(text(f"TRUNCATE {tables} RESTART IDENTITY CASCADE"))
+
+
+@pytest.fixture(autouse=True)
+def census_block_groups(monkeypatch):
+    """Two fake block groups (west of downtown Houston 20% electric heat, east 60%) so
+    scoring never downloads Census files."""
+    groups = gpd.GeoDataFrame(
+        {"geoid": ["1", "2"], "households": [100, 100], "electric_share": [0.2, 0.6]},
+        geometry=[box(-96.0, 29.4, -95.3, 30.2), box(-95.3, 29.4, -94.9, 30.2)],
+        crs=4326,
+    )
+    monkeypatch.setattr("app.leads.consumption.block_group_heating", lambda: groups)
+    return groups
 
 
 @pytest.fixture
