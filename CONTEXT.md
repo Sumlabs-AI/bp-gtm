@@ -97,8 +97,16 @@ One complete fetch of all active NWS Alerts for Texas. Only a successful, comple
 _Avoid_: poll (when meaning the stored result), sync
 
 **Grid Need Component**:
-The ERCOT-derived part of Need Score (load, capacity, forecast load, resource outages, prices). Only signals that indicate value/urgency for residential storage belong here.
-_Avoid_: grid score, grid component, grid stress score
+The ERCOT-derived part of Live Need: is the grid stressed now or about to be? Live-only; there is no Baseline Grid score, because six Load Zones can't make a meaningful percentile and long-term reliability is already in Outage history. Built from ERCOT Grid Conditions and Grid Stress Signals.
+_Avoid_: grid score, grid component, grid stress score, Zone Economics Score (that is economics, not Need)
+
+**ERCOT Grid Condition**:
+The grid state ERCOT itself declares: Normal, a Conservation Appeal, or Energy Emergency Alert level 1–3 (EEA3 means rolling outages). Official, like an NWS Alert.
+_Avoid_: grid alert, grid status (when meaning our reading)
+
+**Grid Stress Signal**:
+Our reading of ERCOT data crossing one of our thresholds: low reserves (PRC), a tight forecast margin, or a price spike in a Cell's Load Zone (real-time now, or day-ahead tomorrow). Derived by us; tagged `reliability` or `market`. Never presented as an ERCOT declaration.
+_Avoid_: grid alert, EEA (unless ERCOT declared one)
 
 ### Propensity and Opportunity
 
