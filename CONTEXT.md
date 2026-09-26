@@ -25,8 +25,12 @@ Per-Cell measure of how useful/necessary battery backup is in that geography. Co
 _Avoid_: score (unqualified), risk score
 
 **Baseline Need**:
-Long-term structural Need for a Cell, driven by historical outage, weather and resilience exposure. Changes slowly. Historical events (e.g. past Major Outage Events) explain Baseline Need; they never answer "why now".
-_Avoid_: static need, historical need
+How much structural reason a place has to benefit from backup power, independent of what is happening today: a union-style combination of Observed Outage Exposure and Weather Need, ranked as a Texas percentile. Historical events explain it; they never answer "why now". Not a probability, not a purchase likelihood, not the GTM score.
+_Avoid_: need score (reserved until Live Need exists), opportunity, risk score
+
+**Dominant Driver**:
+Which input mostly explains a Baseline Need: outage history, weather, or both (when the two inputs are within 10 points).
+_Avoid_: main factor, cause
 
 **Live Need**:
 Current/near-term urgency for a Cell, driven by active alerts, forecasts, current outages and current ERCOT conditions. Changes rapidly. Answers "why now?".
