@@ -211,6 +211,67 @@ Coast. On a quiet day the live panel is empty by design; the worker keeps collec
 - Live signals are observed, not scored; there is no Live Need or Opportunity number yet.
 - The reference population is area-weighted ("% of Texas land"), not customer-weighted.
 
+## Data sources
+
+Every external endpoint the code calls. All are public; only the optional ERCOT Public API
+needs an account. Raw downloads are cached under `apps/api/data/` (gitignored).
+
+### Need Engine (`/need`)
+
+| Source | What we use it for | Endpoint | Access / licence | Refresh |
+| --- | --- | --- | --- | --- |
+| **ORNL EAGLE-I** | County customers-out every 15 min, 2021–2025 → Outage Events, outage hours per customer | `https://api.figshare.com/v2/articles/24237376` (file list; each file via its `download_url`, plus `MCC.csv` modeled customers) | none · CC BY 4.0 | manual (`outage download`); ~2 months after year end |
+| **EIA Form 861** | Utility SAIDI/SAIFI (reliability) 2020–2024 | `https://www.eia.gov/electricity/data/eia861/zip/f861{year}.zip`, older years `…/eia861/archive/zip/f861{year}.zip` | none · public domain | manual; yearly |
+| **NWS warnings (Iowa Environmental Mesonet archive)** | Severe thunderstorm / tornado / extreme wind warning polygons → Storm Exposure | `https://mesonet.agron.iastate.edu/cgi-bin/request/gis/watchwarn.py?accept=shapefile&states=TX&limit1=yes&sts=…&ets=…` | none · public domain (NWS) | manual (`weather download`) |
+| **NOAA nClimGrid-daily (EpiNOAA)** | Daily county max/min temperature → days ≥ 100 °F / ≤ 28 °F | `https://noaa-nclimgrid-daily-pds.s3.amazonaws.com/EpiNOAA/v1-0-0/parquet/cty/YEAR={y}/STATUS={scaled\|prelim}/{yyyymm}.parquet` | none · public domain | manual; months of lag |
+| **US Census cartographic boundaries** | County polygons (Harris, Travis; all Texas for the res-6 reference) | `https://www2.census.gov/geo/tiger/GENZ2024/shp/cb_2024_us_county_500k.zip` | none · public domain | once (committed / cached) |
+| **NWS API: active alerts** | Live NWS Alerts for Texas | `https://api.weather.gov/alerts/active?area=TX` | User-Agent header required · public domain | every 5 min (worker) |
+| **NWS API: forecast zones** | Areas of zone-based alerts | `https://api.weather.gov/zones/{forecast\|county}/{UGC}` (from each alert's `affectedZones`) | User-Agent · public domain | on first use, cached |
+| **NWS API: points / gridpoints** | 48 h forecast (wind gust, heat index, temperature, ice) at 234 points | `https://api.weather.gov/points/{lat},{lng}` (once per point), `https://api.weather.gov/gridpoints/{office}/{x},{y}` | User-Agent · public domain | hourly (worker) |
+| **NOAA Storm Prediction Center** | Day 1–2 severe-storm outlooks | `https://www.spc.noaa.gov/products/outlook/day1otlk_cat.lyr.geojson`, `…/day2otlk_cat.lyr.geojson` | none · public domain | hourly (worker) |
+| **ERCOT dashboards** | Official grid condition (Normal / EEA), reserves (PRC), capacity vs demand forecast | `https://www.ercot.com/api/1/services/read/dashboards/daily-prc.json`, `…/supply-demand.json` | none · public | every 5 min (worker) |
+| **ERCOT MIS reports (live prices)** | Real-time (NP6-905, report 12301) and day-ahead (NP4-190, report 12331) zone prices | list `https://www.ercot.com/misapp/servlets/IceDocListJsonWS?reportTypeId={id}`, file `https://www.ercot.com/misdownload/servlets/mirDownload?doclookupId={docId}` | none · public | 15 min / hourly (worker) |
+
+### Grid Zones (`/grid`) and lead valuation
+
+| Source | What we use it for | Endpoint | Access / licence |
+| --- | --- | --- | --- |
+| **ERCOT MIS yearly price files** | Historical real-time (report 13061) and day-ahead (13060) load-zone/hub prices | same MIS list/download endpoints as above | none · public |
+| **ERCOT Public API** (optional) | Most recent days of prices | `https://api.ercot.com/api/public-reports/np6-905-cd/spp_node_zone_hub`, `…/np4-190-cd/dam_stlmnt_pnt_prices`; token from `https://ercotb2c.b2clogin.com/…` | ERCOT developer account (`.env`) |
+| **ERCOT load zones (ArcGIS, ICF 2022)** | Houston / North / South / West zone polygons | `https://services3.arcgis.com/fwwoCWVtaahwlvxO/arcgis/rest/services/ERCOT_Load_Zones/FeatureServer/7/query` | public layer · boundaries approximate |
+| **HIFLD Electric Retail Service Territories** | Austin Energy and CPS territory polygons (LZ_AEN, LZ_CPS) | `https://services3.arcgis.com/OYP7N6mAJJCyH6hd/arcgis/rest/services/Electric_Retail_Service_Territories_HIFLD/FeatureServer/0/query` | public query; layer metadata restricts use to Platts MSA holders, **check before commercial use** |
+
+The zone polygons are built once (`scripts/build_zone_geojson.py`) into the committed
+`apps/api/app/grid/ercot-zones.geojson`. The battery dispatch model adapts
+[wattgap](https://github.com/saivarun3407/wattgap) (MIT, `app/grid/LICENSE-wattgap`).
+
+### Leads (`/leads`)
+
+| Source | What we use it for | Endpoint | Access / licence |
+| --- | --- | --- | --- |
+| **Harris Central Appraisal District (HCAD)** | Properties: owner, value, size, solar, pool | `https://download.hcad.org/data/CAMA/{year}/…` | public download · no explicit reuse licence |
+| **HCAD parcels** | Parcel points (lead map location) | `https://download.hcad.org/data/GIS/Parcels.zip` | public download · no explicit reuse licence |
+| **ERCOT TDSP ESI ID extract** (MIS report 203) | Electric meters (eligibility: served by a Base utility) | MIS list/download endpoints, `reportTypeId=203` | none · public |
+| **Harris County issued permits (ArcGIS)** | Solar / EV / new-home permits | `https://www.gis.hctx.net/arcgishcpid/rest/services/Permits/IssuedPermits/FeatureServer/0` | public layer |
+| **City of Houston sold permits** | Weekly permit reports | `https://www.houstonpermittingcenter.org/sold-permits-search` | public page · no explicit reuse licence |
+
+Get Base legal sign-off before exporting lead data outside the team (see
+[wiki/residential-leads.md](wiki/residential-leads.md)). Full research notes per lead source:
+`apps/api/app/leads/sources.yaml`.
+
+### Map
+
+| Source | Use | Endpoint | Licence |
+| --- | --- | --- | --- |
+| **OpenFreeMap** | Basemap tiles | `https://tiles.openfreemap.org/styles/positron` | free, no key · OpenStreetMap data (ODbL, attribution shown on the map) |
+
+### Evaluated and not used
+
+- **CenterPoint / Oncor outage maps**: terms are personal / non-commercial; not scraped.
+- **PowerOutage.us**: paid; free tier is non-commercial.
+- **NWS heat/cold advisory counts**: measured to be mostly NWS-office practice, not climate (see the Need Engine section above).
+- **PUCT Beryl/Derecho ZIP-level outage filings**: public record but no explicit licence; parked pending legal review.
+
 ## Where things live
 
 | | |
