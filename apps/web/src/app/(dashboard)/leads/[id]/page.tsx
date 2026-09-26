@@ -96,10 +96,11 @@ export default async function LeadDetailPage(props: PageProps<"/leads/[id]">) {
         </div>
         <Card>
           <CardHeader>
-            <CardDescription>Expected value</CardDescription>
+            <CardDescription>Priority value</CardDescription>
             <CardTitle className="text-3xl font-semibold tabular-nums">
               {lead.expected_value === null ? "Value unavailable" : `${formatMoney(lead.expected_value)}/yr`}
             </CardTitle>
+            <p className="text-xs text-muted-foreground">Fit score × realistic battery value. A ranking index, not a revenue forecast.</p>
           </CardHeader>
           <CardContent className="flex flex-col gap-2">
             <Badge variant="secondary" className="tabular-nums">Fit {lead.score.toFixed(0)}/100</Badge>
@@ -107,7 +108,7 @@ export default async function LeadDetailPage(props: PageProps<"/leads/[id]">) {
               ? "Battery recommendation unavailable"
               : `Pitch a ${lead.recommended_kwh} kWh Base battery`}</p>
             {lead.sizing_reason && <p className="text-sm text-muted-foreground">{lead.sizing_reason}</p>}
-            {lead.value !== null && <p className="text-xs text-muted-foreground">Battery grid value: {formatMoney(lead.value)}/yr</p>}
+            {lead.value !== null && <p className="text-xs text-muted-foreground">Realistic battery value: {formatMoney(lead.value)}/yr (last 12 months)</p>}
           </CardContent>
         </Card>
       </div>
@@ -117,24 +118,34 @@ export default async function LeadDetailPage(props: PageProps<"/leads/[id]">) {
           <Card>
             <CardHeader>
               <CardTitle>Battery options</CardTitle>
-              <CardDescription>Estimated annual grid value at this home.</CardDescription>
+              <CardDescription>Historical energy-trading value by battery size.</CardDescription>
             </CardHeader>
             <CardContent className="flex flex-col gap-4">
               <div className="grid gap-3 sm:grid-cols-3">
-                {BATTERY_SIZES.map((size) => (
-                  <div key={size} className={cn("rounded-lg border p-4", lead.recommended_kwh === size ? "border-primary bg-primary/5" : "border-border")}>
-                    <div className="flex flex-wrap items-center gap-2">
-                      <span className="font-medium">{size} kWh</span>
-                      {lead.recommended_kwh === size && <Badge>Pitch</Badge>}
+                {BATTERY_SIZES.map((size) => {
+                  const batteryValue = lead.battery_values?.[size]
+                  return (
+                    <div key={size} className={cn("rounded-lg border p-4", lead.recommended_kwh === size ? "border-primary bg-primary/5" : "border-border")}>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="font-medium">{size} kWh</span>
+                        {lead.recommended_kwh === size && <Badge>Pitch</Badge>}
+                      </div>
+                      <p className="mt-3 text-xl font-semibold tabular-nums">
+                        {batteryValue ? `≈ ${formatMoney(batteryValue.value)}/yr` : "Value unavailable"}
+                      </p>
+                      {batteryValue && <p className="text-xs text-muted-foreground">Last 12 months</p>}
+                      {batteryValue && <div className="mt-2 flex flex-col gap-1 text-xs text-muted-foreground">
+                        {batteryValue.low !== null && batteryValue.high !== null && batteryValue.low_year !== null && batteryValue.high_year !== null && <p>
+                          Past years: {formatMoney(batteryValue.low)} ({batteryValue.low_year}) to {formatMoney(batteryValue.high)} ({batteryValue.high_year})
+                        </p>}
+                        <p>Ceiling {formatMoney(batteryValue.ceiling)}/yr with perfect hindsight</p>
+                      </div>}
                     </div>
-                    <p className="mt-3 text-xl font-semibold tabular-nums">
-                      {lead.battery_values === null ? "Value unavailable" : `${formatMoney(lead.battery_values[size])}/yr`}
-                    </p>
-                  </div>
-                ))}
+                  )
+                })}
               </div>
               <p className="text-xs leading-relaxed text-muted-foreground">
-                Battery values are a historical screening estimate of energy-arbitrage value from ERCOT real-time prices (perfect hindsight, last 12 months); they exclude retail margin, fees and ancillary services.
+                Battery value estimates energy trading on day-ahead plans after efficiency losses, $0.02/kWh wear and a 20% backup reserve; it excludes retail margin, fees and ancillary services.
               </p>
               {lead.load_zone && <Link href={`/grid/${encodeURIComponent(lead.load_zone)}`} className="text-sm font-medium text-primary hover:underline">
                 Why this zone? <span className="text-muted-foreground">{lead.load_zone}</span>

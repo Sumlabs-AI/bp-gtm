@@ -89,8 +89,9 @@ export default async function LeadsPage(props: PageProps<"/leads">) {
       <div className="flex flex-col gap-2">
         <h2 className="text-2xl font-semibold tracking-tight">Residential leads</h2>
         <p className="max-w-4xl text-sm text-muted-foreground">
-          Single-family, owner-occupied homes Base can serve in the Harris County pilot, ranked by expected annual battery value.
+          Single-family, owner-occupied homes Base can serve in the Harris County pilot, ranked by priority value.
         </p>
+        <p className="text-xs text-muted-foreground">Fit score × realistic battery value. A ranking index, not a revenue forecast.</p>
       </div>
 
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
@@ -168,7 +169,7 @@ export default async function LeadsPage(props: PageProps<"/leads">) {
                       <SelectTrigger id="sort" className="w-full"><SelectValue /></SelectTrigger>
                       <SelectContent>
                         <SelectGroup>
-                          <SelectItem value="priority">Priority (expected value)</SelectItem>
+                          <SelectItem value="priority">Priority (fit × value)</SelectItem>
                           <SelectItem value="score">Fit score</SelectItem>
                           <SelectItem value="value">Battery value</SelectItem>
                           <SelectItem value="triggered_at">Newest signal</SelectItem>
@@ -209,7 +210,7 @@ export default async function LeadsPage(props: PageProps<"/leads">) {
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Expected value ($/yr)</TableHead>
+                    <TableHead>Priority value ($/yr)</TableHead>
                     <TableHead>Fit</TableHead>
                     <TableHead>Address</TableHead>
                     <TableHead>Battery value ($/yr)</TableHead>
@@ -249,7 +250,7 @@ export default async function LeadsPage(props: PageProps<"/leads">) {
                             <div className="flex min-w-60 flex-wrap items-center gap-x-2 gap-y-1 text-xs tabular-nums">
                               {BATTERY_SIZES.map((size) => (
                                 <span key={size} className={Number(size) === lead.recommended_kwh ? "font-semibold" : undefined}>
-                                  {size} kWh {formatDollars(batteryValues[size])}
+                                  {size} kWh {formatDollars(batteryValues[size].value)}
                                   {Number(size) === lead.recommended_kwh && <Badge variant="secondary" className="ml-1">Pitch</Badge>}
                                 </span>
                               ))}
@@ -274,7 +275,7 @@ export default async function LeadsPage(props: PageProps<"/leads">) {
                 </TableBody>
               </Table>
               <p className="mt-4 text-xs text-muted-foreground">
-                Battery values are historical screening estimates of energy-arbitrage value from ERCOT real-time prices (perfect hindsight, last 12 months). They exclude retail margin, fees, and ancillary services.
+                Battery values estimate annual energy trading on ERCOT day-ahead plans, after efficiency losses, wear and a 20% backup reserve. They exclude retail margin, fees and ancillary services.
               </p>
               <div className="mt-4 flex items-center justify-between gap-3">
                 <span className="text-sm text-muted-foreground">50 leads per page</span>

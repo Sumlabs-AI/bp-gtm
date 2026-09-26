@@ -3,7 +3,7 @@ import { notFound } from "next/navigation"
 import { connection } from "next/server"
 import { ArrowLeftIcon } from "lucide-react"
 
-import { MonthlyBasisChart, HourlyProfileChart, MonthlyValueChart } from "@/components/grid/zone-charts"
+import { BatteryYearsChart, MonthlyBasisChart, HourlyProfileChart, MonthlyValueChart } from "@/components/grid/zone-charts"
 import { ZoneMap } from "@/components/grid/zone-map"
 import { Badge } from "@/components/ui/badge"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -21,6 +21,9 @@ export default async function ZonePage(props: PageProps<"/grid/[zone]">) {
   if (!zones.some((z) => z.code === code)) notFound()
   const zone = await apiFetch<ZoneDetail>(`/grid/zones/${code}`)
   const { battery } = zone.assumptions
+  const realisticValue = zone.metrics.arbitrage_usd
+  const ceilingValue = zone.metrics.arbitrage_ceiling_usd
+  const capturedPct = ceilingValue > 0 ? Math.round((realisticValue / ceilingValue) * 100) : null
 
   return (
     <div className="flex flex-col gap-6 px-4 py-4 md:py-6 lg:px-6">
@@ -97,6 +100,33 @@ export default async function ZonePage(props: PageProps<"/grid/[zone]">) {
           )}
           <Card size="sm">
             <CardHeader>
+              <CardTitle>Zone battery value</CardTitle>
+              <CardDescription>Last 12 months · {battery.capacity_kwh} kWh battery</CardDescription>
+            </CardHeader>
+            <CardContent className="flex flex-col gap-2">
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <p className="text-xs text-muted-foreground">Realistic</p>
+                  <p className="text-xl font-semibold tabular-nums">
+                    {formatDriverValue({ value: realisticValue, unit: "$/battery/yr" })}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-xs text-muted-foreground">Perfect-hindsight ceiling</p>
+                  <p className="text-xl font-semibold tabular-nums">
+                    {formatDriverValue({ value: ceilingValue, unit: "$/battery/yr" })}
+                  </p>
+                </div>
+              </div>
+              {capturedPct !== null && (
+                <p className="text-xs text-muted-foreground">
+                  Realistic plan captured {capturedPct}% of the ceiling.
+                </p>
+              )}
+            </CardContent>
+          </Card>
+          <Card size="sm">
+            <CardHeader>
               <CardTitle>Assumptions</CardTitle>
             </CardHeader>
             <CardContent className="flex flex-col gap-1 text-xs text-muted-foreground">
@@ -105,9 +135,10 @@ export default async function ZonePage(props: PageProps<"/grid/[zone]">) {
                 {Math.round(battery.round_trip_efficiency * 100)}% round-trip efficiency.
               </p>
               <p>
-                Backtest: best possible daily charge/discharge schedule on 15-minute real-time
-                prices, with perfect hindsight. Historical screening, not a P&amp;L forecast;
-                excludes ancillary services and retail tariffs.
+                Backtest: a daily plan from day-ahead prices, traded at 15-minute real-time prices
+                after efficiency losses, wear, and a 20% backup reserve. The ceiling assumes perfect
+                hindsight. Historical screening, not a P&amp;L forecast; excludes ancillary services,
+                retail margin, and fees.
               </p>
               <p>
                 Top 10 days produced {zone.metrics.top10_days_share.toFixed(0)}% of the year&apos;s
@@ -124,6 +155,7 @@ export default async function ZonePage(props: PageProps<"/grid/[zone]">) {
         <MonthlyValueChart zone={zone} />
         <MonthlyBasisChart zone={zone} />
       </div>
+      {zone.series.battery_years?.length ? <BatteryYearsChart zone={zone} /> : null}
     </div>
   )
 }

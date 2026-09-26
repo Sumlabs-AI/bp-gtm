@@ -38,11 +38,11 @@ Drivers (0–100, weights in `app/leads/config.py`): home size and home value ar
 Each lead also gets an **estimated annual grid value** (`app/leads/value.py`):
 
 1. **Load zone:** the lead's parcel point inside the zone polygons (`app/grid/ercot-zones.geojson`, smallest polygon wins), else its TDSP (`TDSP_ZONES`).
-2. **Battery values:** the zone's backtest value for 25 / 40 / 50 kWh (`battery_value_*` from `python -m app.grid compute`). Run grid `compute` before lead `score`.
+2. **Battery values:** per size (25 / 40 / 50 kWh) the zone's realistic `value` (day-ahead planner, last 12 months), its perfect-hindsight `ceiling`, and the worst/best full calendar year (`low`/`high` with the year). From `python -m app.grid compute`; see [grid-economics.md](grid-economics.md#battery-backtest). Run grid `compute` before lead `score`.
 3. **Recommended size:** by heated sqft (`battery_sizing` in `app/leads/config.py`: <2,500 → 25, <4,000 → 40, else 50); a pool bumps it one size up. `sizing_reason` says why.
-4. **Expected value** = fit score / 100 × value of the recommended size. `GET /leads` sorts by it by default (`sort=priority`); also `score`, `value`, `triggered_at`.
+4. **Priority value** (`expected_value` in the API) = fit score / 100 × realistic value of the recommended size. `GET /leads` sorts by it by default (`sort=priority`); also `score`, `value`, `triggered_at`. The fit score isn't a calibrated conversion probability, so this is a ranking index in dollars, not a revenue forecast.
 
-It's a screening estimate of energy-arbitrage value (perfect hindsight, last 12 months of real-time prices): no retail margin, fees or ancillary services yet. In the Harris pilot every lead is in LZ_HOUSTON, so the zone doesn't change the ranking yet; it will once other TDSPs' counties are added (North ≈ +22%, West ≈ +39% vs Houston).
+It's a screening estimate of energy-trading value (after losses, $0.02/kWh wear and a 20% backup reserve): no retail margin, fees or ancillary services yet. In the Harris pilot every lead is in LZ_HOUSTON, so the zone doesn't change the ranking yet; it will once other TDSPs' counties are added (last 12 months to 2026-09-20: North ≈ +28%, West ≈ +59% vs Houston). Years swing a lot: a 40 kWh battery in Houston would have made $310 in 2025 and $1,741 in 2023, and the last 12 months ($233) are among the quietest, which is why leads show the range.
 
 ## What counts as "new"
 

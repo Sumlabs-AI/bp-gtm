@@ -201,7 +201,7 @@ def score_leads(now: datetime, cfg: LeadScoringConfig, baseline: bool = False) -
         kwh, sizing_reason = recommend_battery(home.heated_sqft, bool(home.has_pool), cfg)
         zone = home.load_zone if isinstance(home.load_zone, str) else None
         values = battery_values.get(zone)
-        value = values[str(kwh)] if values else None
+        value = values[str(kwh)]["value"] if values else None
         rows.append(
             {
                 "property_id": int(home.property_id),

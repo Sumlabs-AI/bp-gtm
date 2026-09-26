@@ -3,7 +3,15 @@
 export type LeadStatus = "new" | "reviewed" | "qualified" | "excluded"
 export type LeadSignal = "solar" | "ev_charger" | "new_home" | "new_owner" | "new_meter" | "pool"
 export type BatteryKwh = 25 | 40 | 50
-export type BatteryValues = Record<"25" | "40" | "50", number>
+export type BatteryValue = {
+  value: number
+  ceiling: number
+  low: number | null
+  low_year: number | null
+  high: number | null
+  high_year: number | null
+}
+export type BatteryValues = Record<"25" | "40" | "50", BatteryValue>
 
 export type LeadItem = {
   id: number

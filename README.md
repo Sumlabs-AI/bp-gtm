@@ -26,6 +26,9 @@ docker compose exec api python -m app.grid backfill 2025 2026   # ~1 min, public
 docker compose exec api python -m app.grid compute              # score the zones
 ```
 
+For the per-year battery value ranges shown on leads, also load past years (~1 min per year):
+`docker compose exec api python -m app.grid backfill 2019 2020 2021 2022 2023 2024`, then `compute` again.
+
 Then open http://localhost:3000 (redirects to `/grid`).
 
 ### ERCOT API credentials (optional)

@@ -4,6 +4,7 @@ Adapters are faked (canonical frames, no network) so the scenario is exact:
 week 1 is the baseline; week 2 brings a new owner, a new EV permit and a new home.
 """
 
+import json
 from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
 
@@ -305,16 +306,28 @@ def test_map_points_and_cells(client, monkeypatch):
 
 
 def test_value_per_battery_size_and_priority(client):
+    VALUES = {25: 560, 40: 900, 50: 1120}
     with SessionLocal() as db:  # grid compute output for the Houston zone
         db.execute(
             text(
                 "INSERT INTO grid_zone_metrics (settlement_point, period_start, period_end, "
                 "grid_value_score, metrics, scores, series) "
-                "VALUES ('LZ_HOUSTON', :t, :t, 10, :m, '{}', '{}')"
+                "VALUES ('LZ_HOUSTON', :t, :t, 10, :m, '{}', :s)"
             ),
             {
                 "t": WEEK1,
-                "m": '{"battery_value_25": 560, "battery_value_40": 900, "battery_value_50": 1120}',
+                "m": json.dumps(
+                    {f"battery_value_{k}": v for k, v in VALUES.items()}
+                    | {f"battery_ceiling_{k}": 2 * v for k, v in VALUES.items()}
+                ),
+                "s": json.dumps(
+                    {
+                        "battery_years": [
+                            {"year": 2024, "25": 700, "40": 1100, "50": 1400},
+                            {"year": 2025, "25": 300, "40": 480, "50": 600},
+                        ]
+                    }
+                ),
             },
         )
         db.commit()
@@ -327,7 +340,19 @@ def test_value_per_battery_size_and_priority(client):
     a = by_account(client, "A").json()  # point inside LZ_HOUSTON
     b = by_account(client, "B").json()  # no point: zone from its CenterPoint meter
     assert a["load_zone"] == b["load_zone"] == "LZ_HOUSTON"
-    assert a["battery_values"] == {"25": 560, "40": 900, "50": 1120}
+    assert a["battery_values"]["50"] == {
+        "value": 1120,
+        "ceiling": 2240,
+        "low": 600,
+        "low_year": 2025,
+        "high": 1400,
+        "high_year": 2024,
+    }
+    assert {k: v["value"] for k, v in a["battery_values"].items()} == {
+        "25": 560,
+        "40": 900,
+        "50": 1120,
+    }
     assert (a["recommended_kwh"], a["value"]) == (50, 1120)  # 4,000 sqft
     assert a["sizing_reason"] == "4,000 sqft home → 50 kWh"
     assert (b["recommended_kwh"], b["value"]) == (40, 900)  # 1,500 sqft + pool

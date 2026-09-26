@@ -57,15 +57,15 @@ export function HourlyProfileChart({ zone }: { zone: ZoneDetail }) {
 
 export function MonthlyValueChart({ zone }: { zone: ZoneDetail }) {
   const config = {
-    arbitrage_usd: { label: "Battery value ($)", color: "#15803d" },
+    arbitrage_usd: { label: "Battery value, day-ahead plan ($)", color: "#15803d" },
   } satisfies ChartConfig
   return (
     <Card>
       <CardHeader>
         <CardTitle>Battery value by month</CardTitle>
         <CardDescription>
-          What one battery would have earned each month in the backtest. Spiky months mean
-          value depends on a few scarcity events.
+          Realistic value from the day-ahead plan each month. Spiky months mean value depends on a
+          few scarcity events.
         </CardDescription>
       </CardHeader>
       <CardContent>
@@ -78,6 +78,40 @@ export function MonthlyValueChart({ zone }: { zone: ZoneDetail }) {
               content={<ChartTooltipContent labelFormatter={(m) => monthLabel(String(m))} />}
             />
             <Bar dataKey="arbitrage_usd" fill="var(--color-arbitrage_usd)" radius={4} />
+          </BarChart>
+        </ChartContainer>
+      </CardContent>
+    </Card>
+  )
+}
+
+export function BatteryYearsChart({ zone }: { zone: ZoneDetail }) {
+  const config = {
+    "25": { label: "25 kWh", color: "#86c896" },
+    "40": { label: "40 kWh", color: "#22c55e" },
+    "50": { label: "50 kWh", color: "#15803d" },
+  } satisfies ChartConfig
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Realistic value by year</CardTitle>
+        <CardDescription>
+          Energy-trading value from day-ahead plans ($/yr) in each full calendar year.
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        <ChartContainer config={config} className="aspect-auto h-56 w-full">
+          <BarChart data={zone.series.battery_years ?? []} margin={{ left: 4, right: 12 }}>
+            <CartesianGrid vertical={false} />
+            <XAxis dataKey="year" tickLine={false} axisLine={false} />
+            <YAxis tickLine={false} axisLine={false} width={40} tickFormatter={(v) => `$${v}`} />
+            <ChartTooltip
+              content={<ChartTooltipContent labelFormatter={(_, p) => String(p[0]?.payload.year)} />}
+            />
+            <ChartLegend content={<ChartLegendContent />} />
+            <Bar dataKey="25" fill="var(--color-25)" radius={4} />
+            <Bar dataKey="40" fill="var(--color-40)" radius={4} />
+            <Bar dataKey="50" fill="var(--color-50)" radius={4} />
           </BarChart>
         </ChartContainer>
       </CardContent>

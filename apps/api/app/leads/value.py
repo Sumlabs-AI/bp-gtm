@@ -1,8 +1,9 @@
 """What a lead is worth to Base: its ERCOT load zone, the grid value of each battery size
 there (from the zone backtest, app/grid), and the size we'd pitch.
 
-Screening estimate only: energy-arbitrage value with perfect hindsight; no retail margin,
-fees or ancillary services.
+Screening estimate only: energy-arbitrage value of a battery trading on day-ahead plans
+(app/grid/dispatch.py), after losses, wear and the backup reserve; no retail margin, fees
+or ancillary services.
 """
 
 import geopandas as gpd
@@ -28,15 +29,31 @@ def assign_zones(homes: pd.DataFrame) -> pd.Series:
     return by_point.reindex(homes.index).fillna(homes["tdsp"].map(TDSP_ZONES))
 
 
-def zone_battery_values() -> dict[str, dict[str, float]]:
-    """{"LZ_HOUSTON": {"25": 563.0, "40": …, "50": …}, …} from the latest grid compute."""
+def zone_battery_values() -> dict[str, dict[str, dict]]:
+    """Per zone and battery size, from the latest grid compute:
+    {"LZ_HOUSTON": {"25": {"value": 194, "ceiling": 363, "low": 120, "low_year": 2020,
+    "high": 900, "high_year": 2023}, …}, …}. `value` is the realistic day-ahead-planner
+    value over the last year, `ceiling` the perfect-hindsight one, low/high the worst and
+    best full calendar years (None before the history is loaded)."""
     with engine.connect() as conn:
-        rows = conn.execute(text("SELECT settlement_point, metrics FROM grid_zone_metrics"))
+        rows = conn.execute(text("SELECT settlement_point, metrics, series FROM grid_zone_metrics"))
         values = {}
-        for zone, metrics in rows:
-            sizes = {str(k): metrics.get(f"battery_value_{k}") for k in LEAD_BATTERIES_KW}
-            if all(v is not None for v in sizes.values()):
-                values[zone] = {k: round(v, 0) for k, v in sizes.items()}
+        for zone, metrics, series in rows:
+            if any(metrics.get(f"battery_value_{k}") is None for k in LEAD_BATTERIES_KW):
+                continue
+            years = series.get("battery_years") or []
+            values[zone] = {}
+            for k in LEAD_BATTERIES_KW:
+                low = min(years, key=lambda y: y[str(k)], default=None)
+                high = max(years, key=lambda y: y[str(k)], default=None)
+                values[zone][str(k)] = {
+                    "value": round(metrics[f"battery_value_{k}"]),
+                    "ceiling": round(metrics[f"battery_ceiling_{k}"]),
+                    "low": low and round(low[str(k)]),
+                    "low_year": low and low["year"],
+                    "high": high and round(high[str(k)]),
+                    "high_year": high and high["year"],
+                }
         return values
 
 

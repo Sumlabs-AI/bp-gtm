@@ -20,6 +20,15 @@ PERCENTILE_DRIVERS = {"home_size", "home_value"}
 SIGNAL_TYPES = ("solar", "ev_charger", "new_home", "new_owner", "new_meter", "pool")
 
 
+class BatteryValue(BaseModel):
+    value: float  # $/yr, battery trading on day-ahead plans over the last year
+    ceiling: float  # $/yr with perfect hindsight: the most it could have earned
+    low: float | None  # worst full calendar year
+    low_year: int | None
+    high: float | None  # best full calendar year
+    high_year: int | None
+
+
 class LeadItem(BaseModel):
     id: int
     address: str | None
@@ -32,7 +41,7 @@ class LeadItem(BaseModel):
     trigger: str | None
     status: str
     load_zone: str | None
-    battery_values: dict[str, float] | None  # battery kWh -> estimated grid value $/yr
+    battery_values: dict[str, BatteryValue] | None  # keyed by battery kWh
     recommended_kwh: int | None
     sizing_reason: str | None
     value: float | None  # $/yr for the recommended battery
