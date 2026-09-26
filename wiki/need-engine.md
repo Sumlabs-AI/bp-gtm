@@ -71,7 +71,7 @@ Cell ─┬─ county ── EAGLE-I 5y ── Texas percentile ── Observed 
 - **Storage:**
   - Raw downloads go in `data/raw/{eaglei,eia861}` (gitignored, about 6 GB).
   - Normalized Texas data goes in `data/derived/eaglei_tx.parquet` (DuckDB, UTC timestamps).
-  - Postgres holds only `county_outage_features` (one row per Texas county) and `utility_reliability` (one row per Texas utility). Cells don't duplicate them.
+  - Postgres holds only `county_outage_features` (one row per Texas county) and `utility_reliability_features` (one row per Texas utility). Cells don't duplicate them.
 - **Missing data is null, never 0.**
   - ORNL publishes coverage per state, not per county. So a county joins the Reference Population when EAGLE-I has rows for it in ≥ 80% of the window's years. Outside the population it keeps its raw metrics but gets no percentile.
   - A county with no rows at all has unknown metrics.

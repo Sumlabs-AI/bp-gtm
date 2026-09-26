@@ -73,7 +73,7 @@ class UtilityReliability(Base):
     """Utility Reliability Need inputs for one Texas utility, from EIA-861 (5-year means).
     Rebuilt by `python -m app.need outage compute`."""
 
-    __tablename__ = "utility_reliability"
+    __tablename__ = "utility_reliability_features"
 
     utility_id: Mapped[int] = mapped_column(
         Integer, primary_key=True, autoincrement=False
