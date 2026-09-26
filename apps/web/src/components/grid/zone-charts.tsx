@@ -56,16 +56,17 @@ export function HourlyProfileChart({ zone }: { zone: ZoneDetail }) {
 }
 
 export function MonthlyValueChart({ zone }: { zone: ZoneDetail }) {
+  const { battery } = zone.assumptions
   const config = {
-    arbitrage_usd: { label: "Battery value, day-ahead plan ($)", color: "#15803d" },
+    arbitrage_usd: { label: "Day-ahead estimate ($)", color: "#15803d" },
   } satisfies ChartConfig
   return (
     <Card>
       <CardHeader>
         <CardTitle>Battery value by month</CardTitle>
         <CardDescription>
-          Realistic value from the day-ahead plan each month. Spiky months mean value depends on a
-          few scarcity events.
+          Day-ahead estimates for the reference battery ({battery.capacity_kwh} kWh,{" "}
+          {battery.power_kw} kW) · $/month. Spiky months mean value depends on a few scarcity events.
         </CardDescription>
       </CardHeader>
       <CardContent>
@@ -96,7 +97,7 @@ export function BatteryYearsChart({ zone }: { zone: ZoneDetail }) {
       <CardHeader>
         <CardTitle>Realistic value by year</CardTitle>
         <CardDescription>
-          Energy-trading value from day-ahead plans ($/yr) in each full calendar year.
+          Day-ahead estimates for full calendar years · $/year.
         </CardDescription>
       </CardHeader>
       <CardContent>

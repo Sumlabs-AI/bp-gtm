@@ -2,296 +2,242 @@ import Link from "next/link"
 import { connection } from "next/server"
 
 import { LeadsMap } from "@/components/leads/leads-map"
+import { PriorityHelp } from "@/components/leads/priority-help"
+import { SiteHeader } from "@/components/site-header"
 import { Badge } from "@/components/ui/badge"
 import { Button, buttonVariants } from "@/components/ui/button"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Checkbox } from "@/components/ui/checkbox"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyTitle } from "@/components/ui/empty"
+import { Field, FieldGroup, FieldLabel, FieldLegend, FieldSet } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
-import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Separator } from "@/components/ui/separator"
+import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { apiFetch } from "@/lib/api"
-import { scoreColor } from "@/lib/grid"
-import { SIGNAL_LABELS, signalLabel, type LeadPage, type LeadSignal, type LeadStatus, type LeadSummary } from "@/lib/leads"
+import { BATTERY_SIZES, SIGNAL_LABELS, STATUS_LABELS, formatLeadMoney, signalLabel, type LeadItem, type LeadPage, type LeadSignal, type LeadStatus, type LeadSummary } from "@/lib/leads"
+import { cn } from "@/lib/utils"
+
+export const metadata = { title: "Leads" }
 
 const PAGE_SIZE = 50
 const SIGNALS = Object.keys(SIGNAL_LABELS) as LeadSignal[]
-const SCORES = [0, 50, 70, 85]
+const SCORES = [0, 30, 40, 50]
 const STATUSES: LeadStatus[] = ["new", "reviewed", "qualified", "excluded"]
 const SORTS = ["priority", "score", "value", "triggered_at"] as const
-const BATTERY_SIZES = ["25", "40", "50"] as const
-const formatDollars = (value: number) => `$${Math.round(value).toLocaleString("en-US")}`
 
 function first(value: string | string[] | undefined): string | undefined {
   return Array.isArray(value) ? value[0] : value
 }
 
-function recentTrigger(triggeredAt: string | null, trigger: string | null): string | null {
-  if (!triggeredAt) return null
+function recentTrigger(triggeredAt: string | null, trigger: string | null): string {
+  if (!triggeredAt) return "None in 7 days"
   const age = Date.now() - new Date(triggeredAt).getTime()
-  if (!Number.isFinite(age) || age < 0 || age > 7 * 24 * 60 * 60 * 1000) return null
+  if (!Number.isFinite(age) || age < 0 || age > 7 * 24 * 60 * 60 * 1000) return "None in 7 days"
   const days = Math.floor(age / (24 * 60 * 60 * 1000))
   const when = days === 0 ? "today" : days === 1 ? "yesterday" : `${days} days ago`
-  return `${trigger ? signalLabel(trigger) : "New lead"} · ${when}`
+  return `${trigger ? signalLabel(trigger) : "Newly eligible"} · detected ${when}`
+}
+
+function BatteryValues({ lead }: { lead: LeadItem }) {
+  return (
+    <div className="grid grid-cols-3 gap-2 text-xs tabular-nums">
+      {BATTERY_SIZES.map((size) => (
+        <div key={size} className={cn("flex flex-col gap-1 rounded-md p-2", size === lead.recommended_kwh && "bg-muted font-semibold")}>
+          <span>{size} kWh</span>
+          <span>{lead.battery_values ? formatLeadMoney(lead.battery_values[size].value) : "Unavailable"}</span>
+          {size === lead.recommended_kwh && <span>Suggested</span>}
+        </div>
+      ))}
+    </div>
+  )
+}
+
+function RecordedSignals({ lead }: { lead: LeadItem }) {
+  const recordedSignals = SIGNALS.filter((signal) => lead.signals.includes(signal))
+  if (recordedSignals.length === 0) return <span className="text-muted-foreground">—</span>
+
+  return (
+    <div className="flex flex-wrap gap-1">
+      {recordedSignals.map((signal) => (
+        <Badge key={signal} variant="secondary">{SIGNAL_LABELS[signal]}</Badge>
+      ))}
+    </div>
+  )
 }
 
 export default async function LeadsPage(props: PageProps<"/leads">) {
   await connection()
   const query = await props.searchParams
   const minScore = SCORES.find((score) => String(score) === first(query.min_score)) ?? 0
-  const requestedSignals = Array.isArray(query.signals)
-    ? query.signals
-    : query.signals ? [query.signals] : []
+  const requestedSignals = Array.isArray(query.signals) ? query.signals : query.signals ? [query.signals] : []
   const signals = SIGNALS.filter((signal) => requestedSignals.includes(signal))
   const newOnly = first(query.new_only) === "true"
   const zip = (first(query.zip) ?? "").trim()
   const requestedStatus = first(query.status)
-  const status = STATUSES.find((value) => value === requestedStatus)
+  const status = requestedStatus === "all" ? "all" : STATUSES.find((value) => value === requestedStatus) ?? "new"
   const sort = SORTS.find((value) => value === first(query.sort)) ?? "priority"
   const view = first(query.view) === "map" ? "map" : "list"
   const requestedOffset = Number(first(query.offset) ?? 0)
-  const offset = Number.isSafeInteger(requestedOffset) && requestedOffset >= 0
-    ? Math.floor(requestedOffset / PAGE_SIZE) * PAGE_SIZE
-    : 0
+  const offset = Number.isSafeInteger(requestedOffset) && requestedOffset >= 0 ? Math.floor(requestedOffset / PAGE_SIZE) * PAGE_SIZE : 0
 
-  const filters = new URLSearchParams()
+  const filters = new URLSearchParams({ status, sort })
   if (minScore) filters.set("min_score", String(minScore))
   signals.forEach((signal) => filters.append("signals", signal))
   if (newOnly) filters.set("new_only", "true")
   if (zip) filters.set("zip", zip)
-  if (status) filters.set("status", status)
-  if (sort !== "priority") filters.set("sort", sort)
 
   const listQuery = new URLSearchParams(filters)
-  listQuery.set("limit", String(PAGE_SIZE))
-  listQuery.set("offset", String(offset))
+  if (status === "all") listQuery.delete("status")
+  listQuery.set("limit", String(view === "map" ? 1 : PAGE_SIZE))
+  if (view === "list") listQuery.set("offset", String(offset))
   const [summary, page] = await Promise.all([
     apiFetch<LeadSummary>("/leads/summary"),
-    view === "list" ? apiFetch<LeadPage>(`/leads?${listQuery}`) : Promise.resolve(null),
+    apiFetch<LeadPage>(`/leads?${listQuery}`),
   ])
 
-  function viewHref(nextView: "list" | "map") {
+  function listHref(nextView = view, nextOffset = offset) {
     const params = new URLSearchParams(filters)
-    if (offset > 0) params.set("offset", String(offset))
-    if (nextView === "map") params.set("view", "map")
-    return `/leads${params.size ? `?${params}` : ""}`
+    params.set("view", nextView)
+    if (nextOffset > 0) params.set("offset", String(nextOffset))
+    return `/leads?${params}`
   }
 
-  function pageHref(nextOffset: number) {
-    const params = new URLSearchParams(filters)
-    if (nextOffset > 0) params.set("offset", String(nextOffset))
-    return `/leads${params.size ? `?${params}` : ""}`
-  }
+  const backHref = listHref()
+  const clearHref = `/leads?status=${status}&view=${view}`
+  const detailHref = (id: number) => `/leads/${id}?${new URLSearchParams({ back: backHref })}`
 
   return (
-    <div className="flex flex-col gap-6 px-4 py-4 md:py-6 lg:px-6">
-      <div className="flex flex-col gap-2">
-        <h2 className="text-2xl font-semibold tracking-tight">Residential leads</h2>
-        <p className="max-w-4xl text-sm text-muted-foreground">
-          Single-family, owner-occupied homes Base can serve in the Harris County pilot, ranked by priority value.
-        </p>
-        <p className="text-xs text-muted-foreground">Fit score × realistic battery value. A ranking index, not a revenue forecast.</p>
-      </div>
+    <>
+      <SiteHeader title="Leads" />
+      <div className="flex min-w-0 flex-col gap-5 px-4 py-4 md:py-6 lg:px-6">
+        <p className="text-sm text-muted-foreground">Review homes Base can serve in Harris County, ranked by Priority value.</p>
 
-      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        {[
-          ["Leads", summary.leads],
-          ["New this week", summary.new_this_week],
-          ["With solar", summary.by_signal.solar],
-          ["New owners", summary.by_signal.new_owner],
-        ].map(([label, value]) => (
-          <Card key={label} size="sm">
-            <CardHeader>
-              <CardDescription>{label}</CardDescription>
-              <CardTitle className="text-2xl tabular-nums">{Number(value).toLocaleString("en-US")}</CardTitle>
-            </CardHeader>
-          </Card>
-        ))}
-      </div>
+        <form key={backHref} action="/leads" method="get" className="flex flex-col gap-3">
+          <input type="hidden" name="view" value={view} />
+          <FieldGroup className="grid gap-3 sm:grid-cols-2 xl:grid-cols-[7rem_7rem_10rem_1fr_auto] xl:items-end">
+            <Field>
+              <FieldLabel htmlFor="zip">ZIP</FieldLabel>
+              <Input id="zip" name="zip" defaultValue={zip} inputMode="numeric" placeholder="Any ZIP" />
+            </Field>
+            <Field>
+              <FieldLabel htmlFor="min-score">Minimum fit</FieldLabel>
+              <NativeSelect id="min-score" name="min_score" defaultValue={String(minScore)} className="w-full">
+                {SCORES.map((score) => <NativeSelectOption key={score} value={String(score)}>{score === 0 ? "Any" : `${score}+`}</NativeSelectOption>)}
+              </NativeSelect>
+            </Field>
+            <Field>
+              <FieldLabel htmlFor="status">Review status</FieldLabel>
+              <NativeSelect id="status" name="status" defaultValue={status} className="w-full">
+                <NativeSelectOption value="all">All leads</NativeSelectOption>
+                {STATUSES.map((value) => <NativeSelectOption key={value} value={value}>{STATUS_LABELS[value]}</NativeSelectOption>)}
+              </NativeSelect>
+            </Field>
+            <Field>
+              <FieldLabel htmlFor="sort">Sort by</FieldLabel>
+              <NativeSelect id="sort" name="sort" defaultValue={sort} className="w-full">
+                <NativeSelectOption value="priority">Priority value · highest first</NativeSelectOption>
+                <NativeSelectOption value="score">Fit · highest first</NativeSelectOption>
+                <NativeSelectOption value="value">Grid value · highest first</NativeSelectOption>
+                <NativeSelectOption value="triggered_at">Latest signal</NativeSelectOption>
+              </NativeSelect>
+            </Field>
+            <div className="flex items-center gap-2">
+              <Button type="submit">Apply</Button>
+              <Link href={clearHref} className={buttonVariants({ variant: "ghost" })}>Clear filters</Link>
+            </div>
+          </FieldGroup>
+          <details open={signals.length > 0 || newOnly}>
+            <summary className="w-fit cursor-pointer text-sm font-medium">Signals &amp; timing{signals.length + Number(newOnly) > 0 ? ` (${signals.length + Number(newOnly)} active)` : ""}</summary>
+            <FieldSet className="mt-3">
+              <FieldLegend variant="label">Match all selected signals</FieldLegend>
+              <div className="flex flex-wrap gap-2">
+                {SIGNALS.map((signal) => (
+                  <label key={signal} className="flex cursor-pointer items-center gap-2 rounded-full border px-3 py-1.5 text-xs has-[:checked]:border-primary has-[:checked]:bg-muted has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-ring">
+                    <input type="checkbox" name="signals" value={signal} defaultChecked={signals.includes(signal)} className="accent-primary" />
+                    {SIGNAL_LABELS[signal]}
+                  </label>
+                ))}
+                <label className="flex cursor-pointer items-center gap-2 rounded-full border px-3 py-1.5 text-xs has-[:checked]:border-primary has-[:checked]:bg-muted has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-ring">
+                  <input type="checkbox" name="new_only" value="true" defaultChecked={newOnly} className="accent-primary" />
+                  Recent signals · 7 days
+                </label>
+              </div>
+            </FieldSet>
+          </details>
+        </form>
 
-      <nav aria-label="Lead view" className="flex justify-end gap-2">
-        <Link href={viewHref("list")} className={buttonVariants({ variant: view === "list" ? "secondary" : "outline", size: "sm" })} aria-current={view === "list" ? "page" : undefined}>List</Link>
-        <Link href={viewHref("map")} className={buttonVariants({ variant: view === "map" ? "secondary" : "outline", size: "sm" })} aria-current={view === "map" ? "page" : undefined}>Map</Link>
-      </nav>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex flex-col gap-2">
+            <p className="text-sm"><strong>{page.total.toLocaleString("en-US")} leads match</strong> <span className="text-muted-foreground">· Scores updated {summary.last_scored_at ? new Date(summary.last_scored_at).toLocaleDateString("en-US", { timeZone: "America/Chicago" }) : "not yet"}</span></p>
+            <div className="flex flex-wrap items-center gap-2">
+              <Link href={`/leads?status=all&new_only=true&view=${view}`} className={buttonVariants({ variant: "outline", size: "sm", className: "rounded-full" })}>Recent signals · 7 days ({summary.new_this_week.toLocaleString("en-US")})</Link>
+              <span className="text-xs text-muted-foreground">All Harris County · all statuses</span>
+            </div>
+          </div>
+          <nav aria-label="Lead view" className="flex gap-2">
+            <Link href={listHref("list")} className={buttonVariants({ variant: view === "list" ? "secondary" : "outline", size: "sm" })} aria-current={view === "list" ? "page" : undefined}>List</Link>
+            <Link href={listHref("map")} className={buttonVariants({ variant: view === "map" ? "secondary" : "outline", size: "sm" })} aria-current={view === "map" ? "page" : undefined}>Map</Link>
+          </nav>
+        </div>
+        <PriorityHelp />
 
-      {summary.leads === 0 && view === "list" ? (
-        <Card>
-          <CardHeader>
-            <CardTitle>No lead data yet</CardTitle>
-            <CardDescription>Load the Harris County source data, then score the eligible homes to see leads here.</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-2 text-sm">
-            <code className="block w-fit rounded-md bg-muted px-3 py-2">docker compose exec api python -m app.leads refresh</code>
-            <code className="block w-fit rounded-md bg-muted px-3 py-2">docker compose exec api python -m app.leads score</code>
-          </CardContent>
-        </Card>
-      ) : (
-        <>
-          <Card>
-            <CardHeader>
-              <CardTitle>Filter leads</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <form action="/leads" method="get" className="flex flex-col gap-4">
-                <input type="hidden" name="view" value={view} />
-                <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
-                  <div className="flex flex-col gap-2">
-                    <Label htmlFor="min-score">Minimum score</Label>
-                    <Select name="min_score" defaultValue={String(minScore)}>
-                      <SelectTrigger id="min-score" className="w-full"><SelectValue /></SelectTrigger>
-                      <SelectContent>
-                        <SelectGroup>
-                          {SCORES.map((score) => <SelectItem key={score} value={String(score)}>{score === 0 ? "Any score" : `${score}+`}</SelectItem>)}
-                        </SelectGroup>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="flex flex-col gap-2">
-                    <Label htmlFor="zip">ZIP</Label>
-                    <Input id="zip" name="zip" defaultValue={zip} inputMode="numeric" placeholder="Any ZIP" />
-                  </div>
-                  <div className="flex flex-col gap-2">
-                    <Label htmlFor="status">Status</Label>
-                    <Select name="status" defaultValue={status ?? "all"}>
-                      <SelectTrigger id="status" className="w-full"><SelectValue /></SelectTrigger>
-                      <SelectContent>
-                        <SelectGroup>
-                          <SelectItem value="all">All statuses</SelectItem>
-                          {STATUSES.map((value) => <SelectItem key={value} value={value}>{value[0].toUpperCase() + value.slice(1)}</SelectItem>)}
-                        </SelectGroup>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="flex flex-col gap-2">
-                    <Label htmlFor="sort">Sort by</Label>
-                    <Select name="sort" defaultValue={sort}>
-                      <SelectTrigger id="sort" className="w-full"><SelectValue /></SelectTrigger>
-                      <SelectContent>
-                        <SelectGroup>
-                          <SelectItem value="priority">Priority (fit × value)</SelectItem>
-                          <SelectItem value="score">Fit score</SelectItem>
-                          <SelectItem value="value">Battery value</SelectItem>
-                          <SelectItem value="triggered_at">Newest signal</SelectItem>
-                        </SelectGroup>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="flex items-end">
-                    <Button type="submit" className="w-full">Apply filters</Button>
-                  </div>
-                </div>
-                <Separator />
-                <div className="flex flex-wrap items-center gap-x-5 gap-y-3">
-                  <span className="text-sm font-medium">Signals</span>
-                  {SIGNALS.map((signal) => (
-                    <Label key={signal} htmlFor={`signal-${signal}`} className="font-normal">
-                      <Checkbox id={`signal-${signal}`} name="signals" value={signal} defaultChecked={signals.includes(signal)} />
-                      {SIGNAL_LABELS[signal]}
-                    </Label>
-                  ))}
-                  <Label htmlFor="new-only" className="font-normal">
-                    <Checkbox id="new-only" name="new_only" value="true" defaultChecked={newOnly} />
-                    New this week
-                  </Label>
-                </div>
-              </form>
-            </CardContent>
-          </Card>
-
-          {view === "map" ? (
-            <LeadsMap filters={{ minScore, signals, newOnly, zip, status }} className="h-[600px]" />
-          ) : page && <Card>
-            <CardHeader>
-              <CardTitle>Leads</CardTitle>
-              <CardDescription>Showing {page.items.length ? offset + 1 : 0}–{Math.min(offset + page.items.length, page.total)} of {page.total.toLocaleString("en-US")}</CardDescription>
-            </CardHeader>
-            <CardContent>
+        {summary.leads === 0 ? (
+          <Empty><EmptyHeader><EmptyTitle>No lead data yet</EmptyTitle><EmptyDescription>Leads will appear after source data has been refreshed and scored.</EmptyDescription></EmptyHeader><EmptyContent><Link href="/data" className={buttonVariants({ variant: "outline" })}>View data sources</Link></EmptyContent></Empty>
+        ) : page.total === 0 ? (
+          <Empty><EmptyHeader><EmptyTitle>No leads match these filters</EmptyTitle><EmptyDescription>Try a lower minimum fit or fewer signals. All leads includes homes already reviewed.</EmptyDescription></EmptyHeader><EmptyContent><Link href={clearHref} className={buttonVariants({ variant: "outline" })}>Clear filters</Link><Link href={`/leads?status=all&view=${view}`} className={buttonVariants({ variant: "ghost" })}>View all leads</Link></EmptyContent></Empty>
+        ) : view === "map" ? (
+          <LeadsMap key={filters.toString()} filters={{ minScore, signals, newOnly, zip, status: status === "all" ? undefined : status }} backHref={backHref} className="h-[min(65vh,600px)] min-h-96" />
+        ) : (
+          <>
+            <p className="text-xs text-muted-foreground">Historical grid value to Base · $/year · Last 12 months. Suggested size is highlighted. Only recorded signals are shown; — = none found in available records.</p>
+            <div className="hidden rounded-xl border xl:block">
               <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Priority value ($/yr)</TableHead>
-                    <TableHead>Fit</TableHead>
-                    <TableHead>Address</TableHead>
-                    <TableHead>Battery value ($/yr)</TableHead>
-                    <TableHead>Signals</TableHead>
-                    <TableHead>Why now</TableHead>
-                    <TableHead>Status</TableHead>
-                  </TableRow>
-                </TableHeader>
+                <TableHeader><TableRow><TableHead>Address</TableHead><TableHead>Priority value / Fit</TableHead><TableHead>Historical grid value to Base</TableHead><TableHead>Recorded signals</TableHead><TableHead>Recent signal</TableHead><TableHead>Review status</TableHead></TableRow></TableHeader>
                 <TableBody>
-                  {page.items.map((lead) => {
-                    const batteryValues = lead.battery_values
-                    return (
-                      <TableRow key={lead.id}>
-                        <TableCell className="tabular-nums">
-                          {lead.expected_value === null ? (
-                            <span className="text-xs text-muted-foreground">Value unavailable</span>
-                          ) : (
-                            <span className="font-semibold">{formatDollars(lead.expected_value)}</span>
-                          )}
-                        </TableCell>
-                        <TableCell>
-                          <Badge className="tabular-nums" style={{ background: scoreColor(lead.score) }}>
-                            {lead.score.toFixed(0)}
-                          </Badge>
-                        </TableCell>
-                        <TableCell className="max-w-64 min-w-48 whitespace-normal">
-                          <Link href={`/leads/${lead.id}`} className="font-medium text-primary hover:underline">
-                            {lead.address ?? `Lead ${lead.id}`}
-                          </Link>
-                          <span className="block text-xs text-muted-foreground">
-                            {[lead.city, lead.zip].filter(Boolean).join(" · ") || "Location unavailable"}
-                          </span>
-                          {lead.reasons && <span className="block text-xs text-muted-foreground">{lead.reasons}</span>}
-                        </TableCell>
-                        <TableCell>
-                          {batteryValues ? (
-                            <div className="flex min-w-60 flex-wrap items-center gap-x-2 gap-y-1 text-xs tabular-nums">
-                              {BATTERY_SIZES.map((size) => (
-                                <span key={size} className={Number(size) === lead.recommended_kwh ? "font-semibold" : undefined}>
-                                  {size} kWh {formatDollars(batteryValues[size].value)}
-                                  {Number(size) === lead.recommended_kwh && <Badge variant="secondary" className="ml-1">Pitch</Badge>}
-                                </span>
-                              ))}
-                            </div>
-                          ) : <span className="text-xs text-muted-foreground">Value unavailable</span>}
-                        </TableCell>
-                        <TableCell>
-                          <div className="flex max-w-52 flex-wrap gap-1">
-                            {lead.signals.length ? lead.signals.map((signal) => (
-                              <Badge key={signal} variant="secondary">{signalLabel(signal)}</Badge>
-                            )) : "—"}
-                          </div>
-                        </TableCell>
-                        <TableCell className="max-w-40 whitespace-normal text-muted-foreground">{recentTrigger(lead.triggered_at, lead.trigger) ?? "—"}</TableCell>
-                        <TableCell><Badge variant="outline" className="capitalize">{lead.status}</Badge></TableCell>
-                      </TableRow>
-                    )
-                  })}
-                  {page.items.length === 0 && (
-                    <TableRow><TableCell colSpan={7} className="py-10 text-center text-muted-foreground">No leads match these filters.</TableCell></TableRow>
-                  )}
+                  {page.items.map((lead) => (
+                    <TableRow key={lead.id}>
+                      <TableCell className="min-w-44 max-w-60 whitespace-normal">
+                        <Link href={detailHref(lead.id)} className="font-medium text-primary hover:underline">{lead.address ?? `Lead ${lead.id}`}</Link>
+                        <span className="block text-xs text-muted-foreground">{[lead.city, lead.zip].filter(Boolean).join(" · ") || "Location unavailable"}</span>
+                        <span className="line-clamp-1 text-xs text-muted-foreground" title={lead.reasons}>{lead.reasons}</span>
+                      </TableCell>
+                      <TableCell className="tabular-nums"><span className="block font-semibold">{lead.expected_value === null ? "Unavailable" : formatLeadMoney(lead.expected_value)}</span><span className="text-xs text-muted-foreground">Fit {lead.score.toFixed(0)} / 100</span></TableCell>
+                      <TableCell className="min-w-60"><BatteryValues lead={lead} /></TableCell>
+                      <TableCell><RecordedSignals lead={lead} /></TableCell>
+                      <TableCell className="max-w-40 whitespace-normal text-xs text-muted-foreground">{recentTrigger(lead.triggered_at, lead.trigger)}</TableCell>
+                      <TableCell><Badge variant="outline">{STATUS_LABELS[lead.status]}</Badge></TableCell>
+                    </TableRow>
+                  ))}
                 </TableBody>
               </Table>
-              <p className="mt-4 text-xs text-muted-foreground">
-                Battery values estimate annual energy trading on ERCOT day-ahead plans, after efficiency losses, wear and a 20% backup reserve. They exclude retail margin, fees and ancillary services.
-              </p>
-              <div className="mt-4 flex items-center justify-between gap-3">
-                <span className="text-sm text-muted-foreground">50 leads per page</span>
-                <div className="flex gap-2">
-                  {offset > 0 ? (
-                    <Link href={pageHref(offset - PAGE_SIZE)} className={buttonVariants({ variant: "outline", size: "sm" })}>Previous</Link>
-                  ) : <span className={buttonVariants({ variant: "outline", size: "sm", className: "pointer-events-none opacity-50" })}>Previous</span>}
-                  {offset + PAGE_SIZE < page.total ? (
-                    <Link href={pageHref(offset + PAGE_SIZE)} className={buttonVariants({ variant: "outline", size: "sm" })}>Next</Link>
-                  ) : <span className={buttonVariants({ variant: "outline", size: "sm", className: "pointer-events-none opacity-50" })}>Next</span>}
-                </div>
+            </div>
+            <div className="flex flex-col gap-3 xl:hidden">
+              {page.items.map((lead) => (
+                <Card key={lead.id} size="sm">
+                  <CardHeader>
+                    <div className="flex flex-wrap items-start justify-between gap-2"><CardTitle><Link href={detailHref(lead.id)} className="text-primary hover:underline">{lead.address ?? `Lead ${lead.id}`}</Link></CardTitle><Badge variant="outline">{STATUS_LABELS[lead.status]}</Badge></div>
+                    <p className="text-xs text-muted-foreground">{[lead.city, lead.zip].filter(Boolean).join(" · ") || "Location unavailable"}</p>
+                    <p className="line-clamp-1 text-xs text-muted-foreground">{lead.reasons}</p>
+                  </CardHeader>
+                  <CardContent className="flex flex-col gap-3">
+                    <div className="flex flex-wrap justify-between gap-2 text-sm tabular-nums"><span>Priority value <strong>{lead.expected_value === null ? "Unavailable" : formatLeadMoney(lead.expected_value)}</strong></span><span>Fit {lead.score.toFixed(0)} / 100</span></div>
+                    <div><p className="mb-1 text-xs text-muted-foreground">Historical grid value to Base · $/year · Last 12 months. Suggested size is highlighted.</p><BatteryValues lead={lead} /></div>
+                    <RecordedSignals lead={lead} />
+                    <p className="text-xs text-muted-foreground">Recent signal: {recentTrigger(lead.triggered_at, lead.trigger)}</p>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+            {page.items.length === 0 && <Empty><EmptyHeader><EmptyTitle>No leads on this page</EmptyTitle><EmptyDescription>The results may have changed since your last visit.</EmptyDescription></EmptyHeader><EmptyContent><Link href={listHref("list", 0)} className={buttonVariants({ variant: "outline" })}>Return to first page</Link></EmptyContent></Empty>}
+            <nav aria-label="Results pages" className="flex flex-wrap items-center justify-between gap-3">
+              <p className="text-sm text-muted-foreground">Showing {page.items.length ? offset + 1 : 0}–{page.items.length ? Math.min(offset + page.items.length, page.total) : 0} of {page.total.toLocaleString("en-US")}</p>
+              <div className="flex gap-2">
+                {offset > 0 ? <Link href={listHref("list", Math.max(0, offset - PAGE_SIZE))} className={buttonVariants({ variant: "outline", size: "sm" })}>Previous</Link> : <Button variant="outline" size="sm" disabled>Previous</Button>}
+                {offset + PAGE_SIZE < page.total ? <Link href={listHref("list", offset + PAGE_SIZE)} className={buttonVariants({ variant: "outline", size: "sm" })}>Next</Link> : <Button variant="outline" size="sm" disabled>Next</Button>}
               </div>
-            </CardContent>
-          </Card>}
-        </>
-      )}
-    </div>
+            </nav>
+          </>
+        )}
+      </div>
+    </>
   )
 }

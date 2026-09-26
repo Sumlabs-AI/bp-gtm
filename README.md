@@ -1,8 +1,12 @@
 # base-power-gtm
 
-Base Radar: turns public ERCOT grid data into a view of where Base should want more
-batteries. The first feature, **Grid Zones** (`/grid`), scores every ERCOT load zone on
-what a home battery could have earned there over the last 12 months, and explains why.
+Base Radar: turns public grid and property data into sales leads for Base.
+
+- **Leads** (`/leads`, the home page): single-family, owner-occupied homes Base can serve
+  (Harris County pilot), ranked by priority value, with the suggested battery size, talking
+  points and a map. Refreshed weekly. See [wiki/residential-leads.md](wiki/residential-leads.md).
+- **Grid Zones** (`/grid`): scores every ERCOT load zone on what a home battery could have
+  earned there over the last 12 months, and explains why.
 
 - `apps/web`: Next.js 16 + shadcn/ui + MapLibre (pnpm)
 - `apps/api`: FastAPI + SQLAlchemy + Alembic (Python 3.13, uv)
@@ -24,12 +28,16 @@ The database starts empty, so `/grid` shows nothing until you load prices. In an
 ```bash
 docker compose exec api python -m app.grid backfill 2025 2026   # ~1 min, public ERCOT files, no login
 docker compose exec api python -m app.grid compute              # score the zones
+docker compose exec api python -m app.leads refresh             # lead sources (~10 min, ~1 GB download)
+docker compose exec api python -m app.leads score               # score the leads
 ```
 
 For the per-year battery value ranges shown on leads, also load past years (~1 min per year):
 `docker compose exec api python -m app.grid backfill 2019 2020 2021 2022 2023 2024`, then `compute` again.
 
-Then open http://localhost:3000 (redirects to `/grid`).
+The `worker` service repeats all of this every Sunday at 03:00 Central.
+
+Then open http://localhost:3000 (redirects to `/leads`).
 
 ### ERCOT API credentials (optional)
 

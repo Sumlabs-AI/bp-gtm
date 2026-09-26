@@ -1,14 +1,17 @@
 "use client"
 
 import * as React from "react"
-import { useRouter } from "next/navigation"
+import Link from "next/link"
 import { setWorkerUrl } from "maplibre-gl"
 import Map, { Layer, NavigationControl, Source, type MapLayerMouseEvent, type MapRef } from "react-map-gl/maplibre"
 import "maplibre-gl/dist/maplibre-gl.css"
 
+import { Button, buttonVariants } from "@/components/ui/button"
+import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
 import { apiFetch } from "@/lib/api"
 import { scoreColor } from "@/lib/grid"
-import { signalLabel, type LeadSignal, type LeadStatus } from "@/lib/leads"
+import { formatLeadMoney, signalLabel, type LeadDetail, type LeadSignal, type LeadStatus } from "@/lib/leads"
+import { cn } from "@/lib/utils"
 
 const BASEMAP = "https://tiles.openfreemap.org/styles/positron"
 const HARRIS_BOUNDS: [[number, number], [number, number]] = [
@@ -56,14 +59,18 @@ type Hover = {
   trigger?: string | null
 }
 
-export function LeadsMap({ filters, className }: { filters: LeadMapFilters; className?: string }) {
-  const router = useRouter()
+export function LeadsMap({ filters, backHref, className }: { filters: LeadMapFilters; backHref: string; className?: string }) {
   const mapRef = React.useRef<MapRef>(null)
   const timer = React.useRef<ReturnType<typeof setTimeout> | null>(null)
   const [viewport, setViewport] = React.useState<Viewport | null>(null)
   const [data, setData] = React.useState<LeadGeoResponse | null>(null)
   const [hover, setHover] = React.useState<Hover | null>(null)
   const [error, setError] = React.useState(false)
+  const [loading, setLoading] = React.useState(true)
+  const [retry, setRetry] = React.useState(0)
+  const [selected, setSelected] = React.useState<{ id: number; address?: string | null } | null>(null)
+  const [preview, setPreview] = React.useState<{ id: number; lead: LeadDetail | null } | null>(null)
+  const [previewRetry, setPreviewRetry] = React.useState(0)
 
   function readViewport() {
     const map = mapRef.current
@@ -87,8 +94,10 @@ export function LeadsMap({ filters, className }: { filters: LeadMapFilters; clas
     if (filters.status) params.set("status", filters.status)
 
     async function load() {
+      setLoading(true)
       try {
         const response = await apiFetch<LeadGeoResponse>(`/leads/geo?${params}`, { signal: controller.signal })
+        if (controller.signal.aborted) return
         setData(response)
         setError(false)
         setHover(null)
@@ -97,11 +106,29 @@ export function LeadsMap({ filters, className }: { filters: LeadMapFilters; clas
           setData(null)
           setError(true)
         }
+      } finally {
+        if (!controller.signal.aborted) setLoading(false)
       }
     }
     load()
     return () => controller.abort()
-  }, [viewport, filters])
+  }, [viewport, filters, retry])
+
+  React.useEffect(() => {
+    if (!selected) return
+    const id = selected.id
+    const controller = new AbortController()
+    async function loadPreview() {
+      try {
+        const lead = await apiFetch<LeadDetail>(`/leads/${id}`, { signal: controller.signal })
+        if (!controller.signal.aborted) setPreview({ id, lead })
+      } catch {
+        if (!controller.signal.aborted) setPreview({ id, lead: null })
+      }
+    }
+    loadPreview()
+    return () => controller.abort()
+  }, [selected, previewRetry])
 
   React.useEffect(() => () => {
     if (timer.current) clearTimeout(timer.current)
@@ -126,8 +153,8 @@ export function LeadsMap({ filters, className }: { filters: LeadMapFilters; clas
   }
 
   return (
-    <div className={className}>
-      <div className="relative h-full overflow-hidden rounded-xl border">
+    <div className="flex flex-col gap-3">
+      <div className={cn("relative overflow-hidden rounded-xl border", className)} aria-label="Map of Harris County leads">
         <Map
           ref={mapRef}
           initialViewState={{ bounds: HARRIS_BOUNDS, fitBoundsOptions: { padding: 24 } }}
@@ -146,7 +173,9 @@ export function LeadsMap({ filters, className }: { filters: LeadMapFilters; clas
             if (data?.aggregated && feature.geometry.type === "Point") {
               e.target.easeTo({ center: feature.geometry.coordinates as [number, number], zoom: e.target.getZoom() + 2 })
             } else if (feature.properties?.id) {
-              router.push(`/leads/${feature.properties.id}`)
+              setSelected({ id: Number(feature.properties.id), address: feature.properties.address })
+              setPreview(null)
+              setHover(null)
             }
           }}
           cursor={hover ? "pointer" : "grab"}
@@ -198,32 +227,56 @@ export function LeadsMap({ filters, className }: { filters: LeadMapFilters; clas
           <NavigationControl position="top-right" showCompass={false} />
         </Map>
 
-        <div className="absolute top-3 left-3 rounded-md border bg-background/90 px-3 py-2 text-xs shadow-sm">
-          {data ? `${data.total.toLocaleString("en-US")} leads in view${data.aggregated ? " · grouped" : ""}` : error ? "Leads unavailable" : "Loading leads…"}
+        <div role="status" className="absolute top-3 left-3 max-w-[calc(100%-4rem)] rounded-md border bg-background/90 px-3 py-2 text-xs shadow-sm">
+          {data ? `${data.total.toLocaleString("en-US")} leads in map view${data.aggregated ? " · grouped" : ""}${loading ? " · Updating…" : ""}` : loading ? "Loading leads…" : "Leads unavailable"}
+          {data?.total === 0 && !loading && <p className="mt-1 text-muted-foreground">Move or zoom out to find matching homes.</p>}
         </div>
         {error && (
-          <div className="absolute bottom-3 left-3 rounded-md border bg-background/90 px-3 py-2 text-xs text-muted-foreground">
+          <div role="alert" className="absolute top-16 left-3 flex max-w-[calc(100%-1.5rem)] flex-wrap items-center gap-2 rounded-md border bg-background/90 px-3 py-2 text-xs">
             Could not load leads for this view.
+            <Button variant="outline" size="sm" disabled={loading} onClick={() => setRetry((value) => value + 1)}>Retry</Button>
           </div>
         )}
+        <div className="absolute bottom-7 left-3 flex items-center gap-3 rounded-md border bg-background/90 px-3 py-2 text-xs">
+          <span>Color: Fit</span>
+          {[0, 50, 100].map((score) => <span key={score} className="flex items-center gap-1"><span className="size-2.5 rounded-full" style={{ background: scoreColor(score) }} />{score}</span>)}
+        </div>
         {hover && (
           <div
-            className="pointer-events-none absolute z-10 w-60 rounded-lg border bg-background p-3 text-xs shadow-md"
+            className="pointer-events-none absolute hidden w-60 rounded-lg border bg-background p-3 text-xs shadow-md [@media(hover:hover)]:block"
             style={{ left: hover.flip ? hover.x - 252 : hover.x + 12, top: hover.y + 12 }}
           >
             {data?.aggregated ? (
               <>
-                <div className="font-medium">{hover.count?.toLocaleString("en-US")} leads · avg score {hover.score.toFixed(0)}</div>
+                <div className="font-medium">{hover.count?.toLocaleString("en-US")} leads · average fit {hover.score.toFixed(0)}</div>
                 <div className="mt-1 text-muted-foreground">Zoom in to see homes</div>
               </>
             ) : (
               <>
                 <div className="font-medium">{hover.address ?? `Lead ${hover.id}`}</div>
-                <div className="mt-1 text-muted-foreground">Score {hover.score.toFixed(0)} · Trigger: {hover.trigger ? signalLabel(hover.trigger) : "—"}</div>
+                <div className="mt-1 text-muted-foreground">Fit {hover.score.toFixed(0)} · Latest signal: {hover.trigger ? signalLabel(hover.trigger) : "—"}</div>
               </>
             )}
           </div>
         )}
+      {selected && (
+        <Card size="sm" className="absolute right-3 bottom-16 left-3 max-w-md" aria-label="Selected lead preview">
+          <CardHeader><CardTitle>{preview?.lead?.address ?? selected.address ?? `Lead ${selected.id}`}</CardTitle></CardHeader>
+          <CardContent aria-live="polite">
+            {preview?.id !== selected.id ? <p className="text-sm text-muted-foreground">Loading lead preview…</p> : preview.lead ? (
+              <dl className="grid grid-cols-3 gap-3 text-sm">
+                <div><dt className="text-xs text-muted-foreground">Priority value</dt><dd className="font-medium tabular-nums">{preview.lead.expected_value === null ? "Unavailable" : formatLeadMoney(preview.lead.expected_value)}</dd><span className="text-xs text-muted-foreground">Ranking metric</span></div>
+                <div><dt className="text-xs text-muted-foreground">Fit</dt><dd className="font-medium tabular-nums">{preview.lead.score.toFixed(0)} / 100</dd></div>
+                <div><dt className="text-xs text-muted-foreground">Suggested size</dt><dd className="font-medium">{preview.lead.recommended_kwh ? `${preview.lead.recommended_kwh} kWh` : "Unavailable"}</dd></div>
+              </dl>
+            ) : <div className="flex flex-wrap items-center gap-2"><p className="text-sm">Could not load this preview.</p><Button variant="outline" size="sm" onClick={() => { setPreview(null); setPreviewRetry((value) => value + 1) }}>Retry</Button></div>}
+          </CardContent>
+          <CardFooter className="flex gap-2">
+            <Link href={`/leads/${selected.id}?${new URLSearchParams({ back: backHref })}`} className={buttonVariants({ size: "sm" })}>Open lead</Link>
+            <Button variant="ghost" size="sm" onClick={() => setSelected(null)}>Close preview</Button>
+          </CardFooter>
+        </Card>
+      )}
       </div>
     </div>
   )

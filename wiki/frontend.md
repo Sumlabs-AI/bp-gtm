@@ -11,18 +11,20 @@ apps/web/src/
 ├── app/
 │   ├── layout.tsx         Root: fonts, TooltipProvider, Toaster
 │   ├── globals.css        Theme tokens (light/dark)
-│   └── (dashboard)/       Route group — every page inside gets the dashboard shell
+│   └── (dashboard)/       Route group — every page inside gets the app shell
 │       ├── layout.tsx     SidebarProvider + AppSidebar + SiteHeader
-│       ├── page.tsx       Sample dashboard (unreachable: "/" redirects to /grid in next.config.ts)
-│       ├── data.json      Placeholder table data for the sample dashboard
-│       └── grid/          Grid Zones: page.tsx (map + ranking), [zone]/page.tsx (detail)
+│       ├── leads/         Leads list + map (home: "/" redirects here), [id] detail
+│       ├── grid/          Grid Zones: page.tsx (map + ranking), [zone]/page.tsx (detail)
+│       └── data/          Data sources (Operations)
+│       (each has loading.tsx / error.tsx; leads/[id] also not-found.tsx)
 │   └── maplibre/[file]/   Serves MapLibre's web worker from node_modules (see below)
 ├── components/
 │   ├── grid/              zone-map (MapLibre), zone-charts (recharts), driver-bars
 │   ├── ui/                shadcn/ui primitives — generated; edit sparingly
-│   ├── app-sidebar.tsx    Sidebar nav items (edit `data` to change navigation)
-│   ├── site-header.tsx    Top bar
-│   └── …                  Dashboard pieces from the shadcn `dashboard-01` block
+│   ├── leads/             leads-map, status-control, priority-help, lead-return-link
+│   ├── app-sidebar.tsx    Navigation: Leads, Grid Zones; Operations → Data sources
+│   ├── site-header.tsx    Route title / breadcrumb
+│   └── route-error.tsx    Shared error state
 ├── hooks/use-mobile.ts
 └── lib/
     ├── api.ts             apiFetch<T>() + API types
@@ -30,11 +32,17 @@ apps/web/src/
     └── utils.ts           cn() class-merging helper
 ```
 
-## Dashboard shell
+## App shell ("Base Radar")
 
-Based on the shadcn [`dashboard-01`](https://ui.shadcn.com/blocks#dashboard-01) block. To add a page inside the shell, create `src/app/(dashboard)/<route>/page.tsx` and add a nav entry in `components/app-sidebar.tsx`. Pages outside the shell (e.g. login) go directly under `src/app/`.
+Sales-first: `/` redirects to `/leads` (`next.config.ts`). The sidebar has Leads and Grid Zones, plus Operations → Data sources. The shadcn `dashboard-01` sample content was removed. To add a page inside the shell, create `src/app/(dashboard)/<route>/page.tsx`, add a nav entry in `components/app-sidebar.tsx` and a title in `components/site-header.tsx`. Pages outside the shell (e.g. login) go directly under `src/app/`.
 
-The sample dashboard page still shows **static placeholder data** from the block. `/` currently redirects to `/grid` (temporary redirect in `next.config.ts`).
+UX conventions for leads (agreed in a design review, 2026-09-26):
+- The list opens on the **Unreviewed** queue (`status=new`); "All leads" is `status=all`.
+- **Priority value** (= fit/100 × historical grid value of the suggested size) is always labelled as a *ranking metric* with its explanation; it is not revenue or customer savings.
+- Battery values are "Historical grid value to Base", always shown in 25 / 40 / 50 kWh order with the **suggested size** highlighted.
+- Grid value detail uses progressive disclosure (design review with Codex, 2026-09-26): the list, map preview and lead tiles show only the realistic last-12-months value. The lead page's collapsed "Past years and how this is estimated" holds the lowest/highest full year, the perfect-hindsight ceiling, a year-by-year table (from `GET /grid/zones/{zone}`, optional) and the method. The zone page shows the 25/40/50 estimate vs ceiling and the value-by-year chart by default; panels built on the 39.2 kWh zone battery are labelled "reference battery". Don't present "% of ceiling" as operating performance.
+- Signals: list shows only recorded ones as badges; detail shows Yes/No with "No = not found in available records". Talking points cite the evidence (permit month, appraisal record) and only say "confirm…" for undated appraisal-only flags.
+- Detail links carry a `back` param so returning keeps filters, sort, page and view.
 
 ## Grid Zones (`/grid`)
 

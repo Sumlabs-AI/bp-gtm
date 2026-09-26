@@ -31,7 +31,13 @@ export type ZoneDetail = ZoneSummary & {
     battery_years?: { year: number; "25": number; "40": number; "50": number }[]
   }
   assumptions: {
-    battery: { capacity_kwh: number; power_kw: number; round_trip_efficiency: number }
+    battery: {
+      capacity_kwh: number
+      power_kw: number
+      round_trip_efficiency: number
+      wear_usd_per_kwh: number
+      reserve_soc: number
+    }
     scoring: { lookback_days: number; scarcity_threshold: number; spread_hours: number }
   }
 }
