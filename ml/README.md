@@ -32,6 +32,8 @@ cp .env.example .env   # then set TYPESAFE_API_KEY
 | `acs/features.py` | ACS step 2: shares, medians, tract fill, MOE / low-confidence flags → `data/processed/bg_acs_<vintage>.parquet` |
 | `acs/ANALYSIS.md` | ACS data analysis: validation, missingness, MOE, vintage differences, first look at the label |
 | `acs/FEATURES.md` | Generated data dictionary for `bg_acs_<vintage>.parquet` |
+| `train/build_table.py` | Joins label + ACS + parcels → `data/processed/train_bg.parquet` (one row per training block group) |
+| `train/baselines.py` | Income / home value / past-installs baselines, scored within city on 2024-2025 installs |
 | `docs/typesafe/` | Jev docs snapshot (SDK, primitives, confidence, jev-1.13 limits) |
 | `data/` | Git-ignored. `raw/` downloads, `interim/` normalized tables, `gold/` labels, `processed/` outputs |
 
@@ -57,6 +59,13 @@ ACS block-group features (join to `bg_permits.parquet` on `GEOID`):
 ```bash
 uv run python -m acs.fetch --vintage 2024      # ~30 s, cached in data/raw/acs/2024/
 uv run python -m acs.features --vintage 2024   # -> data/processed/bg_acs_2024.parquet + checks
+```
+
+Training table and baselines (after the three pipelines above):
+
+```bash
+uv run python -m train.build_table   # -> data/processed/train_bg.parquet + checks
+uv run python -m train.baselines
 ```
 
 ACS comes from the Census table-based summary files, not api.census.gov (which now requires a key).
@@ -102,3 +111,27 @@ single-family share.
 
 StratMap zips (`data/raw/parcels/stratmap25-landparcels_{fips}_lp.zip`) must be downloaded in a
 browser from the TxGIO DataHub: its CDN answers 403 to scripted requests.
+
+## Training table (`train_bg.parquet`)
+
+- **Rows:** 1,313 block groups ≥ 90% inside Austin (462) or San Antonio (851), with eligible homes > 0
+  (133 dropped). Permits only cover city limits, so block groups straddling the boundary would undercount.
+- **Label:** `y` = backup installs 2021-2025 (3,029). Per-year `y_2021`…`y_2025`, `y_2021_2023` / `y_2024_2025`
+  for the temporal split, `y_no_uri` without 2021. 2026 is partial; San Antonio data starts Dec 2020.
+- **Exposure:** ACS `eligible_homes`. Parcel `parcel_n_eligible_homes` agrees (corr 0.90, median ratio 0.92).
+- **Features:** 24 ACS columns (`train.build_table.acs_features`): meta, censoring / tract-fill flags and the three
+  unstable ACS features are left out. `parcel_*` columns are carried for the installable multiplier and sensitivity
+  checks only: sq ft (Bexar) and deed year (Travis) exist in one county each, so with two training cities they
+  would stand in for the city. `aux_*` are other permit counts (solar, panel, Base Power…), never features.
+- **City gap:** 17.7 installs per 1,000 eligible homes in Austin vs 2.5 in San Antonio. Part is likely permit
+  practice, not demand, so the model needs a city offset and propensity is ranked within metro.
+
+Baselines, within city, 2024-2025 installs (capture@k = share of installs in the top k% of block groups by
+score; Spearman on install rate, block groups with ≥ 50 eligible homes):
+
+| | Austin capture@20 | Austin Spearman | San Antonio capture@20 | San Antonio Spearman |
+| --- | --- | --- | --- | --- |
+| income only | 46% | 0.37 | 58% | 0.33 |
+| home value only | 45% | 0.53 | 67% | 0.37 |
+| past installs 2021-23 (rate) | 44% | 0.56 | 59% | 0.34 |
+| random | 18% | 0.04 | 22% | 0.02 |
