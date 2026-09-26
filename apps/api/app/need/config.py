@@ -158,3 +158,22 @@ class ForecastConfig(BaseModel):
 
 
 forecast = ForecastConfig()
+
+
+class GridLiveConfig(BaseModel):
+    """Live grid inputs (M5): ERCOT Grid Condition + our Grid Stress Signals. No score."""
+
+    # Our reliability thresholds (MW). ERCOT's own EEA1 trigger is PRC < 2,500 MW.
+    prc_low_mw: int = 3000
+    margin_low_mw: int = 3000
+    # Market spikes use the existing scarcity price (app.grid.config.ScoringConfig).
+    condition_stale_minutes: int = 20
+    price_stale_minutes: int = 45
+    refresh_minutes: int = 5  # dashboards
+    price_refresh_minutes: int = 15  # MIS RT report
+    rt_documents: int = 4  # re-read the last hour of 15-min files each time (fills gaps)
+    dam_documents: int = 2
+    dam_refresh_minutes: int = 60  # picks up the daily ~12:35 publication
+
+
+grid_live = GridLiveConfig()

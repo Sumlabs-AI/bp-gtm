@@ -23,10 +23,21 @@ export type CellFeature = {
     activeAlertCategory: AlertCategory | null
     activeForecastSignals: number
     forecastLevel: "elevated" | "high" | null
+    gridState: string | null
+    activeGridStressSignals: number
   }
 }
 
-export type CellCollection = { type: "FeatureCollection"; features: CellFeature[] }
+// The ERCOT-wide official condition, given once per map response (also with no Cells).
+export type GridSummary = {
+  state: string | null
+  title: string | null
+  eeaLevel: number | null
+  official: boolean
+  stale: boolean
+}
+
+export type CellCollection = { type: "FeatureCollection"; features: CellFeature[]; grid: GridSummary }
 
 export type CellDetail = {
   h3: string
@@ -35,7 +46,7 @@ export type CellDetail = {
   loadZone: string | null
   needScore: number | null
   components: { outage?: OutageComponent; weather?: WeatherComponent }
-  live: { weather: { alerts: AlertFeed; forecast: ForecastFeed } }
+  live: { weather: { alerts: AlertFeed; forecast: ForecastFeed }; grid: LiveGrid }
 }
 
 // NWS Alerts: official alerts active for the Cell now. Observed, not scored; never shown
@@ -179,4 +190,31 @@ export type ForecastFeed = {
   grid: GridFreshness
   spc: SpcFreshness
   signals: ForecastSignal[]
+}
+
+// Live grid: the ERCOT Grid Condition (official, as ERCOT declares it) and Grid Stress
+// Signals (OUR thresholds on ERCOT data). Never presented as equivalent. No score.
+export type LiveGrid = {
+  condition: {
+    state: string | null
+    title: string | null
+    eeaLevel: number | null
+    prcMw: number | null
+    official: boolean
+    sourceUpdatedAt: string | null
+    fetchedAt: string | null
+    stale: boolean
+  }
+  prices: { loadZone: string | null; latestRt: { price: number; intervalStart: string } | null; stale: boolean }
+  stressSignals: {
+    type: "low_reserves" | "tight_margin" | "rt_price_spike" | "dam_price_spike"
+    category: "reliability" | "market"
+    value: number
+    threshold: number
+    unit: string
+    at: string | null
+    message: string
+    hours: number | null
+  }[]
+  notes: string[]
 }

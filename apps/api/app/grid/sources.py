@@ -82,6 +82,57 @@ def parse_historical(market: str, raw: pd.DataFrame) -> pd.DataFrame:
     )[COLUMNS]
 
 
+# --- Live MIS reports (public, no login) ------------------------------------------------
+# NP6-905-CD real-time settlement point prices (every 15 min) and NP4-190-CD day-ahead
+# settlement point prices (daily, for the next day). Used by the Need Engine's live grid
+# signals; rows land in grid_prices, so zone economics stay current without API creds.
+
+MIS_LIVE = {"RT": 12301, "DA": 12331}
+
+
+def parse_mis_prices(market: str, csv_text: str) -> pd.DataFrame:
+    raw = pd.read_csv(io.StringIO(csv_text), skipinitialspace=True)
+    point_col = "SettlementPointName" if market == "RT" else "SettlementPoint"
+    raw = raw[raw[point_col].isin(TRACKED_POINTS)]
+    if market == "RT":  # load zones also appear energy-weighted (LZEW): keep the plain series
+        raw = raw[~raw["SettlementPointType"].astype(str).str.endswith("EW")]
+    day = pd.to_datetime(raw["DeliveryDate"], format="%m/%d/%Y")
+    if market == "RT":
+        offset = pd.to_timedelta(raw["DeliveryHour"] - 1, unit="h") + pd.to_timedelta(
+            (raw["DeliveryInterval"] - 1) * 15, unit="min"
+        )
+    else:
+        offset = pd.to_timedelta(raw["HourEnding"].str[:2].astype(int) - 1, unit="h")
+    return pd.DataFrame(
+        {
+            "settlement_point": raw[point_col],
+            "market": market,
+            "interval_start": _to_utc(day + offset, _yes(raw["DSTFlag"])),
+            "price": raw["SettlementPointPrice"].astype(float),
+        }
+    )[COLUMNS]
+
+
+def fetch_mis_recent(market: str, documents: int) -> pd.DataFrame:
+    """The latest `documents` CSV publications of a live MIS price report."""
+    listing = httpx.get(MIS_LIST.format(MIS_LIVE[market]), headers=_UA, timeout=60)
+    docs = sorted(
+        (
+            d["Document"]
+            for d in listing.raise_for_status().json()["ListDocsByRptTypeRes"]["DocumentList"]
+            if d["Document"]["FriendlyName"].endswith("_csv")
+        ),
+        key=lambda d: d["PublishDate"],
+        reverse=True,
+    )[:documents]
+    frames = []
+    for doc in docs:
+        resp = httpx.get(MIS_DOWNLOAD.format(doc["DocID"]), headers=_UA, timeout=120)
+        with zipfile.ZipFile(io.BytesIO(resp.raise_for_status().content)) as zf:
+            frames.append(parse_mis_prices(market, zf.read(zf.namelist()[0]).decode()))
+    return pd.concat(frames, ignore_index=True) if frames else pd.DataFrame(columns=COLUMNS)
+
+
 # --- ERCOT Public API ----------------------------------------------------------------
 
 API_BASE = "https://api.ercot.com/api/public-reports"

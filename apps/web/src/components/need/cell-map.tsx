@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button"
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet"
 import { OutageBreakdown } from "@/components/need/outage-breakdown"
 import { ForecastSignals } from "@/components/need/forecast-signals"
+import { LiveGridSection } from "@/components/need/live-grid"
 import { NwsAlerts } from "@/components/need/nws-alerts"
 import { WeatherBreakdown } from "@/components/need/weather-breakdown"
 import { apiFetch } from "@/lib/api"
@@ -42,6 +43,8 @@ export function CellMap({ className }: { className?: string }) {
   // Keyed by Cell so a stale detail never shows under a newly selected Cell.
   const [detail, setDetail] = React.useState<CellDetail | null>(null)
   const shownDetail = detail?.h3 === selected ? detail : null
+  // ERCOT-wide official condition, given once per map response (even with no Cells in view).
+  const grid = data?.grid ?? null
 
   function readViewport() {
     const map = mapRef.current
@@ -195,6 +198,21 @@ export function CellMap({ className }: { className?: string }) {
             </Button>
           ))}
           <span className="pr-1 text-muted-foreground">{STATUS_TEXT[status](data?.features.length ?? 0)}</span>
+          {grid?.state && (
+            <span
+              className={`rounded px-1.5 py-0.5 ${
+                grid.stale
+                  ? "border border-amber-500 text-amber-700"
+                  : grid.official
+                    ? "bg-red-600 text-white"
+                    : "bg-muted text-muted-foreground"
+              }`}
+              title="Official ERCOT grid condition"
+            >
+              ERCOT: {grid.title ?? grid.state}
+              {grid.stale && " (stale)"}
+            </span>
+          )}
         </div>
 
         <div className="absolute top-3 right-12 flex items-center gap-1 rounded-md border bg-background/90 px-2 py-1.5 text-xs shadow-sm">
@@ -246,6 +264,7 @@ export function CellMap({ className }: { className?: string }) {
             <div className="flex flex-col gap-6 overflow-y-auto pb-4">
               <NwsAlerts feed={shownDetail.live.weather.alerts} />
               <ForecastSignals feed={shownDetail.live.weather.forecast} />
+              <LiveGridSection grid={shownDetail.live.grid} />
               {shownDetail.components.outage && <OutageBreakdown outage={shownDetail.components.outage} />}
               {shownDetail.components.weather && <WeatherBreakdown weather={shownDetail.components.weather} />}
             </div>

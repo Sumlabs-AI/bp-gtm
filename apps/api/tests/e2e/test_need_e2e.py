@@ -78,7 +78,8 @@ def test_viewport_returns_only_cells_in_view(client):
     assert len(both.json()["features"]) > len(ids)
 
     empty = client.get("/need/cells", params={"bbox": bbox(-97.8, 30.2, -97.7, 30.3)})  # Austin
-    assert empty.json() == {"type": "FeatureCollection", "features": []}
+    assert empty.json()["type"] == "FeatureCollection"
+    assert empty.json()["features"] == []
 
     # A box clipping just the edge of a Cell still returns that Cell.
     ring = geo.cell_to_polygon(geo.latlng_to_cell(LAT, LNG))["coordinates"][0]
@@ -146,7 +147,22 @@ def test_cell_detail(client):
                     "spc": {"fetchedAt": None, "stale": True},
                     "signals": [],
                 },
-            }
+            },
+            "grid": {
+                "condition": {
+                    "state": None,
+                    "title": None,
+                    "eeaLevel": None,
+                    "prcMw": None,
+                    "official": False,
+                    "sourceUpdatedAt": None,
+                    "fetchedAt": None,
+                    "stale": True,
+                },
+                "prices": {"loadZone": None, "latestRt": None, "stale": True},
+                "stressSignals": [],
+                "notes": ["No Load Zone for this Cell: price signals unavailable"],
+            },
         },
     }
     # Valid H3 index, but not seeded (Austin).

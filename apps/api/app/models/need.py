@@ -250,3 +250,24 @@ class ForecastSignal(Base):
     source_updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))  # NWS/SPC
     fetched_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))  # ours
     replaced_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class GridCondition(Base):
+    """One poll of ERCOT's public dashboards: the ERCOT Grid Condition (official state) plus
+    reserves and the forecast margin. Failed polls are logged here and change nothing."""
+
+    __tablename__ = "grid_conditions"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    fetched_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
+    succeeded: Mapped[bool] = mapped_column(Boolean)
+    error: Mapped[str | None] = mapped_column(Text)
+    source_updated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    state: Mapped[str | None] = mapped_column(String(40))  # as ERCOT declares it
+    title: Mapped[str | None] = mapped_column(String(120))
+    eea_level: Mapped[int | None] = mapped_column(SmallInteger)
+    prc_mw: Mapped[int | None] = mapped_column(Integer)  # physical responsive capability
+    capacity_mw: Mapped[int | None] = mapped_column(Integer)
+    demand_mw: Mapped[int | None] = mapped_column(Integer)
+    margin_forecast_min_mw: Mapped[int | None] = mapped_column(Integer)
+    margin_forecast_min_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
