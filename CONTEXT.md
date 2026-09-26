@@ -97,8 +97,12 @@ The latest Lead Evidence that makes a Lead worth a fresh look this week (new per
 _Avoid_: alert, event
 
 **Grid Value**:
-Estimated annual energy-arbitrage value ($/yr) of a battery size in a Lead's Load Zone, from the Zone Economics backtest.
-_Avoid_: value (unqualified), savings
+Estimated annual energy-trading value ($/yr) for a battery size in a Lead's Load Zone in an average full calendar year (2019 onward, matching multi-year contracts), modeled using day-ahead plans without hindsight, after losses, wear and backup reserve (Zone Economics backtest). Shown alongside the last 12 months, the lowest/highest full year and its **Grid Value Ceiling**. Falls back to the last 12 months when no full-year history is loaded.
+_Avoid_: value (unqualified), savings, revenue
+
+**Grid Value Ceiling**:
+The most a battery size could have earned in the Load Zone over the same period (an average full year) with perfect knowledge of every price. A benchmark for Grid Value, never a sales figure.
+_Avoid_: potential, max revenue
 
 **Expected Value**:
 Lead Score / 100 × Grid Value of the recommended battery size; the default Lead ranking. A per-Lead economics ranking, not Opportunity.
