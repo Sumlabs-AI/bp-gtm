@@ -15,7 +15,7 @@ A named geographic area (e.g. Harris, Travis) used to decide which Cells are see
 _Avoid_: region, area, county (when meaning the seed area)
 
 **Load Zone**:
-An ERCOT settlement/load zone (LZ_HOUSTON, LZ_NORTH, LZ_SOUTH, LZ_WEST, LZ_AEN, LZ_CPS, …). A Cell may intersect a Load Zone; they are different levels of geography.
+An ERCOT settlement/load zone (LZ_HOUSTON, LZ_NORTH, LZ_SOUTH, LZ_WEST, LZ_AEN, LZ_CPS, …). Each Cell is assigned the Load Zone its center falls in; Cell and Load Zone remain different levels of geography.
 _Avoid_: zone (unqualified), market
 
 ### Need
@@ -25,8 +25,18 @@ Per-Cell measure of how useful/necessary battery backup is in that geography. Co
 _Avoid_: score (unqualified), risk score
 
 **Baseline Need**:
-Long-term structural Need for a Cell, driven by historical outage, weather and resilience exposure. Changes slowly.
-_Avoid_: static need, historical need
+How much structural reason a place has to benefit from backup power, independent of what is happening today: a union-style combination of Observed Outage Exposure and Weather Need, ranked as a Texas percentile. Historical events explain it; they never answer "why now".
+
+It is kept apart from two other concepts:
+- **Live Need** says whether something is happening now.
+- **Propensity Score** says how likely the area is to buy.
+
+Opportunity combines these three later. Baseline Need is not a probability and not the GTM score.
+_Avoid_: need score (reserved until Live Need exists), opportunity, risk score
+
+**Dominant Driver**:
+Which input mostly explains a Baseline Need: outage history, weather, or both (when the two inputs are within 10 points).
+_Avoid_: main factor, cause
 
 **Live Need**:
 Current/near-term urgency for a Cell, driven by active alerts, forecasts, current outages and current ERCOT conditions. Changes rapidly. Answers "why now?".
@@ -37,22 +47,86 @@ A human-readable reason attached to a Cell's Need (e.g. "Severe weather expected
 _Avoid_: alert, reason
 
 **Outage Need Component**:
-The outage-derived part of Need Score (frequency, duration, recency, customers affected).
+The outage-derived part of Need Score: the mean of Observed Outage Exposure and Utility Reliability Need, or whichever of the two exists.
 _Avoid_: outage score
 
+**Observed Outage Exposure**:
+How much outage a Cell's county has actually experienced: the Texas percentile of outage hours per customer over 5 years. County-level: every Cell in a county shares it. Outage Events and Major Outage Events explain that history but are not scored.
+_Avoid_: outage history score, outage risk
+
+**Utility Reliability Need**:
+How unreliable a Cell's electric utility is in normal conditions (interruption minutes per customer, excluding major events), as a Texas percentile. Unknown where the Cell's utility is unknown.
+_Avoid_: utility score, reliability score
+
+**Outage Event**:
+A continuous period in which a meaningful share of a county's customers are without power. A **Major Outage Event** is one whose peak share or total customer-hours crosses the major threshold.
+_Avoid_: outage (when meaning the county-level event), storm
+
+**Reference Population**:
+The set a raw metric is ranked against to make a 0–100 percentile: all Texas counties or all Texas utilities with usable data, not just our Markets.
+_Avoid_: benchmark, peer group
+
+**Data Through**:
+The last date an external source's history covers. Features computed from that source are "as of" this date, never implied to be current.
+_Avoid_: last updated, as of today
+
 **Weather Need Component**:
-The weather-derived part of Need Score (historical severe weather, active alerts, forecast extremes).
+The weather-derived part of Need Score. Baseline: Storm Exposure and Temperature Extremes Exposure over history. Live (later): active alerts and forecast extremes.
 _Avoid_: weather score
 
+**Storm Exposure**:
+How often a place falls under warnings for frequent outage-causing storms (severe thunderstorm, tornado, extreme wind), counted in warning-days, as a Texas percentile. Part of the Weather Need Component; varies within a county. Rare tropical and ice events are not in it (they appear through outage history, and later in Live Need).
+_Avoid_: storm risk, storm score
+
+**Temperature Extremes Exposure**:
+How often a place measurably reaches heat or cold that makes an outage dangerous (days ≥ 100°F, days ≤ 28°F), as a Texas percentile. Part of the Weather Need Component. Measured temperature, not NWS advisories, and without humidity.
+_Avoid_: heat score, climate risk
+
+**Warning-day**:
+A local calendar day on which a place was inside at least one qualifying NWS warning area. Counting days, not warnings, keeps one storm with several warnings from counting several times.
+_Avoid_: warning count (when meaning days)
+
+**Live Weather Signal**:
+Umbrella for evidence that weather makes backup power urgent now. It has exactly two kinds, NWS Alerts and Forecast Signals, which must never be presented as equivalent. Not a score.
+_Avoid_: live alert (for both kinds), weather event
+
+**NWS Alert**:
+An official NWS warning, watch or advisory (e.g. a Tornado Warning), issued by NWS with its own area and event time window. High-confidence, actionable.
+_Avoid_: alert signal, warning (for watches/advisories too)
+
+**Forecast Signal**:
+Our deterministic reading of NWS gridded forecast or SPC outlook data: a continuous period in which a forecast value crosses one of our thresholds (e.g. wind gusts ≥ 58 mph from 14:00 to 20:00 tomorrow), or an SPC risk area. Derived by us, not issued by NWS.
+_Avoid_: forecast alert, warning, prediction
+
+**Active** (signal):
+A Live Weather Signal that currently counts, judged at read time. An NWS Alert is Active when its time window contains now and it was in the latest successful Snapshot. A Forecast Signal is Active when it hasn't ended, starts within the next 48 hours, and hasn't been replaced by a newer successful forecast for its point. A Cell is affected when its center is inside the area (alerts) or it belongs to the signal's forecast point (forecasts).
+_Avoid_: current, open
+
+**Snapshot**:
+One complete fetch of all active NWS Alerts for Texas. Only a successful, complete Snapshot can end alerts that disappeared; a failed one changes nothing, and alert data becomes stale when no Snapshot has succeeded recently.
+_Avoid_: poll (when meaning the stored result), sync
+
 **Grid Need Component**:
-The ERCOT-derived part of Need Score (load, capacity, forecast load, resource outages, prices). Only signals that indicate value/urgency for residential storage belong here.
-_Avoid_: grid score, grid component, grid stress score
+The ERCOT-derived part of Live Need: is the grid stressed now or about to be? Live-only; there is no Baseline Grid score, because six Load Zones can't make a meaningful percentile and long-term reliability is already in Outage history. Built from ERCOT Grid Conditions and Grid Stress Signals.
+_Avoid_: grid score, grid component, grid stress score, Zone Economics Score (that is economics, not Need)
+
+**ERCOT Grid Condition**:
+The grid state ERCOT itself declares: Normal, a Conservation Appeal, or Energy Emergency Alert level 1–3 (EEA3 means rolling outages). Official, like an NWS Alert.
+_Avoid_: grid alert, grid status (when meaning our reading)
+
+**Grid Stress Signal**:
+Our reading of ERCOT data crossing one of our thresholds: low reserves (PRC), a tight forecast margin, or a price spike in a Cell's Load Zone (real-time now, or day-ahead tomorrow). Derived by us; tagged `reliability` or `market`. Never presented as an ERCOT declaration.
+_Avoid_: grid alert, EEA (unless ERCOT declared one)
 
 ### Propensity and Opportunity
 
 **Propensity Score**:
-Per-Cell prediction of battery adoption likelihood, owned by the ML workstream and built primarily from permit history. Answers "how likely is adoption here?", not "how needed is it?". Not yet built; distinct from Lead Score.
-_Avoid_: adoption score, ML score, permit score, lead score
+Per-Cell (H3 res 8) likelihood or affinity for battery adoption, 0–100, produced by the ML workstream from permit history and static Need features. Answers "how likely is adoption here?", not "how needed is it?" (Baseline Need) and not "why now?" (Live Need). Carries the model version, the Feature Version it was scored against, and when it was scored.
+_Avoid_: adoption score, ML score, permit score, lead score, probability (the contract is 0–100)
+
+**Feature Version**:
+The version of the Need feature definitions (which columns, thresholds, windows and sources) an export was produced with. A Propensity Score records the Feature Version it was trained or scored against, so definitions can change without silently invalidating a model.
+_Avoid_: schema version, data version
 
 **Opportunity**:
 The GTM interpretation of a Cell's Need Score together with its Propensity Score. Both dimensions stay visible; the combining formula is undefined until decided by the team.

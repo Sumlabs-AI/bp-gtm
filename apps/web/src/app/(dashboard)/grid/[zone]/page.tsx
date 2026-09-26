@@ -2,7 +2,7 @@ import type { Metadata } from "next"
 import Link from "next/link"
 import { notFound } from "next/navigation"
 import { connection } from "next/server"
-import { ChartNoAxesCombinedIcon, CalculatorIcon } from "lucide-react"
+import { CalculatorIcon } from "lucide-react"
 
 import { Disclosure } from "@/components/disclosure"
 import { BatteryYearsChart, MonthlyBasisChart, HourlyProfileChart, MonthlyValueChart } from "@/components/grid/zone-charts"
@@ -105,7 +105,8 @@ export default async function ZonePage(props: PageProps<"/grid/[zone]">) {
 
         {!!zone.series.battery_years?.length && <BatteryYearsChart zone={zone} />}
 
-        <Disclosure title="Price analysis · Last 12 months" icon={ChartNoAxesCombinedIcon}>
+        <section aria-labelledby="price-analysis" className="flex min-w-0 flex-col gap-4">
+          <h3 id="price-analysis" className="text-lg font-semibold tracking-tight">Price analysis · Last 12 months</h3>
           <div className="flex min-w-0 flex-col gap-6">
             <Card className="min-w-0">
               <CardHeader className="min-w-0">
@@ -162,7 +163,7 @@ export default async function ZonePage(props: PageProps<"/grid/[zone]">) {
               <MonthlyBasisChart zone={zone} />
             </div>
           </div>
-        </Disclosure>
+        </section>
 
         <Disclosure title="How Grid Value is estimated" icon={CalculatorIcon}>
           <div className="flex min-w-0 flex-col gap-3 text-sm text-muted-foreground">

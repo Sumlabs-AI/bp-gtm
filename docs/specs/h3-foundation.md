@@ -149,6 +149,8 @@ Database tests live alongside the existing end-to-end suite and reuse its harnes
 
 Performance is measured, not asserted: the seed command's reported duration for Harris and Travis, and the response time and payload size of a full-county viewport request, go into the milestone report.
 
+> **Update (Milestone 2):** the only static enrichment built is the ERCOT Load Zone. It closes the static-geography work: county, ZIP, utility and Weather Zone are added only when a Need signal requires them. See `wiki/need-engine.md`.
+
 ## Out of Scope
 
 - Any Need Score, component score, or feature computation (Milestones 3–6).

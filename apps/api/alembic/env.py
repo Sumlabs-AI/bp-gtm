@@ -1,5 +1,6 @@
 from logging.config import fileConfig
 
+from geoalchemy2 import alembic_helpers
 from sqlalchemy import engine_from_config, pool
 
 from alembic import context
@@ -15,6 +16,14 @@ if config.config_file_name is not None:
 
 target_metadata = Base.metadata
 
+# Let autogenerate handle PostGIS: render Geometry columns + their GIST indexes, and ignore
+# the extension's own tables (spatial_ref_sys, ...) instead of proposing to drop them.
+GEO_OPTIONS = {
+    "include_object": alembic_helpers.include_object,
+    "process_revision_directives": alembic_helpers.writer,
+    "render_item": alembic_helpers.render_item,
+}
+
 
 def run_migrations_offline() -> None:
     context.configure(
@@ -23,6 +32,7 @@ def run_migrations_offline() -> None:
         literal_binds=True,
         dialect_opts={"paramstyle": "named"},
         compare_type=True,
+        **GEO_OPTIONS,
     )
     with context.begin_transaction():
         context.run_migrations()
@@ -35,7 +45,12 @@ def run_migrations_online() -> None:
         poolclass=pool.NullPool,
     )
     with connectable.connect() as connection:
-        context.configure(connection=connection, target_metadata=target_metadata, compare_type=True)
+        context.configure(
+            connection=connection,
+            target_metadata=target_metadata,
+            compare_type=True,
+            **GEO_OPTIONS,
+        )
         with context.begin_transaction():
             context.run_migrations()
 

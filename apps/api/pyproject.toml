@@ -5,8 +5,11 @@ description = "FastAPI backend"
 requires-python = ">=3.13"
 dependencies = [
     "alembic>=1.20.0",
+    "duckdb>=1.5.5",
     "fastapi[standard]>=0.141.1",
+    "geoalchemy2>=0.20.0",
     "geopandas>=1.1.4",
+    "h3>=4.5.0",
     "httpx>=0.28.1",
     "openpyxl>=3.1.5",
     "pandas>=3.0.6",
@@ -25,7 +28,7 @@ dev = [
 
 [tool.ruff]
 line-length = 100
-extend-exclude = ["alembic/versions"]
+extend-exclude = ["alembic/versions", "data"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B"]
