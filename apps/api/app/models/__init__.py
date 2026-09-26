@@ -6,6 +6,8 @@ from app.models.need import (
     Cell,
     CountyOutageFeatures,
     CountyTemperatureFeatures,
+    LiveWeatherSignal,
+    LiveWeatherSnapshot,
     StormFeatures,
     UtilityReliability,
 )
@@ -18,6 +20,8 @@ __all__ = [
     "GridZoneMetrics",
     "Item",
     "Lead",
+    "LiveWeatherSignal",
+    "LiveWeatherSnapshot",
     "Meter",
     "Permit",
     "Property",

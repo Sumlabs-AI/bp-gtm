@@ -8,6 +8,7 @@ import "maplibre-gl/dist/maplibre-gl.css"
 import { Button } from "@/components/ui/button"
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet"
 import { OutageBreakdown } from "@/components/need/outage-breakdown"
+import { LiveWeatherSignals } from "@/components/need/live-weather"
 import { WeatherBreakdown } from "@/components/need/weather-breakdown"
 import { apiFetch } from "@/lib/api"
 import { scoreColor } from "@/lib/grid"
@@ -133,6 +134,15 @@ export function CellMap({ className }: { className?: string }) {
                   paint={{ "line-color": "#6366f1", "line-width": 0.5, "line-opacity": 0.5 }}
                 />,
                 <Layer
+                  key="cells-live"
+                  id="cells-live"
+                  minzoom={H3_MAP_MIN_ZOOM}
+                  type="line"
+                  // Cells under an active NWS alert: outlined, not coloured (no live score yet).
+                  filter={[">", ["get", "activeWeatherSignals"], 0]}
+                  paint={{ "line-color": "#dc2626", "line-width": 1.5 }}
+                />,
+                <Layer
                   key="cells-highlight"
                   id="cells-highlight"
                   minzoom={H3_MAP_MIN_ZOOM}
@@ -199,8 +209,9 @@ export function CellMap({ className }: { className?: string }) {
               <dd>{shownDetail.needScore ?? "—"}</dd>
             </dl>
           )}
-          {shownDetail && (shownDetail.components.outage || shownDetail.components.weather) && (
+          {shownDetail && (
             <div className="flex flex-col gap-6 overflow-y-auto pb-4">
+              <LiveWeatherSignals live={shownDetail.live.weather} />
               {shownDetail.components.outage && <OutageBreakdown outage={shownDetail.components.outage} />}
               {shownDetail.components.weather && <WeatherBreakdown weather={shownDetail.components.weather} />}
             </div>

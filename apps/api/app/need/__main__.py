@@ -9,6 +9,7 @@ uv run python -m app.need outage validate         # known storms + SAIDI cross-c
 uv run python -m app.need weather download        # IEM warnings + nClimGrid (cached)
 uv run python -m app.need weather compute         # res-6 Storm + county Temperature
 uv run python -m app.need weather validate        # storm days by year, known storms
+uv run python -m app.need live refresh            # one NWS alert Snapshot (worker: every 5 min)
 uv run python -m app.need export --out cells.csv        # h3_index, resolution, center (for ML)
 """
 
@@ -159,6 +160,31 @@ def weather(action: str) -> None:
         print(f"  {r.h3_index}  {r.lat:6.2f},{r.lng:8.2f}  {r.warning_days_5y} days")
 
 
+def live(action: str) -> None:
+    from datetime import UTC, datetime
+
+    from app.need.live import nws
+    from app.need.live.refresh import refresh
+
+    with nws.client() as http, SessionLocal() as db:
+        snapshot = refresh(
+            db,
+            fetch=lambda: nws.fetch_alerts(http),
+            resolve_zones=nws.zone_resolver(http),
+            now=datetime.now(UTC),
+        )
+        db.commit()
+    if snapshot.succeeded:
+        print(
+            f"Live weather Snapshot {snapshot.fetched_at:%Y-%m-%d %H:%M}Z: "
+            f"{snapshot.alerts_total} NWS alerts, {snapshot.signals_kept} kept as signals, "
+            f"{snapshot.superseded} superseded",
+            flush=True,
+        )
+    else:
+        print(f"Live weather Snapshot FAILED (signals unchanged): {snapshot.error}", flush=True)
+
+
 def export(out: Path) -> None:
     columns = ("h3_index", "resolution", "center_lat", "center_lng")
     with SessionLocal() as db, out.open("w", newline="") as f:
@@ -185,6 +211,8 @@ def main() -> None:
     p.add_argument("action", choices=["download", "compute", "validate"])
     p = sub.add_parser("weather", help="Baseline Weather Need pipeline")
     p.add_argument("action", choices=["download", "compute", "validate"])
+    p = sub.add_parser("live", help="Live Weather Signals (NWS alerts)")
+    p.add_argument("action", choices=["refresh"])
     p = sub.add_parser("export", help="write all Cells to CSV")
     p.add_argument("--out", type=Path, required=True)
     args = parser.parse_args()
@@ -197,6 +225,8 @@ def main() -> None:
         outage(args.action)
     elif args.cmd == "weather":
         weather(args.action)
+    elif args.cmd == "live":
+        live(args.action)
     else:
         export(args.out)
 

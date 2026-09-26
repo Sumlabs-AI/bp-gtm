@@ -2,7 +2,7 @@
 
 Scores **how useful backup power is** in a place, per **Cell** (H3 resolution-8 hexagon, ~0.74 km²). It is separate from lead scoring and from the ML Propensity Score, which join onto the same Cells by `h3_index`. Terms: [`CONTEXT.md`](../CONTEXT.md). Why PostGIS: [ADR 0001](../docs/adr/0001-postgis.md).
 
-Status: **Milestones 1–4A (Cells, Load Zone, Baseline Outage Need, Baseline Weather Need)**. Cells exist for Harris and Travis counties. Each Cell has its ERCOT Load Zone and its county, plus an **Outage Need Component** and a **Weather Need Component**, drawn on `/need`. There's no combined Need Score yet (`needScore: null`, see M6). Static geography is closed: a new geography is added only when a Need signal needs it. County was added in M3A for that reason.
+Status: **Milestones 1–4A + 4B-1**. Cells exist for Harris and Travis counties, each with its ERCOT Load Zone and county. Baseline: an **Outage Need Component** and a **Weather Need Component**. Live: **Live Weather Signals** (official NWS alerts, observed and not scored). All are drawn on `/need`. There's no combined Need Score yet (`needScore: null`, see M6). Static geography is closed: a new geography is added only when a Need signal needs it.
 
 ## The Cell contract (shared with ML)
 
@@ -139,6 +139,49 @@ Cell (res 8) ─┬─ res-6 parent ── IEM SV/TO/EW warning-days 5y ── T
   - Top Texas storm cells are around Amarillo (75 warning-days in 5 y).
   - Temperature over the 5 years through 2026-02-28, days ≥100°F / ≥95°F / ≤28°F / ≤32°F: Harris 37/261/26/43 (exposure 8), Travis 133/347/52/93 (exposure 47).
 
+## Live Weather Signals (M4B-1, issue #14)
+
+"Is this place threatened right now?" Official NWS alerts, recorded as **Live Weather Signals**. **No score yet** (M4B-3 decides scoring, once signals are proven).
+
+- **Source**: `api.weather.gov/alerts/active?area=TX`. It's public domain with no key, but a User-Agent is required (`LiveWeatherConfig.user_agent`). One request per **Snapshot**; the `worker` takes one every 5 min.
+- **Allowlist** (`LiveWeatherConfig.categories`), NWS event → category:
+  - tornado
+  - severe_storm
+  - tropical (incl. hurricane/tropical watches, storm surge)
+  - winter (ice/winter storm)
+  - heat (extreme heat, heat advisory)
+  - cold (extreme cold, cold weather advisory, (hard) freeze)
+
+  Flood, fire, air quality and marine are ignored. Tropical and ice *are* live signals even though they're excluded from Baseline Weather: Baseline asks how often, Live asks is it happening now.
+- **Area**: the alert's own polygon (`geometry_source = "alert"`), or the union of its NWS zones (`"zones"`, forecast `TXZ…`/county `TXC…`, fetched once and cached in `data/cache/nws-zones/`).
+- **Two clocks, kept apart** (`live_weather_signals`, never deleted):
+  - NWS event time: `effective_at`, `onset_at`, `expires_at`, `ends_at`
+  - Our ingestion state: `first_seen_at`, `last_seen_at`, `superseded_at`
+  - `live_weather_snapshots` logs every attempt: `fetched_at`, `succeeded`, counts, `error`
+- **Snapshots**:
+  - A **successful, complete** Snapshot upserts allowlisted alerts and supersedes signals missing from it (NWS cancelled, replaced or ended them).
+  - **Any failure** (fetch, parse, one zone geometry) logs a failed Snapshot and changes no signal.
+- **Active** (decided at read time, `app/need/live/store.py`, with an explicit `now`):
+  - not superseded
+  - `effective_at ≤ now < coalesce(ends_at, expires_at)`
+  - the Cell's center is inside the area (PostGIS `ST_Contains`)
+
+  No clean-up job: an alert ending at 15:30 simply stops matching at 15:30.
+- **Stale**: if no Snapshot has succeeded within 30 min (`stale_after_minutes`), the API says `stale: true`. Active signals are still shown, marked as possibly out of date.
+- **API**:
+  - `GET /need/cells/{h3}` → `live.weather = {fetchedAt, stale, signals[]}`. Each signal has event, category, severity, certainty, urgency, headline, effectiveAt, endsAt, geometrySource, firstSeenAt, lastSeenAt.
+  - `GET /need/cells` features → `activeWeatherSignals` (count) and `activeWeatherCategory` (most severe, `category_order`).
+- **Map**: red outline on Cells with an active signal; the sheet lists them with end times and the stale flag.
+- **Tests** (`tests/e2e/test_live_weather.py`, NWS payloads injected):
+  - time expiry with no refresh
+  - successful-Snapshot cancellation
+  - failed-Snapshot staleness
+  - future `effective`
+  - zones vs alert geometry
+  - allowlist
+  - reappearing alerts
+  - `ends` → `expires` fallback
+
 ## Commands
 
 ```bash
@@ -153,6 +196,7 @@ docker compose exec api python -m app.need outage validate         # Major Outag
 docker compose exec api python -m app.need weather download        # IEM warning polygons + nClimGrid county Parquet (cached)
 docker compose exec api python -m app.need weather compute         # res-6 Storm Exposure + county Temperature Extremes
 docker compose exec api python -m app.need weather validate        # warning-days by year, Derecho/Beryl, top storm cells
+docker compose exec api python -m app.need live refresh            # one NWS alert Snapshot (the worker does this every 5 min)
 ```
 
 Seeding reads only the committed county files, so it needs no network. To add a county, add a `Market`, run `download_counties`, commit the GeoJSON, then seed it.
