@@ -142,27 +142,39 @@ score; Spearman on install rate, block groups with ≥ 50 eligible homes):
 
 ## Propensity model v1 (`train/model.py`)
 
-LightGBM Poisson on the 24 ACS features; offset = log(eligible homes) + log(city install rate), so the model
-ranks block groups *within* a city. Shallow trees (7 leaves, ≥ 30 rows per leaf), rounds by inner CV, 5 seeds
-averaged. Spatial CV folds are 5 km grid cells.
+LightGBM Poisson on the 24 ACS features, and a Poisson GLM on 7 (log home value, log income, log density,
+single-family share, 65+ share, owner household size, WFH share) as the "are trees worth it" check. Offset =
+log(exposure) + log(city install rate): both rank block groups *within* a city. Exposure = parcel eligible homes
+(ACS × 0.92 where no parcels). Spatial CV folds are 5 km grid cells.
+
+Metrics (`train/baselines.py`): **capture AUC** is the count version of ROC AUC (x = share of eligible homes,
+best score first; y = share of installs; 0.5 random, 1 perfect). **homes@20** = share of installs in the top 20%
+of eligible homes. A plain ROC AUC on "block group had ≥ 1 install" is misleading here: it rewards big block groups.
 
 Spatial CV × time (train 2021-2023 on 4/5 of the blocks, rank the held-out fifth, 2024-2025 installs):
 
-| | Austin capture@10 / @20 / Spearman | San Antonio capture@10 / @20 / Spearman |
+| | Austin capture AUC / homes@20 | San Antonio capture AUC / homes@20 |
 | --- | --- | --- |
-| **model v1** | **34%** / 47% / 0.47 | 40% / 63% / 0.36 |
-| home value only | 26% / 45% / 0.53 | 44% / 67% / 0.37 |
-| income only | 27% / 46% / 0.37 | 43% / 58% / 0.33 |
-| past installs 2021-23 | 26% / 44% / 0.56 | 41% / 59% / 0.34 |
+| LightGBM | 0.68 / 45% | 0.77 / 60% |
+| GLM (7 features) | 0.68 / 44% | 0.77 / 58% |
+| home value only | 0.69 / 44% | 0.77 / 59% |
+| past installs 2021-23 | 0.69 / 46% | 0.71 / 55% |
+| income only | 0.62 / 33% | 0.70 / 47% |
+| random | 0.50 / 20% | 0.50 / 20% |
 
-- **v1 ties home value, it does not beat it.** Better at the very top in Austin (capture@10 +8 pts), worse
-  or equal elsewhere. Same picture on the full 2021-2025 label.
-- **Leave one city out fails**: a model trained on one city ranks the other worse than home value alone
-  (Austin capture@20 36%, San Antonio 44%). What drives installs differs between the two cities, a warning for
-  scoring DFW, which has no permits.
-- **SHAP:** home value dominates; density, single-family share and household size are negative, 65+ households
-  positive. Electric heat is ~neutral once the rest is in.
-- **The negative single-family effect is partly an exposure artifact.** With parcel eligible homes as exposure,
-  `pct_owner_sfd` importance drops from 0.16 to 0.03 (`pct_sfd` and density stay negative). ACS undercounts
-  eligible homes in mixed block groups, which inflates their rate. Dropping block groups under 50 eligible
-  homes changes little.
+Leave one city out (2021-2025), capture AUC: LightGBM 0.62 (Austin) / 0.71 (San Antonio), **GLM 0.69 / 0.76**,
+home value 0.68 / 0.75.
+
+- **The signal is real and useful**: the top 20% of homes by score hold 44-60% of installs, 2.2-3× random.
+  Ranking areas from Census data alone does as well as knowing where installs already happened.
+- **No model beats home value on its own yet.** Both models tie it inside a city.
+- **LightGBM does not transfer between cities; the GLM does.** For scoring metros with no permits (DFW) the GLM
+  is the safer choice today. Coefficients (per sd, log-rate): home value +0.61, 65+ +0.26, income +0.21,
+  density −0.14, single-family share −0.30.
+- **Parcel exposure fixed most of the spurious owner-occupied-SFD effect** (ACS undercounts eligible homes in mixed
+  block groups). A negative single-family *share* remains; unexplained, possibly installs on homes the label
+  counts as "can't tell" property type.
+- **Fort Worth as a third city**: its open-data permits (ArcGIS `CFW_Open_Data_Development_Permits_View`,
+  1.6M rows) describe residential building permits, but 98% of electrical/plumbing permits have no description,
+  so standby generators are invisible. It could only give a battery (mostly solar + storage) label. Dallas open
+  data stops in mid-2020.

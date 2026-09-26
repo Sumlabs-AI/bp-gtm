@@ -1,8 +1,9 @@
 """Propensity model v1: LightGBM Poisson on ACS features, exposure = eligible homes, per-city offset.
+A small Poisson GLM on a handful of features runs alongside as the "is the tree model worth it" check.
 
   uv run python -m train.model
 
-offset = log(eligible_homes) + log(city install rate in the training rows), so trees explain the rate *within*
+offset = log(exposure) + log(city install rate in the training rows), so trees explain the rate *within*
 a city and never spend splits on the Austin / San Antonio permitting gap. Scores are the raw log-rate relative
 to the city, only meaningful as a ranking inside a metro.
 
@@ -22,6 +23,8 @@ import numpy as np
 import pandas as pd
 import pyarrow.parquet as pq
 
+from scipy.optimize import minimize
+
 from train.baselines import BASELINES, evaluate
 from train.build_table import PROCESSED, ROOT, acs_features
 
@@ -37,8 +40,8 @@ PARAMS = {
 
 
 def offset(df: pd.DataFrame, y: str) -> np.ndarray:
-    city_rate = df.groupby("city")[y].sum() / df.groupby("city")["eligible_homes"].sum()
-    return (np.log(df["eligible_homes"]) + np.log(df["city"].map(city_rate))).to_numpy()
+    city_rate = df.groupby("city")[y].sum() / df.groupby("city")["exposure"].sum()
+    return (np.log(df["exposure"]) + np.log(df["city"].map(city_rate))).to_numpy()
 
 
 def fit(df: pd.DataFrame, y: str, feats: list[str]) -> list[lgb.Booster]:
@@ -60,6 +63,48 @@ def score(boosters: list[lgb.Booster], df: pd.DataFrame, feats: list[str]) -> pd
     return pd.Series(raw, index=df.index)
 
 
+GLM_FEATURES = {  # name -> transform; picked from the SHAP ranking, logs for the skewed ones
+    "log_home_value": lambda d: np.log(d["median_home_value"]),
+    "log_income": lambda d: np.log(d["median_hh_income"]),
+    "log_density": lambda d: np.log1p(d["housing_density_km2"]),
+    "pct_sfd": lambda d: d["pct_sfd"],
+    "pct_hh_65plus": lambda d: d["pct_hh_65plus"],
+    "avg_hh_size_owner": lambda d: d["avg_hh_size_owner"],
+    "pct_wfh": lambda d: d["pct_wfh"],
+}
+GLM_L2 = 1.0
+
+
+def _glm_x(df: pd.DataFrame, center: pd.Series | None = None, scale: pd.Series | None = None):
+    x = pd.DataFrame({k: f(df) for k, f in GLM_FEATURES.items()}, index=df.index)
+    center = x.median() if center is None else center
+    scale = x.std() if scale is None else scale
+    return ((x.fillna(center) - center) / scale).to_numpy(), center, scale
+
+
+def fit_glm(df: pd.DataFrame, y: str, feats: list[str] | None = None) -> dict:
+    """Poisson regression with the same offset as the trees, small ridge penalty."""
+    x, center, scale = _glm_x(df)
+    x1, off, yy = np.c_[np.ones(len(x)), x], offset(df, y), df[y].to_numpy()
+
+    def loss(b):
+        eta = off + x1 @ b
+        mu = np.exp(eta)
+        pen = GLM_L2 * (b[1:] @ b[1:])
+        return (mu - yy * eta).sum() + pen, x1.T @ (mu - yy) + np.r_[0, 2 * GLM_L2 * b[1:]]
+
+    b = minimize(loss, np.zeros(x1.shape[1]), jac=True, method="L-BFGS-B").x
+    return {"coef": b, "center": center, "scale": scale}
+
+
+def score_glm(m: dict, df: pd.DataFrame, feats: list[str] | None = None) -> pd.Series:
+    x, _, _ = _glm_x(df, m["center"], m["scale"])
+    return pd.Series(np.c_[np.ones(len(x)), x] @ m["coef"], index=df.index)
+
+
+MODELS = {"LGBM": (fit, score), "GLM": (fit_glm, score_glm)}
+
+
 def spatial_folds(df: pd.DataFrame) -> pd.Series:
     """Folds of BLOCK_KM x BLOCK_KM grid cells, so neighbours don't sit on both sides of a split."""
     bg = gpd.read_file(f"zip://{TIGER_BG}", columns=["GEOID"]).set_index("GEOID").to_crs(5070)
@@ -71,18 +116,19 @@ def spatial_folds(df: pd.DataFrame) -> pd.Series:
     return cell.map(fold_of)
 
 
-def oof_scores(df: pd.DataFrame, y: str, feats: list[str], folds: pd.Series) -> pd.Series:
+def oof_scores(df: pd.DataFrame, y: str, feats: list[str], folds: pd.Series, model: str) -> pd.Series:
+    fit_fn, score_fn = MODELS[model]
     out = pd.Series(np.nan, index=df.index)
     for k in range(N_FOLDS):
         test = folds == k
-        out[test] = score(fit(df[~test], y, feats), df[test], feats)
+        out[test] = score_fn(fit_fn(df[~test], y, feats), df[test], feats)
     return out
 
 
-def compare(df: pd.DataFrame, model_score: pd.Series, y: str, baselines: list[str]) -> pd.DataFrame:
+def compare(df: pd.DataFrame, model_scores: dict[str, pd.Series], y: str, baselines: list[str]) -> pd.DataFrame:
     rows = []
     for city, d in df.groupby("city"):
-        rows.append({"city": city, "score": "MODEL", **evaluate(d, model_score[d.index], y)})
+        rows += [{"city": city, "score": m, **evaluate(d, s[d.index], y)} for m, s in model_scores.items()]
         rows += [{"city": city, "score": b, **evaluate(d, BASELINES[b](d), y)} for b in baselines]
     return pd.DataFrame(rows).set_index(["city", "score"]).round(3)
 
@@ -105,20 +151,25 @@ def main():
           f"({BLOCK_KM} km blocks), rows per fold {folds.value_counts().sort_index().tolist()}\n")
 
     base = ["income only", "home value only"]
-    oof_time = oof_scores(df, "y_2021_2023", feats, folds)
+    oof_time = {m: oof_scores(df, "y_2021_2023", feats, folds, m) for m in MODELS}
     print("1. spatial CV x time: train 2021-2023, test 2024-2025 on held-out blocks")
     print(compare(df, oof_time, "y_2024_2025", base + ["past installs 2021-23 (rate)"]).to_string(), "\n")
 
-    oof_all = oof_scores(df, "y", feats, folds)
+    oof_all = {m: oof_scores(df, "y", feats, folds, m) for m in MODELS}
     print("2. spatial CV, 2021-2025")
     print(compare(df, oof_all, "y", base).to_string(), "\n")
 
-    loco = pd.Series(np.nan, index=df.index)
+    loco = {m: pd.Series(np.nan, index=df.index) for m in MODELS}
     for city in df["city"].unique():
         test = df["city"] == city
-        loco[test] = score(fit(df[~test], "y", feats), df[test], feats)
+        for m, (fit_fn, score_fn) in MODELS.items():
+            loco[m][test] = score_fn(fit_fn(df[~test], "y", feats), df[test], feats)
     print("3. leave one city out (train on the other city), 2021-2025")
     print(compare(df, loco, "y", base).to_string(), "\n")
+
+    glm = fit_glm(df, "y")
+    print("GLM coefficients (per 1 sd, log-rate):",
+          ", ".join(f"{k} {v:+.2f}" for k, v in zip(GLM_FEATURES, glm["coef"][1:])), "\n")
 
     final = fit(df, "y", feats)
     print("SHAP, final model (direction: +1 = higher value -> higher propensity)")
@@ -127,7 +178,9 @@ def main():
     final[0].save_model(PROCESSED / "model_v1.txt")
     for i, b in enumerate(final[1:], 1):
         b.save_model(PROCESSED / f"model_v1_seed{i}.txt")
-    df[["GEOID", "city"]].assign(fold=folds, oof_time=oof_time, oof_all=oof_all, loco=loco) \
+    df[["GEOID", "city"]].assign(fold=folds, **{f"{k}_{m.lower()}": v[m] for k, v in
+                                                 {"oof_time": oof_time, "oof_all": oof_all, "loco": loco}.items()
+                                                 for m in MODELS}) \
         .to_parquet(PROCESSED / "train_bg_oof.parquet", index=False)
 
 

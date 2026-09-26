@@ -12,7 +12,10 @@ Choices (see README "Training table"):
 - Rows: block groups >= 90% inside the permit city (permits only cover city limits) with eligible_homes > 0.
 - Label: backup installs 2021-2025. 2026 is partial; pre-2021 has no San Antonio data. Per-year columns kept
   for the temporal split (train 2021-2023, test 2024-2025) and the without-Uri check (drop 2021).
-- Exposure: ACS eligible_homes (owner-occupied single-family detached), defined the same everywhere we score.
+- Exposure: `exposure` = parcel eligible homes (owner-occupied single-family detached) where the block group has
+  parcels, else ACS eligible_homes x the median parcel/ACS ratio. ACS undercounts eligible homes in mixed block
+  groups, which inflated their rate and taught the model a spurious negative single-family effect. Exposure only
+  sets the rate being learned; scores rank on rate, so scoring outside parcel counties still works.
 - Features: ACS only. Parcel columns are carried with a `parcel_` prefix for the installable multiplier and
   sensitivity checks, not for the propensity model: several are filled in only one county (sq ft: Bexar,
   deed year: Travis), so with two training cities they would act as a city indicator.
@@ -21,6 +24,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import numpy as np
 import pandas as pd
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -73,11 +77,15 @@ def build() -> tuple[pd.DataFrame, list[str]]:
     df = df.merge(label_counts(permits, df), on="GEOID", how="left", validate="one_to_one")
     ycols = [c for c in df.columns if c.startswith(("y_", "aux_"))] + ["y"]
     df[ycols] = df[ycols].fillna(0).astype(int)
-    df["rate_per_1k"] = 1000 * df["y"] / df["eligible_homes"]
 
     df = df.merge(parcels.drop(columns="county").add_prefix("parcel_").rename(columns={"parcel_GEOID": "GEOID"}),
                   on="GEOID", how="left", validate="one_to_one")
     df["has_parcels"] = df["parcel_n_parcels"].notna()
+    use_parcels = df["parcel_n_eligible_homes"].fillna(0) > 0
+    ratio = (df.loc[use_parcels, "parcel_n_eligible_homes"] / df.loc[use_parcels, "eligible_homes"]).median()
+    df["exposure"] = df["parcel_n_eligible_homes"].where(use_parcels, df["eligible_homes"] * ratio)
+    df["exposure_source"] = np.where(use_parcels, "parcels", "acs")
+    df["rate_per_1k"] = 1000 * df["y"] / df["exposure"]
 
     check(df, permits, n_in_city, acs)
     return df, acs_features(acs)
@@ -110,6 +118,7 @@ def check(df: pd.DataFrame, permits: pd.DataFrame, n_in_city: int, acs: pd.DataF
     miss = df[feats].isna().mean()
     print(f"\n{len(feats)} ACS features; missing > 0: "
           + (", ".join(f"{c} {v:.1%}" for c, v in miss[miss > 0].sort_values(ascending=False).items()) or "none"))
+    print(f"exposure from parcels: {(df['exposure_source'] == 'parcels').mean():.1%}")
     print(f"low-confidence ACS rows: {df['acs_low_confidence'].mean():.1%}; "
           f"eligible_homes < 50: {(df['eligible_homes'] < 50).mean():.1%}")
     both = df[df["has_parcels"]]
