@@ -16,3 +16,6 @@ class Cell(Base):
     center_lng: Mapped[float] = mapped_column(Float)
     # GIST-indexed (geoalchemy2 creates the index) for viewport and spatial joins.
     geometry: Mapped[str] = mapped_column(Geometry("POLYGON", srid=4326), nullable=False)
+    # ERCOT load zone of the Cell's center (app.grid.zones.zone_for_points); None when the
+    # center is outside every zone polygon. Recomputed by `python -m app.need enrich`.
+    load_zone: Mapped[str | None] = mapped_column(String(20))

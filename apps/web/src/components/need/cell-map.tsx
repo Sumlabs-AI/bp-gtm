@@ -171,6 +171,8 @@ export function CellMap({ className }: { className?: string }) {
               <dd className="tabular-nums">
                 {shownDetail.center.lat.toFixed(5)}, {shownDetail.center.lng.toFixed(5)}
               </dd>
+              <dt className="text-muted-foreground">Load Zone</dt>
+              <dd className="font-mono">{shownDetail.loadZone ?? "Unknown"}</dd>
               <dt className="text-muted-foreground">Need Score</dt>
               <dd>{shownDetail.needScore ?? "—"}</dd>
             </dl>

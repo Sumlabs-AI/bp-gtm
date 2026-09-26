@@ -1,12 +1,15 @@
 """Need Engine Cells end to end: geometry -> seeded Cells in PostGIS -> HTTP API."""
 
+import pandas as pd
 from shapely.geometry import shape
-from sqlalchemy import func, select
+from sqlalchemy import func, select, update
 
 from app import geo
 from app.db import SessionLocal
+from app.grid.zones import zone_for_points
 from app.models import Cell
 from app.need.config import need
+from app.need.enrich import enrich_load_zones
 from app.need.store import seed_polygon
 
 LAT, LNG = 29.7604, -95.3698  # Houston City Hall
@@ -129,9 +132,67 @@ def test_cell_detail(client):
         "h3": cell,
         "resolution": 8,
         "center": {"lat": center_lat, "lng": center_lng},
+        "loadZone": None,  # set by enrichment, not by seeding
         "needScore": None,
         "components": {},
     }
     # Valid H3 index, but not seeded (Austin).
     assert client.get(f"/need/cells/{geo.latlng_to_cell(30.27, -97.74)}").status_code == 404
     assert client.get("/need/cells/not-a-cell").status_code == 404
+
+
+AUSTIN = (30.2672, -97.7431)  # downtown, Austin Energy territory
+GULF = (27.0, -94.0)  # offshore: no load zone
+
+
+def enrich():
+    with SessionLocal() as db:
+        report = enrich_load_zones(db)
+        db.commit()
+    return report
+
+
+def test_enrichment_assigns_each_cell_its_load_zone(client):
+    houston = seed(square(LNG, LAT, 0.01)).generated
+    austin = seed(square(AUSTIN[1], AUSTIN[0], 0.01)).generated
+    gulf = seed(square(GULF[1], GULF[0], 0.01)).generated
+
+    # Which zone each Cell gets is the shared rule's job (tests/test_grid_zones.py); here:
+    # every Cell is processed, and a Cell outside every zone stays unknown (no fallback).
+    report = enrich()
+    assert report.processed == houston + austin + gulf
+    assert (report.assigned, report.unknown) == (houston + austin, gulf)
+    assert sum(report.by_zone.values()) == report.assigned
+    gulf_cell = client.get(f"/need/cells/{geo.latlng_to_cell(*GULF)}").json()
+    assert gulf_cell["loadZone"] is None
+
+
+def test_cells_use_the_shared_load_zone_rule(client):
+    # Cells straddling the Austin Energy boundary, where the smallest-polygon rule matters.
+    seed(square(-97.84, 30.2672, 0.06))
+    enrich()
+    features = client.get("/need/cells", params={"bbox": bbox(-98, 30.1, -97.7, 30.4)}).json()
+    details = [client.get(f"/need/cells/{f['id']}").json() for f in features["features"]]
+    centers = pd.DataFrame([d["center"] for d in details])
+    expected = zone_for_points(centers["lat"], centers["lng"]).tolist()
+    assert [d["loadZone"] for d in details] == expected
+    assert {"LZ_AEN", "LZ_SOUTH"} <= set(expected)  # both sides of the boundary covered
+
+
+def test_enrichment_recomputes_every_run(client):
+    seed(square(LNG, LAT, 0.01))
+    first = enrich()
+    assert first.changed == first.processed
+
+    again = enrich()
+    assert again.changed == 0
+    assert (again.assigned, again.by_zone) == (first.assigned, first.by_zone)
+
+    # A stale zone (e.g. from an older zone file) is corrected, not kept.
+    cell = geo.latlng_to_cell(LAT, LNG)
+    with SessionLocal() as db:
+        db.execute(update(Cell).where(Cell.h3_index == cell).values(load_zone="LZ_WEST"))
+        db.commit()
+    fixed = enrich()
+    assert fixed.changed == 1
+    assert client.get(f"/need/cells/{cell}").json()["loadZone"] == "LZ_HOUSTON"

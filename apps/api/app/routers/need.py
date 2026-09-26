@@ -23,6 +23,7 @@ class CellDetail(BaseModel):
     h3: str
     resolution: int
     center: LatLng
+    loadZone: str | None  # noqa: N815
     needScore: float | None  # noqa: N815  (camelCase is the API contract)
     components: dict[str, Any]
 
@@ -66,6 +67,7 @@ def cell_detail(db: DB, h3_index: str):
         h3=cell.h3_index,
         resolution=cell.resolution,
         center=LatLng(lat=cell.center_lat, lng=cell.center_lng),
+        loadZone=cell.load_zone,
         needScore=None,
         components={},
     )

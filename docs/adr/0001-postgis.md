@@ -30,4 +30,4 @@ Plain Postgres with lat/lng columns, with spatial work done in Python (h3 + shap
 - One more piece of database infrastructure: the image changed from Alpine to Debian.
 - **Existing volumes:** switching from the Alpine image to the Debian one changes the C library. To keep data, dump the database before switching, recreate the volume, and restore (see `wiki/need-engine.md`). Don't recreate the volume and re-download sources: ERCOT has returned 403 after repeated full downloads.
 - Lead tables keep their plain `lat`/`lon` columns; nothing forces them onto PostGIS.
-- When Milestone 2 maps Cells to Load Zones, reuse the Lead rule (point inside the zone polygon, smallest polygon wins) so a Lead and its Cell never disagree.
+- When Milestone 2 maps Cells to Load Zones, reuse the Lead rule (point inside the zone polygon, smallest polygon wins) so Leads and Cells share one rule (done in Milestone 2: `app.grid.zones.zone_for_points`, used by both).

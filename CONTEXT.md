@@ -15,7 +15,7 @@ A named geographic area (e.g. Harris, Travis) used to decide which Cells are see
 _Avoid_: region, area, county (when meaning the seed area)
 
 **Load Zone**:
-An ERCOT settlement/load zone (LZ_HOUSTON, LZ_NORTH, LZ_SOUTH, LZ_WEST, LZ_AEN, LZ_CPS, …). A Cell may intersect a Load Zone; they are different levels of geography.
+An ERCOT settlement/load zone (LZ_HOUSTON, LZ_NORTH, LZ_SOUTH, LZ_WEST, LZ_AEN, LZ_CPS, …). Each Cell is assigned the Load Zone its center falls in; Cell and Load Zone remain different levels of geography.
 _Avoid_: zone (unqualified), market
 
 ### Need
