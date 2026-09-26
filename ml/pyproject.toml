@@ -1,0 +1,17 @@
+[project]
+name = "bp-ml"
+version = "0.1.0"
+requires-python = ">=3.12"
+dependencies = [
+    "geopandas>=1.1.4",
+    "openai>=3.19.2",
+    "pandas>=3.0.6",
+    "pyarrow>=25.0.1",
+    "pydantic>=2.13.5",
+    "pyproj>=3.8.0",
+    "python-dotenv>=1.2.3",
+    "requests>=2.34.2",
+    "shapely>=2.1.2",
+    "tqdm>=4.70.1",
+    "typesafe-sdk>=0.7.1",
+]

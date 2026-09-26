@@ -1,0 +1,105 @@
+JEV SKILL: LOW-COST JUDGING WITH CONFIDENCE-BASED ESCALATION
+
+Purpose
+Use JEV as a fast, low-cost first-pass evaluator for well-specified judgments. Accept its verdict only when local validation shows that confidence identifies reliable cases. Route uncertain, invalid, or intrinsically difficult cases to a stronger judge or human reviewer.
+
+CORE PRINCIPLES
+
+1. Make the task a bounded decision.
+Good fits include:
+- Whether a claim is supported, contradicted, or not established by supplied evidence.
+- Which of two responses better follows an explicit rubric or user request.
+- Whether an answer matches a trusted reference or expected state.
+- Whether an output violates a clearly stated policy.
+- Which fixed category applies to an item.
+
+JEV is less suitable as the sole judge when correctness requires independently checking a mathematical derivation, code, subtle reasoning, or persuasive but wrong content. It can also struggle with long, reference-free prose and style-adversarial comparisons. If the task requires deep verification, use tools, deterministic checks, an expert, or a stronger reasoning judge.
+
+2. Supply the evidence and decision criteria.
+Include the complete relevant prompt, response(s), reference answer or source evidence, and concise rubric. State what counts as correct, how to handle partial or ambiguous answers, and the allowed labels. Avoid asking for broad impressions when a concrete decision can be specified.
+
+3. Keep a typed, machine-checkable output contract.
+Request one label from a closed set and probabilities for every label when supported. Ensure the verdict agrees with the highest-probability label; probabilities are finite, normalized, and associated with exactly the allowed labels. Treat malformed or missing output as invalid and escalate it; do not silently repair it.
+
+4. Treat confidence as a routing signal, not proof.
+For a label distribution p, a simple confidence score is q = max(p). JEV's confidence can help rank cases by likely error, but calibration and error-detection quality depend on task, prompt, data, and case mix. High confidence can still be wrong, especially on unfamiliar, adversarial, or reference-free inputs.
+
+RECOMMENDED PROMPT PATTERNS
+
+A. Evidence-grounded claim check
+"Using only the evidence below, classify the response as SUPPORTED, CONTRADICTED, or INSUFFICIENT_EVIDENCE. A claim is SUPPORTED only when the evidence entails it. CONTRADICTED means the evidence conflicts with it. Use INSUFFICIENT_EVIDENCE when neither conclusion follows. Do not use outside knowledge. Evaluate the response's substantive claims, not its style."
+Inputs: question/task; evidence; candidate response.
+
+B. Pairwise rubric comparison
+"Compare Response A and Response B against the requirements below. Choose A, B, or TIE. Prefer the response that best satisfies the requirements; do not reward length, confidence, or polished style by itself. Use TIE only when neither response is meaningfully better."
+Inputs: user request; rubric/requirements; both complete responses.
+
+C. Reference-based correctness
+"Compare the candidate's final answer with the trusted reference and the question. Classify it as CORRECT, INCORRECT, or NO_ANSWER. Accept semantically equivalent answers. Do not infer a final commitment if the response is genuinely ambiguous."
+Inputs: question; reference; candidate response.
+
+D. Policy or categorical check
+"Apply the policy/category definitions below to the supplied item. Return exactly one allowed label. Base the decision only on the stated definitions and supplied content. If evidence is insufficient, use [UNCERTAIN label] rather than guessing."
+Inputs: policy or category definitions; item; allowed labels.
+
+For every pattern, specify the desired output schema explicitly (label plus per-label probabilities, if available). Ask for concise decisions rather than a free-form essay. Keep rubric wording stable during a run; test paraphrases before deployment because wording changes can shift outcomes.
+
+PAIRWISE ORDER AVERAGING
+
+Position can bias pairwise judgments. For important pairwise evaluation, run both presentations: (A, B) and (B, A). If the judge reports the probability that the first-position response wins, align both outputs to semantic response A:
+
+    p_bar(A) = (p_first(A when shown A,B) + 1 - p_first(B when shown B,A)) / 2
+
+Choose A when p_bar(A) is above 0.5, B when below 0.5, and treat exact ties as half-credit or a tie according to the task definition. Compute confidence from the aligned, averaged distribution (for binary A/B, max(p_bar(A), 1-p_bar(A))). If either call is invalid, defer the pair. This doubles first-stage calls, so include that cost in the budget. Do not average unaligned labels.
+
+CONFIDENCE ROUTING
+
+Recommended cascade:
+1. Run JEV and validate its output.
+2. For pairwise judgments where position bias matters, collect both orders and align/average probabilities as above.
+3. If output is invalid, input is outside the validated task envelope, or the case is known to require difficult verification, escalate immediately.
+4. Otherwise accept JEV only if q >= a locally validated threshold tau.
+5. If q < tau, send the case and the same evidence/rubric to the selected stronger judge. Use that judge's verdict as final, or route unresolved/high-impact disagreements to a human.
+6. Log input version, rubric version, labels, probability distribution, q, routing decision, final verdict, latency, and cost for monitoring.
+
+Choose tau on a representative selection set by maximizing the fraction accepted while meeting a predeclared quality constraint (for example, cascade accuracy within a chosen margin of the fallback). Freeze tau, then measure it on separate held-out examples before deployment. Tune separately for each workload and fallback judge. There is no universal threshold. If errors are costly, choose a more conservative threshold or require human review for the affected category.
+
+CALIBRATION AND VALIDATION
+
+- Build a labeled validation set representative of production inputs, including edge cases and relevant subgroups. Keep related examples (same source question, prompt family, or pair variants) together when splitting data to avoid leakage.
+- Measure accuracy and class-wise/macro metrics; include invalid-output rate. For probabilities, use Brier score or negative log-likelihood and an expected calibration error (ECE) summary. Plot accuracy/error rate by confidence bin and measure whether confidence separates correct from incorrect cases (for example, error-detection AUROC).
+- Evaluate selective risk: as the acceptance threshold rises, report coverage, error rate/accuracy among accepted items, escalation rate, total cost, and latency. Compare the cascade against the fallback alone and a same-budget random escalation baseline if useful.
+- Temperature scaling may improve probability calibration, but fit it on a selection set and test it on untouched held-out data. Fit per workload; a temperature that helps one task can hurt another. Calibration does not guarantee that confidence will detect adversarial or out-of-distribution errors.
+- Test repeated requests, rubric paraphrases, candidate-order reversals, ambiguous examples, and style-adversarial examples (e.g., a polished but incorrect answer). Validate on the types of cases expected in production.
+- Revalidate after changing model/version, prompt/rubric, evidence format, data distribution, or fallback. Monitor drift and periodically audit a sample of accepted decisions.
+
+ESCALATION RULES
+
+Escalate when any of the following applies:
+- JEV output is missing, malformed, contradictory, or fails schema validation.
+- Confidence is below the workload-specific threshold.
+- The item requires independent code execution, mathematical proof checking, multi-step factual verification, or other reasoning beyond the validated envelope.
+- The content is unusually long, reference-free, ambiguous, adversarial, or uses persuasive style that could mask an error.
+- A high-impact decision or known failure category requires a stronger review regardless of confidence.
+- JEV and a deterministic check, trusted reference, or other judge disagree.
+
+For critical decisions, confidence alone should never waive required human or deterministic review. If the fallback is also uncertain or disagrees with trusted evidence, escalate to a human adjudicator rather than forcing a label.
+
+IMPLEMENTATION CHECKLIST
+
+[ ] Define the decision, allowed labels, rubric, abstention/uncertainty handling, and error costs.
+[ ] Provide JEV with the full task context and reference evidence needed to decide.
+[ ] Use a stable structured output contract; validate fields, labels, probabilities, normalization, and verdict/argmax consistency.
+[ ] Create a representative labeled selection set and a separate untouched test set; group related examples during splitting.
+[ ] Establish baselines: JEV alone, fallback alone, and (if relevant) random escalation at the same budget.
+[ ] For pairwise ranking, evaluate both candidate orders, align semantic labels, average probabilities, and include doubled-call cost.
+[ ] Measure quality, invalid outputs, calibration, confidence/error separation, coverage, escalation rate, cost, and latency.
+[ ] Select tau on the selection set against an explicit quality constraint; freeze the policy and confirm it on held-out data.
+[ ] Add immediate escalation for invalid, high-risk, out-of-scope, and known hard cases.
+[ ] Log decisions and periodically audit accepted cases; revalidate after meaningful changes or drift.
+
+INTERPRETATION NOTE
+Published accuracy, price, latency, and threshold results are study-specific snapshots, not guarantees for a new workflow. The paper reports JEV near stronger judges on ordinary preference and evidence-grounded factuality, but a larger gap on difficult reasoning/coding verification. Reproduce the evaluation on your own workload before relying on a cascade.
+
+Source
+Li, Miao, Krishnan, and Padman, “JEV-as-a-Judge: Accept When Confident, Escalate When Unsure,” arXiv:2609.26550 (v1, 22 Sep 2026), https://arxiv.org/abs/2609.26550

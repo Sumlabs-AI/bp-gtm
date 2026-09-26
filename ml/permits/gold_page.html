@@ -1,0 +1,255 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Permit gold labels</title>
+<style>
+  :root {
+    --bg: #f7f7f5; --card: #ffffff; --ink: #1c1c1a; --muted: #6b6b66; --line: #e2e2dc;
+    --accent: #2f6fdf; --accent-ink: #ffffff; --chip: #efefea; --ok: #1f8a4c; --warn: #b4531a;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #151514; --card: #1f1f1d; --ink: #ecece8; --muted: #9a9a93; --line: #34342f;
+            --accent: #5b8ff0; --accent-ink: #0d0d0c; --chip: #2a2a27; --ok: #4cc07f; --warn: #e08a52; }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 15px/1.45 -apple-system, system-ui, sans-serif; }
+  main { max-width: 1100px; margin: 0 auto; padding: 20px 16px 40px; display: grid; grid-template-columns: 1fr 300px; gap: 20px; }
+  @media (max-width: 860px) { main { grid-template-columns: 1fr; } }
+  header { grid-column: 1 / -1; display: flex; align-items: center; gap: 16px; }
+  header h1 { font-size: 17px; margin: 0; }
+  .bar { flex: 1; height: 6px; background: var(--chip); border-radius: 3px; overflow: hidden; }
+  .bar > div { height: 100%; background: var(--ok); width: 0; transition: width .2s; }
+  .count { font-variant-numeric: tabular-nums; color: var(--muted); }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 18px; }
+  .meta { display: flex; flex-wrap: wrap; gap: 6px 14px; color: var(--muted); font-size: 13px; margin-bottom: 10px; }
+  .meta b { color: var(--ink); font-weight: 600; }
+  .desc { font-size: 19px; line-height: 1.4; margin: 6px 0 4px; word-break: break-word; }
+  .desc.empty { color: var(--muted); font-style: italic; }
+  .contractor { color: var(--muted); font-size: 14px; }
+  h2 { font-size: 12px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin: 18px 0 8px; }
+  .opts { display: flex; flex-wrap: wrap; gap: 6px; }
+  button.opt { border: 1px solid var(--line); background: var(--chip); color: var(--ink); border-radius: 7px;
+               padding: 7px 10px; font: inherit; font-size: 14px; cursor: pointer; }
+  button.opt kbd { font: 12px ui-monospace, monospace; color: var(--muted); margin-right: 6px; }
+  button.opt.on { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+  button.opt.on kbd { color: var(--accent-ink); opacity: .8; }
+  input.notes { width: 100%; margin-top: 16px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 7px;
+                background: var(--bg); color: var(--ink); font: inherit; }
+  .nav { display: flex; gap: 8px; margin-top: 16px; align-items: center; }
+  .nav button { border: 1px solid var(--line); background: var(--card); color: var(--ink); border-radius: 7px; padding: 8px 14px; font: inherit; cursor: pointer; }
+  .nav button.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+  .status { color: var(--muted); font-size: 13px; margin-left: auto; }
+  .status.err { color: var(--warn); }
+  aside { font-size: 13.5px; color: var(--muted); }
+  aside .card { padding: 14px 16px; }
+  aside h3 { color: var(--ink); font-size: 14px; margin: 0 0 6px; }
+  aside ul { padding-left: 18px; margin: 6px 0 12px; }
+  aside li { margin: 3px 0; }
+  .done { font-weight: 600; color: var(--ok); }
+  .hint { margin-top: 12px; padding: 10px 12px; border-radius: 7px; background: var(--chip); font-size: 13.5px; }
+  .hint b { color: var(--ink); }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1 id="title">Permit gold labels</h1>
+    <div class="bar"><div id="bar"></div></div>
+    <span class="count" id="count">…</span>
+  </header>
+
+  <section class="card" id="card">
+    <div class="meta" id="meta"></div>
+    <div class="desc" id="desc"></div>
+    <div class="contractor" id="contractor"></div>
+    <div class="hint" id="hint" hidden></div>
+
+    <h2>Equipment it concerns <span style="text-transform:none">(toggle all that apply, none is fine)</span></h2>
+    <div class="opts" id="equipment"></div>
+
+    <h2>What the permit does</h2>
+    <div class="opts" id="action"></div>
+
+    <h2>Property</h2>
+    <div class="opts" id="property"></div>
+
+    <input class="notes" id="notes" placeholder="Notes (optional). Press Esc to leave this box.">
+
+    <div class="nav">
+      <button id="prev">← Back</button>
+      <button id="next" class="primary">Save &amp; next ⏎</button>
+      <button id="skip">Next unlabeled →</button>
+      <span class="status" id="status"></span>
+    </div>
+  </section>
+
+  <aside>
+    <div class="card">
+      <h3>How to label</h3>
+      <ul>
+        <li>Label what the text says. If it's only a name ("McDaniel - Battery"), tick <b>battery</b> and pick <b>can't tell</b> for the action.</li>
+        <li><b>Gas line for a generator:</b> tick standby generator, action = <b>supporting work only</b>.</li>
+        <li><b>Portable hookup</b> = inlet box, interlock kit, or manual switch for a portable generator.</li>
+        <li><b>Transfer switch with a generator</b> = standby generator. A FranklinWH/Tesla "gateway" or "backup switch" = battery.</li>
+        <li><b>Solar + battery</b> on one permit: tick both.</li>
+        <li><b>Property:</b> use Austin's "Residential/Commercial" class if the text doesn't say. A cell tower or AT&amp;T site = commercial.</li>
+        <li>Not sure? Choose your best guess and write a note.</li>
+      </ul>
+      <h3>Keys</h3>
+      <ul>
+        <li>Equipment: <b>1–6</b></li>
+        <li>Action: letter shown on each button</li>
+        <li>Property: <b>h m b u</b></li>
+        <li><b>Enter</b> save &amp; next · <b>←</b> back · <b>→</b> next unlabeled</li>
+      </ul>
+    </div>
+  </aside>
+</main>
+
+<script>
+const EQUIPMENT = [
+  ["standby_generator", "1", "Standby generator"],
+  ["portable_generator_hookup", "2", "Portable gen hookup"],
+  ["battery", "3", "Battery / ESS"],
+  ["solar", "4", "Solar PV"],
+  ["panel_upgrade", "5", "Panel / service upgrade"],
+  ["ev_charger", "6", "EV charger"],
+];
+const ACTION = [
+  ["new_install", "n", "New install"],
+  ["add_to_existing", "a", "Add to existing"],
+  ["replace", "p", "Replace"],
+  ["repair_or_service", "r", "Repair / service"],
+  ["remove", "x", "Remove"],
+  ["detach_reinstall", "d", "Detach & reinstall"],
+  ["revision", "v", "Revision of permit"],
+  ["supporting_work_only", "s", "Supporting work only"],
+  ["cant_tell", "c", "Can't tell"],
+];
+const PROPERTY = [
+  ["single_family_home", "h", "Single-family home"],
+  ["multifamily", "m", "Multifamily"],
+  ["commercial_or_public", "b", "Commercial / public"],
+  ["cant_tell", "u", "Can't tell"],
+];
+
+const REVIEW = new URLSearchParams(location.search).has("review");
+let rows = [], labels = {}, suggest = {}, i = 0, cur = null;
+const $ = (id) => document.getElementById(id);
+if (REVIEW) { document.title = "Permit label review"; document.getElementById("title").textContent = "Review: LLM vs Jev disagreements"; }
+
+function blank(r) {
+  const l = { gold_id: r.gold_id, action: "", property: "", notes: "" };
+  EQUIPMENT.forEach(([k]) => (l[k] = "0"));
+  const s = suggest[r.gold_id];
+  if (s) {  // review mode: start from the LLM's answer
+    EQUIPMENT.forEach(([k]) => (l[k] = s[k] || "0"));
+    l.action = s.action; l.property = s.property;
+  }
+  return l;
+}
+
+function renderOpts(el, opts, isOn, onClick) {
+  el.innerHTML = "";
+  for (const [k, key, text] of opts) {
+    const b = document.createElement("button");
+    b.className = "opt" + (isOn(k) ? " on" : "");
+    b.innerHTML = `<kbd>${key}</kbd>${text}`;
+    b.onclick = () => { onClick(k); render(); };
+    el.appendChild(b);
+  }
+}
+
+function render() {
+  const r = rows[i];
+  const n = Object.keys(labels).length;
+  $("count").textContent = `${n} / ${rows.length} ${REVIEW ? "reviewed" : "labeled"} · #${i + 1}`;
+  $("bar").style.width = `${(100 * n) / rows.length}%`;
+  const meta = [
+    ["City", r.city === "austin" ? "Austin" : "San Antonio"],
+    ["Type", r.permit_type], ["Work class", r.work_class], ["Class", r.class_hint],
+    ["Status", r.status], ["Issued", (r.issued_date || "").slice(0, 10)],
+  ].filter(([, v]) => v);
+  $("meta").innerHTML = meta.map(([k, v]) => `<span>${k}: <b>${esc(v)}</b></span>`).join("");
+  $("desc").textContent = r.description || "(no description)";
+  $("desc").className = "desc" + (r.description ? "" : " empty");
+  $("contractor").textContent = r.contractor ? `Contractor: ${r.contractor}` : "";
+  const s = suggest[r.gold_id];
+  $("hint").hidden = !s;
+  if (s) $("hint").innerHTML = `<b>Pre-filled with the LLM's answer</b> (${esc(s.llm_confidence)} confidence): ${esc(s.llm_reason)}<br>`
+    + `Flagged because: ${esc(r.why || "")}. Fix anything wrong, then Enter.`;
+  renderOpts($("equipment"), EQUIPMENT, (k) => cur[k] === "1", (k) => (cur[k] = cur[k] === "1" ? "0" : "1"));
+  renderOpts($("action"), ACTION, (k) => cur.action === k, (k) => (cur.action = k));
+  renderOpts($("property"), PROPERTY, (k) => cur.property === k, (k) => (cur.property = k));
+  if (document.activeElement !== $("notes")) $("notes").value = cur.notes || "";
+  if (n === rows.length) setStatus("All done. Thank you! Labels are saved.", false, true);
+}
+
+function esc(s) { return String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c])); }
+function setStatus(t, err = false, done = false) { const s = $("status"); s.textContent = t; s.className = "status" + (err ? " err" : "") + (done ? " done" : ""); }
+
+function go(j) {
+  i = Math.max(0, Math.min(rows.length - 1, j));
+  cur = { ...(labels[rows[i].gold_id] || blank(rows[i])) };
+  render();
+}
+
+function nextUnlabeled(from) {
+  for (let k = 1; k <= rows.length; k++) {
+    const j = (from + k) % rows.length;
+    if (!labels[rows[j].gold_id]) return j;
+  }
+  return from;
+}
+
+async function save() {
+  if (!cur.action || !cur.property) { setStatus("Pick an action and a property first.", true); return; }
+  cur.notes = $("notes").value.trim();
+  try {
+    const res = await fetch("/label", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(cur) });
+    if (!res.ok) throw new Error(res.status);
+    labels[cur.gold_id] = { ...cur };
+    setStatus("Saved");
+    go(nextUnlabeled(i));
+  } catch (e) {
+    setStatus("Save failed. Is the server still running?", true);
+  }
+}
+
+document.addEventListener("keydown", (e) => {
+  if (document.activeElement === $("notes")) {
+    if (e.key === "Escape") $("notes").blur();
+    if (e.key === "Enter") { e.preventDefault(); $("notes").blur(); save(); }
+    return;
+  }
+  if (e.metaKey || e.ctrlKey || e.altKey) return;
+  const k = e.key.toLowerCase();
+  const eq = EQUIPMENT.find(([, key]) => key === k);
+  const ac = ACTION.find(([, key]) => key === k);
+  const pr = PROPERTY.find(([, key]) => key === k);
+  if (eq) cur[eq[0]] = cur[eq[0]] === "1" ? "0" : "1";
+  else if (ac) cur.action = ac[0];
+  else if (pr) cur.property = pr[0];
+  else if (e.key === "Enter") { e.preventDefault(); return save(); }
+  else if (e.key === "ArrowLeft") return go(i - 1);
+  else if (e.key === "ArrowRight") return go(nextUnlabeled(i));
+  else return;
+  e.preventDefault();
+  render();
+});
+$("next").onclick = save;
+$("prev").onclick = () => go(i - 1);
+$("skip").onclick = () => go(nextUnlabeled(i));
+
+fetch(REVIEW ? "/data?review=1" : "/data").then((r) => r.json()).then((d) => {
+  rows = d.rows; suggest = d.suggest || {};
+  const ids = new Set(rows.map((r) => r.gold_id));
+  labels = Object.fromEntries(Object.entries(d.labels).filter(([k]) => ids.has(k)));
+  const first = rows.findIndex((r) => !labels[r.gold_id]);
+  go(first === -1 ? 0 : first);
+}).catch(() => setStatus("Could not load data. Is the server running?", true));
+</script>
+</body>
+</html>
