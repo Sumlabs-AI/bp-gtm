@@ -2,9 +2,7 @@
 
 import { useState, type ReactNode } from "react"
 import Link from "next/link"
-import { ChartNoAxesCombinedIcon } from "lucide-react"
 
-import { Disclosure } from "@/components/disclosure"
 import { DriverBars } from "@/components/grid/driver-bars"
 import { ZoneMap } from "@/components/grid/zone-map"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -29,6 +27,14 @@ export function ZoneComparison({ zones, children }: { zones: ZoneSummary[]; chil
       <div className="grid min-w-0 items-start gap-6 xl:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
         {children}
         <div className="flex min-w-0 flex-col gap-2">
+          <Field>
+            <FieldLabel htmlFor="grid-map-metric">Color map by</FieldLabel>
+            <NativeSelect id="grid-map-metric" value={metric} onChange={(event) => setMetric(event.target.value)} className="w-full">
+              <NativeSelectOption value="average">Grid Value · 40 kWh · Average year ($/yr)</NativeSelectOption>
+              <NativeSelectOption value="grid_value">Zone Economics Score · Last 12 months</NativeSelectOption>
+              {drivers.map((driver) => <NativeSelectOption key={driver.key} value={driver.key}>{driver.label} · Relative score, last 12 months</NativeSelectOption>)}
+            </NativeSelect>
+          </Field>
           <ZoneMap zones={zones} metric={metric} className="h-80 min-w-0 xl:h-96" />
           <p className="text-xs text-muted-foreground">
             Approximate Load Zone boundaries. All {zones.length} Load Zones, including those not drawn,
@@ -37,18 +43,10 @@ export function ZoneComparison({ zones, children }: { zones: ZoneSummary[]; chil
         </div>
       </div>
 
-      <Disclosure title="Price analysis · Last 12 months" icon={ChartNoAxesCombinedIcon}>
-        <Field className="max-w-sm">
-          <FieldLabel htmlFor="grid-map-metric">Color map by</FieldLabel>
-          <NativeSelect id="grid-map-metric" value={metric} onChange={(event) => setMetric(event.target.value)} className="w-full">
-            <NativeSelectOption value="average">Grid Value · 40 kWh · Average year ($/yr)</NativeSelectOption>
-            <NativeSelectOption value="grid_value">Zone Economics Score · Last 12 months</NativeSelectOption>
-            {drivers.map((driver) => <NativeSelectOption key={driver.key} value={driver.key}>{driver.label} · Relative score</NativeSelectOption>)}
-          </NativeSelect>
-          <p className="text-xs text-muted-foreground">Changes the map above. Price-analysis measures use the last 12 months.</p>
-        </Field>
+      <section aria-labelledby="price-analysis" className="flex min-w-0 flex-col gap-4">
         <div className="flex flex-col gap-1">
-          <h3 className="font-medium">Zone Economics Score · Last 12 months · Relative to {zones.length} Load Zones</h3>
+          <h3 id="price-analysis" className="text-lg font-semibold tracking-tight">Price analysis · Last 12 months</h3>
+          <p className="text-sm font-medium">Zone Economics Score · Relative to {zones.length} Load Zones</p>
           <p className="text-sm text-muted-foreground">
             A weighted comparison of five grid-price measures. The score is a relative index, not a
             percentage of Grid Value or a measure of backup need. Each driver is scaled 0–100 across
@@ -75,7 +73,7 @@ export function ZoneComparison({ zones, children }: { zones: ZoneSummary[]; chil
             <p className="text-xs text-muted-foreground">{DRIVER_HELP[driver.key]}</p>
           </div>)}
         </div>
-      </Disclosure>
+      </section>
     </>
   )
 }
