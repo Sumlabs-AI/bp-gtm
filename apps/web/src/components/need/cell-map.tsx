@@ -79,8 +79,6 @@ export function CellMap({
   // Keyed by Cell so a stale detail never shows under a newly selected Cell.
   const [detail, setDetail] = React.useState<CellDetail | null>(null)
   const shownDetail = detail?.h3 === selected ? detail : null
-  // ERCOT-wide official condition, given once per map response (even with no Cells in view).
-  const grid = data?.grid ?? null
 
   function readViewport() {
     const map = mapRef.current
@@ -300,21 +298,6 @@ export function CellMap({
               ))}
             </select>
           </label>
-          {grid?.state && (
-            <span
-              className={`rounded px-1.5 py-0.5 ${
-                grid.stale
-                  ? "border border-amber-500 text-amber-700"
-                  : grid.official
-                    ? "bg-red-600 text-white"
-                    : "bg-muted text-muted-foreground"
-              }`}
-              title="Official ERCOT grid condition"
-            >
-              ERCOT: {grid.title ?? grid.state}
-              {grid.stale && " (stale)"}
-            </span>
-          )}
         </div>
 
         <div className="absolute top-3 right-12 flex items-center gap-1 rounded-md border bg-background/90 px-2 py-1.5 text-xs shadow-sm">
@@ -353,7 +336,6 @@ export function CellMap({
                 </button>
               )
             })}
-            <span className="pl-1 text-muted-foreground">click to filter</span>
           </div>
         )}
         </div>
