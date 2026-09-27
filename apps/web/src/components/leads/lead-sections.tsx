@@ -21,10 +21,17 @@ const formatDateTime = (value: string) => new Date(value).toLocaleString("en-US"
 const formatDate = (value: string) => new Date(value).toLocaleDateString("en-US", {
   dateStyle: "medium", timeZone: "America/Chicago",
 })
-const formatEvidenceDate = (value: string | null) => value
-  ? new Date(`${value}T00:00:00Z`).toLocaleDateString("en-US", { dateStyle: "medium", timeZone: "UTC" })
-  : "Date unavailable"
 const topPercent = (score: number) => Math.round(100 - score)
+
+/** The most recent dated record behind a signal: when it happened and where it was found. */
+function latestEvidence(lead: LeadDetail, type: string): { label: string; source: string } | null {
+  const item = lead.evidence
+    .filter((e) => e.type === type && e.date)
+    .sort((a, b) => (b.date ?? "").localeCompare(a.date ?? ""))[0]
+  if (!item?.date) return null
+  const month = new Date(`${item.date}T00:00:00Z`).toLocaleDateString("en-US", { month: "short", year: "numeric", timeZone: "UTC" })
+  return { label: month, source: `${item.source.replaceAll("_", " ")}: ${item.detail}` }
+}
 
 export function countyName(lead: LeadDetail): string {
   const c = lead.county
@@ -185,11 +192,15 @@ export function HomeProfile({ lead }: { lead: LeadDetail }) {
         <>
           <Separator />
           <div className="flex flex-wrap gap-1.5">
-            {flagDrivers.map((d) => (
-              <Badge key={d.key} variant={d.value === true ? "secondary" : "outline"}>
-                {signalLabel(d.key)}: {d.value === true ? "Yes" : "No"}
-              </Badge>
-            ))}
+            {flagDrivers.map((d) => {
+              const since = d.value === true ? latestEvidence(lead, d.key) : null
+              return (
+                <Badge key={d.key} variant={d.value === true ? "secondary" : "outline"} title={since?.source}>
+                  {signalLabel(d.key)}: {d.value === true ? "Yes" : "No"}
+                  {since && <span className="font-normal text-muted-foreground">· {since.label}</span>}
+                </Badge>
+              )
+            })}
           </div>
           <p className="text-[11px] text-muted-foreground">No = not found in available records.</p>
         </>
@@ -199,29 +210,6 @@ export function HomeProfile({ lead }: { lead: LeadDetail }) {
         <p>{county} · Appraisal account {lead.account}</p>
         <p>First seen {formatDateTime(lead.first_seen_at)} · Scored {formatDateTime(lead.scored_at)}</p>
       </div>
-    </div>
-  )
-}
-
-export function EvidenceList({ lead }: { lead: LeadDetail }) {
-  return (
-    <div className="px-3">
-      {lead.evidence.length ? (
-        <ul className="divide-y divide-border">
-          {lead.evidence.map((item, index) => (
-            <li key={`${item.type}-${item.date}-${index}`} className="flex flex-col gap-1 py-2 first:pt-0 last:pb-0">
-              <div className="flex flex-wrap items-center gap-2">
-                <Badge variant="secondary">{signalLabel(item.type)}</Badge>
-                <span className="text-xs text-muted-foreground">{formatEvidenceDate(item.date)}</span>
-              </div>
-              <p className="text-sm">{item.detail}</p>
-              <p className="text-xs text-muted-foreground">Source: {item.source.replaceAll("_", " ")}</p>
-            </li>
-          ))}
-        </ul>
-      ) : (
-        <p className="text-xs text-muted-foreground">No signal evidence yet.</p>
-      )}
     </div>
   )
 }
