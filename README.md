@@ -4,7 +4,7 @@
 [Base Power](https://basepowercompany.com): where Base can serve, where backup power matters
 most, and which homes are most likely to adopt.
 
-**Demo video:** _Loom link — added at submission_ · **Repo:** https://github.com/Sumlabs-AI/bp-gtm ·
+**Demo video:** [Watch on Loom](https://www.loom.com/share/1e8c294ba86443988b04d2ff15026a84) · **Repo:** https://github.com/Sumlabs-AI/bp-gtm ·
 **Run it:** `pnpm install && pnpm up`, then open http://localhost:3000 (real data loads on first start)
 
 ![Base Radar architecture](docs/architecture.png)
