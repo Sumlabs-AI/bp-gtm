@@ -37,6 +37,8 @@ zeros). Parcel files join on the Travis Central Appraisal District property id (
 | `travis_parcels_clean_part1.parquet` + `_part2.parquet` | 380,917 | Parcel, Travis | StratMap 2025 parcels, cleaned and deduplicated, with polygons (split in two files; read both and concatenate) |
 | `household_install_table.parquet` (+ `household_install_table_dictionary.csv`) | 373,524 | Parcel, Travis | One row per parcel: market value, eligibility gates, and whether the home has a permitted backup-power install (generator, battery, Base Power), with first install date and install event counts |
 | `austin_backup_permits.parquet` | 9,238 | Permit, Austin | Residential City of Austin permits for backup power (generator, battery, Base Power, other backup), with the city's own fields and the matched TCAD parcel |
+| `travis_tract_medical_need.parquet` (also `.csv`) | 289 | Tract, Travis | Medical need per tract (chronic-condition and disability prevalences, emPOWER rate), installable homes, median value, homes with backup, need index and percentile, expected backup buyers and a priority score (sorted by priority) |
+| `places2025_TX_tract.parquet` | 6,844 | Tract, Texas | CDC PLACES 2025 model-based health estimates for every Texas tract (crude prevalence and 95% CI per measure) |
 | `austin_value_quantiles.csv` | 37 | Aggregate | Home value quantiles (P10–P95, mean) of all eligible homes and of homes with a backup install, generator, battery or Base Power 2026, per universe |
 | `austin_value_percentiles.csv` | 24 | Aggregate | Where each buyer group sits in the local value distribution (median percentile, share above P75/P85/P90/P95) |
 | `austin_install_rates_by_value.csv` | 30 | Aggregate | Homes with a backup install per 1,000 eligible homes by value band (<$300k … $1.5M+), with 95% CI and rate vs the universe average, by product |
@@ -91,6 +93,10 @@ homes with a backup install, 3,179 generator, 2,166 battery, 302 Base Power 2026
 
 **Austin install results** (`austin_*.csv`): universes of eligible homes — `A_travis_strict` (`installable` = 1), `B_travis_relaxed` (`installable_relaxed` = 1), `C_situsAustin_strict` / `D_situsAustin_relaxed` (same, situs city = Austin), `E_suppl_CoAentity_strict` / `F_suppl_CoAentity_relaxed` (same, parcel taxed by the City of Austin). Value = TCAD market value. Rates count homes, not permits. Permits cover City of Austin jurisdiction only.
 
+**Tract medical need** (`travis_tract_medical_need`): `tract` = 11-digit tract GEOID. Prevalences (`copd`, `chd`, `stroke`, `selfcare`, `indeplive`, `disability`, `phlth`) are shares of adults (0–1) from CDC PLACES; `copd_adults_est` / `selfcare_adults_est` = estimated adults; `empower_dme_per_1k_medicare` = electricity-dependent Medicare beneficiaries per 1,000 (from the emPOWER files above); `installable_homes`, `median_value`, `backup_homes` from the Travis parcel files; `need_index` (standardized) and `need_pctile` rank tracts by medical need; `homes_x_need`, `expected_backup_buyers` and `priority` rank tracts for outreach. Area-level only: the medical data weights a tract and identifies no one.
+
+**CDC PLACES** (`places2025_TX_tract`): the source's own columns, `<measure>_crudeprev` (percent) and `<measure>_crude95ci`; `tractfips` / `countyfips` as text GEOIDs.
+
 **StratMap parcels** (`travis_parcels_clean_part*`): one row per `prop_id`; `n_accounts` = appraisal
 accounts on the parcel; `lot_sqft`, `lot_acres` (and `lot_acres_3083`, equal-area) from the polygon;
 `bg_outside_travis` = 1 for the 635 border parcels whose point falls in a neighbouring county's
@@ -109,6 +115,7 @@ No file contains owner names or mailing addresses.
 | Travis parcels | TCAD parcels — https://gis.traviscountytx.gov/server1/rest/services/Boundaries_and_Jurisdictions/TCAD/MapServer/0 | Travis County / Travis Central Appraisal District | Public GIS service |
 | Building footprints | Building Footprints 2024 — https://gis.traviscountytx.gov/server1/rest/services/Basemap_Reference/Building_Footprints_2024/MapServer/0 | Travis County | Public GIS service |
 | Backup-power permits | City of Austin Issued Construction Permits — https://data.austintexas.gov/resource/3syk-w9eu (dataset updated 2026-09-26) | City of Austin | Public open data |
+| Health estimates | CDC PLACES: Census Tract Data (GIS Friendly Format), 2025 release — https://data.cdc.gov/500-Cities-Places/PLACES-Census-Tract-Data-GIS-Friendly-Format-2025-/yjkw-uj5s | Centers for Disease Control and Prevention | Public |
 | StratMap parcels | StratMap 2025 Land Parcels, Travis County (48453), `stratmap25-landparcels_48453_lp.zip` — TxGIO DataHub, https://data.geographic.texas.gov/ (service: https://feature.tnris.org/arcgis/rest/services/Parcels/stratmap25_land_parcels_48/MapServer) | Texas Geographic Information Office (TxGIO), from the Travis Central Appraisal District, Aug 2025 | Public download |
 
 Retrieved 2026-09-26 (permits: 2026-09-27).
@@ -122,6 +129,6 @@ Retrieved 2026-09-26 (permits: 2026-09-27).
 | Provenance | Built only from the public sources listed above, through their official downloads and public services, retrieved 2026-09-26. No login-protected, paid or non-commercial source (e.g. utility outage maps) was used. |
 | Source terms | Census Bureau and HHS data are U.S. Government public data. Travis County GIS and TxGIO StratMap data stay subject to their publishers' terms. The copyright covers the datasets as produced and compiled, not the original source records. |
 | Personal data | No owner names, owner IDs or mailing addresses in any file. Install flags come from public permits and describe properties, not people; do not combine them with other data to identify residents. The owner-occupancy flag is computed without storing the mailing address. |
-| Health data | emPOWER counts are aggregated and suppressed by the source (1–10 published as 11). Use them only as an area-level signal, never to single out a household or person. |
+| Health data | CDC PLACES values are model-based tract estimates. emPOWER counts are aggregated and suppressed by the source (1–10 published as 11). Use them only as an area-level signal, never to single out a household or person. |
 | Accuracy | Screening estimates, provided "as is" without warranty. ACS block-group values carry sampling error: keep the MOE / reliability or use the `_eb` columns. |
 | In-file notice | Every Parquet file carries this copyright, license and source notice in its metadata (`copyright`, `license`, `sources`, `compliance` keys); every CSV starts with a one-line license comment. |
