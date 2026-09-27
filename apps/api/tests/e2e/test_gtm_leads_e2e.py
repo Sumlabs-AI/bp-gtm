@@ -246,6 +246,23 @@ def test_geo_points_respect_the_cell_filters(client, world):
     assert client.get("/leads/geo", params={"zoom": 12}).status_code == 422
 
 
+def test_lead_cells_are_the_cells_of_the_filtered_leads(client, world):
+    def cells(**params) -> dict[str, int]:
+        r = client.get("/leads/cells", params=params)
+        assert r.status_code == 200, r.text
+        return {c["h3"]: c["leads"] for c in r.json()["cells"]}
+
+    houston = "-96,29,-93,31"
+    # Every Cell with a lead in view, with its lead count; the Cell-less home has none.
+    assert cells(bbox=houston) == {CELL["A"]: 2, CELL["B"]: 1, CELL["C"]: 1}
+    assert client.get("/leads/cells", params={"bbox": houston}).json()["total"] == 4
+    # Same filters as the list: clicked Cells, Baseline Need bands, the viewport.
+    assert cells(cells=[CELL["B"], CELL["C"]]) == {CELL["B"]: 1, CELL["C"]: 1}
+    assert cells(bbox=houston, need_band=["80-100"]) == {CELL["A"]: 2}
+    assert cells(bbox="-95.40,29.74,-95.34,29.78") == {CELL["A"]: 2}
+    assert client.get("/leads/cells").status_code == 422  # unbounded
+
+
 def test_loader_sets_h3_and_backfill_is_idempotent(world):
     with SessionLocal() as db:
         db.execute(update(Property).values(h3_index=None))
