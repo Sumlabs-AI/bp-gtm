@@ -193,3 +193,14 @@ baseline = BaselineConfig()
 # ML exports carry and a Propensity file records. Bump it when a definition changes; the
 # changelog lives in wiki/ml-contract.md.
 FEATURE_VERSION = "1.0.0"
+
+
+# Baseline Need bands, shared by the map legend, the lead filters and the API. Lower edge
+# inclusive, upper exclusive, except the top band, which includes 100.
+NEED_BANDS: dict[str, tuple[float, float]] = {
+    "0-40": (0, 40),
+    "40-60": (40, 60),
+    "60-80": (60, 80),
+    "80-100": (80, 100),
+}
+NEED_BANDS_TOP = "80-100"

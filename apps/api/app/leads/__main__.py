@@ -50,8 +50,14 @@ def main() -> None:
         help="don't flag newly eligible homes as new (use after changing matching rules)",
     )
     sub.add_parser("weekly", help="refresh every source, then score")
+    sub.add_parser("cells", help="backfill each located property's H3 Cell (h3_index)")
     args = parser.parse_args()
 
+    if args.cmd == "cells":
+        from app.leads.store import assign_cells
+
+        print(f"{assign_cells():,} properties assigned their H3 Cell")
+        return
     if args.cmd == "refresh":
         unknown = set(args.sources) - set(SOURCES)
         if unknown:

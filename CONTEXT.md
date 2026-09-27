@@ -139,8 +139,12 @@ An eligible property (single-family, owner-occupied, on an active residential me
 _Avoid_: prospect, customer, contact
 
 **Lead Score**:
-Per-Lead heuristic fit score (0–100) from weighted, explainable drivers such as home size, value, solar, pool and new owner. Rule-based lead qualification; not the ML Propensity Score and not a Need Score.
-_Avoid_: propensity, fit score (in docs), score (unqualified)
+Per-Lead heuristic fit score (0–100) from weighted drivers such as home size, value, solar, pool and new owner. **Superseded**: leads are ranked by their Cell's scores (Baseline Need, then Propensity) and ordered within a Cell by the home's consumption estimate. Still computed by the pipeline; not shown or used for ranking.
+_Avoid_: propensity, fit score, score (unqualified), using it as a ranking
+
+**GTM page**:
+The home page: the list of Leads is the product, the map is the lens. Every Lead joins its Cell by `h3_index` (the master key; Cell scores are never copied onto Leads). The map's viewport, legend bands, clicked Cells and live-signal chips all filter the one list.
+_Avoid_: dashboard, leads map (when meaning this page)
 
 **Lead Evidence**:
 A dated fact supporting a Lead's drivers or trigger (a permit, a new meter, an appraisal flag).

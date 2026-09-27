@@ -307,6 +307,7 @@ docker compose exec api python -m app.need outage compute       # Outage Need on
 docker compose exec api python -m app.need weather download     # NWS warnings + measured temperature
 docker compose exec api python -m app.need weather compute      # Weather Need on /need
 docker compose exec api python -m app.need baseline compute     # Baseline Need (default on /need)
+docker compose exec api python -m app.leads cells                       # each home's H3 Cell (the GTM page joins on it)
 docker compose exec api python -m app.need export-ml --out-dir data/ml   # features for the ML model
 ```
 
@@ -317,7 +318,7 @@ The `worker` service re-runs the grid and lead steps every Sunday at 03:00 Centr
 the live Need signals fresh (NWS alerts and ERCOT conditions every 5 min, prices every 15 min,
 forecasts hourly). The `app.need` history steps (outage, weather, baseline) are run by hand.
 
-Then open http://localhost:3000 (redirects to `/leads`).
+Then open http://localhost:3000 (redirects to `/gtm`: the map beside the ranked leads).
 
 ### ERCOT API credentials (optional)
 

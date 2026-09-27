@@ -248,3 +248,12 @@ export type Propensity = {
   scoredAt: string
   importedAt: string
 }
+
+// Baseline Need bands: the map legend and the lead filter share them (mirrors NEED_BANDS in
+// the API config). Lower edge inclusive, upper exclusive, except the top band, which includes 100.
+export const NEED_BANDS: { key: string; label: string; low: number; high: number; top?: true }[] = [
+  { key: "0-40", label: "0–40", low: 0, high: 40 },
+  { key: "40-60", label: "40–60", low: 40, high: 60 },
+  { key: "60-80", label: "60–80", low: 60, high: 80 },
+  { key: "80-100", label: "80–100", low: 80, high: 100, top: true },
+]
