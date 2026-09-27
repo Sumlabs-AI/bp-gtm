@@ -39,7 +39,8 @@ export function SiteHeader({
             </BreadcrumbList>
           </Breadcrumb>
         ) : (
-          <h1 className="truncate text-base font-medium">{title}</h1>
+          {/* Base's eyebrow style ("RELIABLE POWER"): small, bold, spaced capitals in dark green. */}
+          <h1 className="truncate text-[13px] font-bold tracking-[0.18em] text-primary uppercase">{title}</h1>
         )}
       </div>
     </header>
