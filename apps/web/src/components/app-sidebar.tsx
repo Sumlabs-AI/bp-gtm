@@ -29,8 +29,8 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
     <Sidebar collapsible="offcanvas" {...props}>
       <SidebarHeader className="px-4 pt-5 pb-4">
         <Link href="/gtm" onClick={() => setOpenMobile(false)} className="flex w-fit flex-col gap-1.5 rounded-md focus-visible:outline-2 focus-visible:outline-sidebar-ring">
-          <BaseLogo className="h-7 w-auto text-sidebar-foreground" />
-          <span className="pl-0.5 text-xs font-semibold tracking-[0.25em] text-sidebar-primary uppercase">Radar</span>
+          <BaseLogo className="h-14 w-auto text-sidebar-foreground" />
+          <span className="pl-1 text-sm font-semibold tracking-[0.3em] text-sidebar-primary uppercase">Radar</span>
         </Link>
       </SidebarHeader>
       <SidebarContent>
