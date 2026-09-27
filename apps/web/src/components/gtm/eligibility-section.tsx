@@ -3,6 +3,7 @@
 import * as React from "react"
 import { CheckIcon, CircleHelpIcon, Loader2Icon, XIcon } from "lucide-react"
 
+import { PanelCard, Tag } from "@/components/gtm/panel-card"
 import { Button } from "@/components/ui/button"
 import { evaluate, SAMPLE_PLAN, type Eligibility, type Status } from "@/lib/eligibility"
 
@@ -37,22 +38,33 @@ export function EligibilitySection({ leadId }: { leadId: number }) {
     return () => clearTimeout(timer)
   }, [running, step, leadId])
 
+  const summary = result ? (
+    <span className="flex items-center gap-1.5">
+      <span className={`rounded-md px-2 py-0.5 font-medium ${VERDICT[result.verdict].className}`}>{VERDICT[result.verdict].label}</span>
+      <span className="font-semibold tabular-nums">{result.score}</span>
+    </span>
+  ) : (
+    <Tag tone="calm">Proof of concept</Tag>
+  )
+
   return (
-    <div className="mx-4 rounded-lg border p-3 text-sm">
-      {result ? (
-        <EligibilityResult result={result} />
-      ) : (
-        <div className="flex items-center gap-3">
-          <p className="min-w-0 flex-1 text-xs text-muted-foreground">
-            {running ? STEPS[step.index] : "Check this home's plan set against Base's install requirements."}
-          </p>
-          <Button size="sm" disabled={running} onClick={() => setStep({ leadId, index: 0 })}>
-            {running && <Loader2Icon className="animate-spin" aria-hidden />}
-            Calculate eligibility
-          </Button>
-        </div>
-      )}
-    </div>
+    <PanelCard title="Eligibility" value={summary}>
+      <div className="px-3 text-sm">
+        {result ? (
+          <EligibilityResult result={result} />
+        ) : (
+          <div className="flex items-center gap-3">
+            <p className="min-w-0 flex-1 text-xs text-muted-foreground">
+              {running ? STEPS[step.index] : "Check this home's plan set against Base's install requirements. Proof of concept: the same sample plan set for every home."}
+            </p>
+            <Button size="sm" disabled={running} onClick={() => setStep({ leadId, index: 0 })}>
+              {running && <Loader2Icon className="animate-spin" aria-hidden />}
+              Calculate eligibility
+            </Button>
+          </div>
+        )}
+      </div>
+    </PanelCard>
   )
 }
 

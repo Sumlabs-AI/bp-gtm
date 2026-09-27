@@ -1,6 +1,6 @@
 # Install eligibility (proof of concept)
 
-The lead drawer's **Eligibility** section answers "can this home host a Base battery?" from an architectural plan set. It is a proof of concept: every home uses the same sample plan set, the plan reading is recorded rather than computed, and the result feeds nothing else. It does not change the lead score, sort, filters or export, and nothing is stored.
+The **Eligibility** card, the last card in the lead drawer's Home section, answers "can this home host a Base battery?" from an architectural plan set. It is a proof of concept: every home uses the same sample plan set, the plan reading is recorded rather than computed, and the result feeds nothing else. It does not change the lead score, sort, filters or export, and nothing is stored.
 
 It comes from a hackathon prototype that had a model read uploaded drawings. Only its install rules were kept.
 

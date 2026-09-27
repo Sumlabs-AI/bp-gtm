@@ -70,9 +70,6 @@ export function LeadDrawer({ id, onClose }: { id: number | null; onClose: () => 
               <AddressCard lead={shown} />
             </div>
 
-            <SectionTitle title="Eligibility" hint="Proof of concept · the same sample plan set for every home" />
-            <EligibilitySection leadId={shown.id} />
-
             <SectionTitle title="Home" hint="This property: value, use and records" />
             <PanelCard
               title="Priority value"
@@ -92,6 +89,7 @@ export function LeadDrawer({ id, onClose }: { id: number | null; onClose: () => 
             >
               <HomeProfile lead={shown} />
             </PanelCard>
+            <EligibilitySection leadId={shown.id} />
 
             <SectionTitle title="Area" hint="The home's H3 Cell: why backup power matters here, and now" />
             {shownCell ? (
