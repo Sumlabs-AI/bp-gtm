@@ -1,20 +1,133 @@
-# base-power-gtm
+# Base Radar: where to sell home backup power next
 
-**Base Radar** turns public data into a go-to-market map for [Base Power](https://basepowercompany.com):
-where a home battery is structurally *needed*, where it is *likely to be bought*, and
-where something is happening *right now* that makes it urgent.
+**Base Radar** turns public data into a ranked, street-level go-to-market map for
+[Base Power](https://basepowercompany.com): where Base can serve, where backup power matters
+most, and which homes are most likely to adopt.
 
-- **Leads** (`/leads`, the home page): single-family, owner-occupied homes Base can serve
-  (Harris County pilot), ranked by priority value, with the suggested battery size, talking
-  points and a map. Refreshed weekly. See [wiki/residential-leads.md](wiki/residential-leads.md).
-- **Grid Zones** (`/grid`): scores every ERCOT load zone on what a home battery could have
-  earned there, and explains why. See [wiki/grid-economics.md](wiki/grid-economics.md).
-- **Need** (`/need`): the **Need Engine**, described below. See [wiki/need-engine.md](wiki/need-engine.md)
-  and, for the ML handoff, [wiki/ml-contract.md](wiki/ml-contract.md).
+**Demo video:** [Watch on Loom](https://www.loom.com/share/1e8c294ba86443988b04d2ff15026a84) · **Repo:** https://github.com/Sumlabs-AI/bp-gtm ·
+**Run it:** `pnpm install && pnpm up`, then open http://localhost:3000 (real data loads on first start)
 
-Stack: `apps/web` Next.js 16 + shadcn/ui + MapLibre · `apps/api` FastAPI + SQLAlchemy + Alembic
-(Python 3.13, uv) · Postgres 17 + PostGIS · docker-compose. The [`wiki/`](wiki/README.md) is the
-project knowledge base; start there before changing code.
+![Base Radar architecture](docs/architecture.png)
+
+## Summary
+
+Base Radar turns public data into a ranked, street-level go-to-market map for Base Power. It helps
+answer three questions: where Base can serve, where backup power matters most, and which homes are
+most likely to adopt.
+
+The platform combines property records, permits, outage history, severe-weather exposure and ERCOT
+market data into one decision workflow. Property and parcel data identify eligible homes and support
+installability screening. Outage and weather signals quantify structural backup-power need. City
+permits show where generators, batteries and Base Power systems have already been installed.
+Additional health data from CDC PLACES and HHS emPOWER is analyzed only at area level, never to
+identify individuals.
+
+Today, Base Radar covers Houston and Austin, with more than 900,000 properties in the product
+dataset. Homes are connected to a common H3 geographic grid, allowing Base to move from
+market-level signals to ranked neighborhoods and individual properties.
+
+Our Austin research found that local home value is the strongest adoption signal tested. Homes
+above $1.5M purchased backup power approximately 38× more often than homes below $300k, while Base
+Power's 2026 buyers skewed below traditional generator buyers in home value. That creates a
+potentially attractive middle-high-value segment: roughly 36,000 installable Austin homes between
+$800k and $1.5M without an existing backup installation, corresponding to approximately 1,300
+expected buyers if observed adoption rates persist.
+
+Each lead can then be inspected with its address, estimated electricity use, suggested battery
+size, area-level backup need and the factors driving its ranking.
+
+## Team
+
+| Name | Role | Contact | GitHub |
+| --- | --- | --- | --- |
+| Henry Heckmann | Team Lead | henry@corgi.insure · [LinkedIn](https://www.linkedin.com/in/henry-heckmann) | — |
+| Igor Eduardo | Data Scientist & AI Research | igor.openvc@gmail.com · [LinkedIn](https://www.linkedin.com/in/igor-eduardo-00z) | [@nomad-link-id](https://github.com/nomad-link-id) |
+| Marc-Antoine Cayer | Full-Stack Engineer | [LinkedIn](https://www.linkedin.com/in/macayer) | [@macayer](https://github.com/macayer) |
+| Romain Chaudron | Backend & ML Engineer | romain.chau@gmail.com · [LinkedIn](https://www.linkedin.com/in/romain-chaudron) | [@chaudronmagic](https://github.com/chaudronmagic) |
+| Matthieu Berger | Frontend Engineer | matt@sumlabs.ai · [LinkedIn](https://www.linkedin.com/in/matthieu-berger) | [@mamalovesyou](https://github.com/mamalovesyou) |
+
+## Quick start
+
+Prerequisites: Docker, Node 22+ with pnpm 10 (`corepack enable`). No API keys are needed.
+
+```bash
+git clone https://github.com/Sumlabs-AI/bp-gtm.git && cd bp-gtm
+pnpm install
+cp .env.example .env      # optional ERCOT Public API credentials; leave empty for the demo
+pnpm up                   # web http://localhost:3000 · API http://localhost:8000/docs
+```
+
+On first start the API loads the committed data snapshot (`apps/api/snapshot/`: Houston and Austin
+homes, leads, H3 cell scores, grid values) into the empty database, so the app shows real data
+without running any pipeline. The `worker` service then keeps live signals fresh (NWS alerts and
+ERCOT conditions every 5 min, prices every 15 min, forecasts hourly).
+
+## Reproduce the demo
+
+1. `pnpm up` and open http://localhost:3000 (redirects to **GTM**).
+2. **GTM** — switch the market between Houston and Austin; colour the H3 cells by Baseline Need,
+   Propensity, Outage Need or Weather Need; click a cell to filter the ranked leads beside the map.
+3. Open a lead: address, suggested battery size, estimated electricity use, installability, the
+   area's backup need and the factors behind its rank. Export the list as CSV.
+4. **Grid Zones** — battery value by ERCOT load zone. **Data sources** — freshness of every input.
+
+Environment variables (`.env.example`): only the optional ERCOT Public API credentials
+(`ERCOT_USERNAME`, `ERCOT_PASSWORD`, `ERCOT_PRIMARY_KEY`, `ERCOT_SECONDARY_KEY`) for the most recent
+days of prices. Everything else uses public endpoints with no key. To rebuild the data from source
+instead of the snapshot, see [Rebuild the data](#rebuild-the-data-from-source).
+
+## Tech stack
+
+| Layer | Technology |
+| --- | --- |
+| Web | Next.js 16, React 19, Tailwind CSS 4, shadcn/ui, MapLibre GL, Recharts |
+| API | FastAPI, SQLAlchemy 2, Alembic, Python 3.13 (uv), pandas, GeoPandas, DuckDB, H3 |
+| Database | Postgres 17 + PostGIS |
+| Jobs | `worker` container (weekly refresh + live signals); CLIs `python -m app.grid`, `app.leads`, `app.need` |
+| ML | `ml/` (separate uv project): LightGBM and GLM propensity, exported per H3 cell |
+| Runtime | Docker Compose (db, api, worker, web) |
+
+## Data and provenance
+
+All inputs are public; the full list of endpoints and licences is in [Data sources](#data-sources).
+
+| Domain | Sources |
+| --- | --- |
+| Homes | Harris Central Appraisal District (HCAD) records and parcels; Travis Central Appraisal District (TCAD) records and parcels |
+| Eligibility | ERCOT TDSP ESI ID extract (active residential meters) |
+| Adoption | Harris County, City of Houston and City of Austin building permits |
+| Need | ORNL EAGLE-I outages, EIA-861 reliability, NWS warnings (IEM), NOAA nClimGrid, NWS API, SPC outlooks |
+| Grid | ERCOT price reports and dashboards |
+| Geography | US Census boundaries, ERCOT load zones, HIFLD territories, H3 |
+| Research datasets | Census ACS 2020–2024, CDC PLACES 2025, HHS emPOWER, TCAD, Travis County building footprints, City of Austin permits — see [`datasets/`](datasets/README.md) |
+
+The committed snapshot contains computed product data only: no owner names or mailing addresses.
+The GTM research datasets in [`datasets/`](datasets/README.md) are © 2026 Igor Eduardo: free for
+the hackathon team's project; the sponsor and third parties need a written license.
+
+## Known limitations and next steps
+
+**Limitations**
+- Two markets (Harris and Travis counties); co-op territories are not covered by the ERCOT meter
+  extract.
+- Home value remains the strongest adoption signal; the propensity models tie it but do not beat it
+  yet (see [`ml/README.md`](ml/README.md)).
+- The electricity-use estimate is calibrated on Houston homes; Austin homes lack living area in the
+  public parcel layer.
+- Temperature uses dry-bulb data, so Houston's humid heat is under-counted (backlog #21).
+- Outage history is county-level: every cell in a county shares it.
+- Utility reliability is known only for CenterPoint and Austin Energy.
+- Live signals are observed, not scored.
+- The reference population is area-weighted ("% of Texas land"), not customer-weighted.
+- Appraisal and permit data have no explicit reuse licence: get Base legal sign-off before
+  exporting lead data outside the team.
+
+**Next steps**
+- Add San Antonio and Dallas–Fort Worth (parcels for 22 counties are already prepared in `ml/`).
+- Home-level propensity with parcel features, and product-specific models (generator vs battery).
+- Score live signals into a "why now" Timing factor for the Opportunity Score.
+- Heat-index history (#21) and within-county outage detail from satellite night lights.
+- Push ranked leads to Base's CRM.
 
 ---
 
@@ -201,22 +314,13 @@ GTM Opportunity.
 The stormiest cells in Texas are around Amarillo; the highest outage exposure is on the Gulf
 Coast. On a quiet day the live panel is empty by design; the worker keeps collecting.
 
-## Honest limitations
-
-- Temperature uses dry-bulb data, so Houston's humid heat is under-counted (the live
-  forecast already uses heat index; the historical fix is backlog #21).
-- Outage history is county-level: every cell in a county shares it. Satellite night-light
-  detection (NASA Black Marble) is the planned route to within-county outage detail.
-- Utility reliability is known only for CenterPoint and Austin Energy.
-- Live signals are observed, not scored; there is no Live Need or Opportunity number yet.
-- The reference population is area-weighted ("% of Texas land"), not customer-weighted.
 
 ## Data sources
 
 Every external endpoint the code calls. All are public; only the optional ERCOT Public API
 needs an account. Raw downloads are cached under `apps/api/data/` (gitignored).
 
-### Need Engine (`/need`)
+### Need Engine (GTM map cells and live signals)
 
 | Source | What we use it for | Endpoint | Access / licence | Refresh |
 | --- | --- | --- | --- | --- |
@@ -232,7 +336,7 @@ needs an account. Raw downloads are cached under `apps/api/data/` (gitignored).
 | **ERCOT dashboards** | Official grid condition (Normal / EEA), reserves (PRC), capacity vs demand forecast | `https://www.ercot.com/api/1/services/read/dashboards/daily-prc.json`, `…/supply-demand.json` | none · public | every 5 min (worker) |
 | **ERCOT MIS reports (live prices)** | Real-time (NP6-905, report 12301) and day-ahead (NP4-190, report 12331) zone prices | list `https://www.ercot.com/misapp/servlets/IceDocListJsonWS?reportTypeId={id}`, file `https://www.ercot.com/misdownload/servlets/mirDownload?doclookupId={docId}` | none · public | 15 min / hourly (worker) |
 
-### Grid Zones (`/grid`) and lead valuation
+### Grid Zones and lead valuation
 
 | Source | What we use it for | Endpoint | Access / licence |
 | --- | --- | --- | --- |
@@ -245,7 +349,7 @@ The zone polygons are built once (`scripts/build_zone_geojson.py`) into the comm
 `apps/api/app/grid/ercot-zones.geojson`. The battery dispatch model adapts
 [wattgap](https://github.com/saivarun3407/wattgap) (MIT, `app/grid/LICENSE-wattgap`).
 
-### Leads (`/leads`)
+### Leads (GTM ranked list, Houston and Austin)
 
 | Source | What we use it for | Endpoint | Access / licence |
 | --- | --- | --- | --- |
@@ -254,6 +358,8 @@ The zone polygons are built once (`scripts/build_zone_geojson.py`) into the comm
 | **ERCOT TDSP ESI ID extract** (MIS report 203) | Electric meters (eligibility: served by a Base utility) | MIS list/download endpoints, `reportTypeId=203` | none · public |
 | **Harris County issued permits (ArcGIS)** | Solar / EV / new-home permits | `https://www.gis.hctx.net/arcgishcpid/rest/services/Permits/IssuedPermits/FeatureServer/0` | public layer |
 | **City of Houston sold permits** | Weekly permit reports | `https://www.houstonpermittingcenter.org/sold-permits-search` | public page · no explicit reuse licence |
+| **Travis Central Appraisal District (TCAD) parcels** | Austin properties and parcel points: value, year built, location | `https://gis.traviscountytx.gov/server1/rest/services/…` (Travis County public GIS) | public layer · no explicit reuse licence |
+| **City of Austin issued construction permits** | Generator, battery, solar and Base Power installs | `https://data.austintexas.gov/resource/3syk-w9eu.json` | open data portal |
 
 Get Base legal sign-off before exporting lead data outside the team (see
 [wiki/residential-leads.md](wiki/residential-leads.md)). Full research notes per lead source:
@@ -276,51 +382,42 @@ Get Base legal sign-off before exporting lead data outside the team (see
 
 | | |
 | --- | --- |
+| Web pages | `apps/web/src/app/(dashboard)/`: `gtm` (map + ranked leads), `grid` (Grid Zones), `data` (Data sources) |
+| Data snapshot | `apps/api/snapshot/` (gzipped CSVs), loaded by `python -m app.snapshot load` on API start |
+| Leads | `apps/api/app/leads/` (adapters per source, scoring, electricity use, battery value); CLI `python -m app.leads` |
+| Propensity research | [`ml/`](ml/README.md) (training table, models, H3 export), [`wiki/propensity.md`](wiki/propensity.md) |
+| GTM datasets | [`datasets/`](datasets/README.md) (© 2026 Igor Eduardo, license terms inside) |
 | Geography | `apps/api/app/geo` (the H3 contract, no framework dependencies), `apps/api/app/need/markets.py` |
 | Need Engine | `apps/api/app/need/` (`outage/`, `weather/`, `live/`, `baseline.py`, `ml.py`); CLI `python -m app.need` |
 | API | `apps/api/app/routers/need.py`: `GET /need/cells?bbox=` (GeoJSON), `GET /need/cells/{h3}` (the full explanation) |
 | Map | `apps/web/src/components/need/` |
 | Decisions | [`CONTEXT.md`](CONTEXT.md) (the glossary every name follows), [`docs/adr/`](docs/adr/), GitHub issues #4–#23 (one spec per milestone) |
 
+
 ---
 
-## Getting started
+## Rebuild the data from source
 
-Prerequisites: Docker, Node 22+ with pnpm 10 (`corepack enable`), Python 3.13 + [uv](https://docs.astral.sh/uv/).
-
-```bash
-pnpm install
-cp .env.example .env   # ERCOT API credentials (optional, see below)
-pnpm up                # web http://localhost:3000 · api http://localhost:8000/docs
-```
-
-The database starts empty, so `/grid` shows nothing until you load prices. In another terminal:
+The snapshot is enough for the demo. To rebuild everything from the public sources:
 
 ```bash
-docker compose exec api python -m app.grid backfill 2025 2026   # ~1 min, public ERCOT files, no login
-docker compose exec api python -m app.grid compute              # score the zones
+docker compose exec api python -m app.grid backfill 2019 2020 2021 2022 2023 2024 2025 2026
+docker compose exec api python -m app.grid compute              # battery value per load zone
 docker compose exec api python -m app.leads refresh             # lead sources (~10 min, ~1 GB download)
 docker compose exec api python -m app.leads score               # score the leads
-docker compose exec api python -m app.need seed                 # H3 Cells for /need (offline, seconds)
+docker compose exec api python -m app.need seed                 # H3 cells (offline, seconds)
 docker compose exec api python -m app.need outage download      # outage history, ~6 GB (cached)
-docker compose exec api python -m app.need outage compute       # Outage Need on /need
+docker compose exec api python -m app.need outage compute
 docker compose exec api python -m app.need weather download     # NWS warnings + measured temperature
-docker compose exec api python -m app.need weather compute      # Weather Need on /need
-docker compose exec api python -m app.need baseline compute     # Baseline Need (default on /need)
-docker compose exec api python -m app.leads cells                       # each home's H3 Cell (the GTM page joins on it)
-docker compose exec api python -m app.need export-ml --out-dir data/ml   # features for the ML model
+docker compose exec api python -m app.need weather compute
+docker compose exec api python -m app.need baseline compute     # Baseline Need
+docker compose exec api python -m app.leads cells               # each home's H3 cell
+docker compose exec api python -m app.need import-propensity ml/output/propensity.parquet
 ```
 
-For the per-year battery value ranges shown on leads, also load past years (~1 min per year):
-`docker compose exec api python -m app.grid backfill 2019 2020 2021 2022 2023 2024`, then `compute` again.
+The `worker` service re-runs the grid and lead steps every Sunday at 03:00 Central.
 
-The `worker` service re-runs the grid and lead steps every Sunday at 03:00 Central, and keeps
-the live Need signals fresh (NWS alerts and ERCOT conditions every 5 min, prices every 15 min,
-forecasts hourly). The `app.need` history steps (outage, weather, baseline) are run by hand.
-
-Then open http://localhost:3000 (redirects to `/gtm`: the map beside the ranked leads).
-
-### ERCOT API credentials (optional)
+## ERCOT API credentials (optional)
 
 The yearly files lag by up to a week. To pull the most recent days, register at
 [developer.ercot.com](https://developer.ercot.com) and fill in `.env`: the subscription keys
@@ -360,3 +457,4 @@ After adding a dependency, rebuild that container: `docker compose up -d --build
 | Need Engine: H3 cells, Baseline Need, live signals, every source and threshold | [wiki/need-engine.md](wiki/need-engine.md) |
 | Handing features to the ML propensity model, importing predictions | [wiki/ml-contract.md](wiki/ml-contract.md) |
 | The glossary every name in the code follows | [CONTEXT.md](CONTEXT.md) |
+

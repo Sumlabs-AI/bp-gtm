@@ -19,6 +19,7 @@ from app.models import (
     PropensityImport,
     Property,
 )
+from app.need.config import opportunity as opportunity_config
 from app.need.config import timing as timing_config
 from app.need.enrich import enrich_counties, enrich_load_zones
 from app.need.live.alerts import take_snapshot
@@ -244,6 +245,46 @@ def test_geo_points_respect_the_cell_filters(client, world):
     ).json()
     assert [f["properties"]["id"] for f in body["features"]] == [world["c"]]
     assert client.get("/leads/geo", params={"zoom": 12}).status_code == 422
+
+
+def test_leads_only_keeps_each_countys_top_opportunity_cells(client, world, monkeypatch):
+    with SessionLocal() as db:
+        batch = PropensityImport(
+            imported_at=NOW,
+            file_name="test.parquet",
+            rows=2,
+            product_cells=2,
+            other_cells=0,
+            model_versions=["v1"],
+            feature_versions=["1.0.0"],
+            warnings=[],
+        )
+        db.add(batch)
+        db.flush()
+        for h3, score in ((CELL["A"], 70.0), (CELL["B"], 90.0)):  # A 73.9 < B 77.9; C unscored
+            db.add(
+                CellPropensity(
+                    h3_index=h3,
+                    propensity_score=score,
+                    model_version="v1",
+                    feature_version="1.0.0",
+                    scored_at=NOW,
+                    imported_at=NOW,
+                    import_id=batch.id,
+                )
+            )
+        db.commit()
+    # 0.1% of 5 Harris homes: the best Cell alone (B) already holds enough.
+    assert ids(client, leads_only=True) == [world["b"]]
+    body = client.get("/leads/cells").json()
+    assert body["cells"] == [CELL["B"]]
+    assert body["min_score"] == {"harris": opportunity_score(90.0, 60.0)}
+    # Half of them (2.5 homes): B (1) then A (2), whole Cells; never unscored C.
+    monkeypatch.setattr(opportunity_config, "lead_share", 0.5)
+    assert set(ids(client, leads_only=True)) == {world["b"], world["a_big"], world["a_small"]}
+    assert client.get("/leads/cells").json()["min_score"] == {
+        "harris": opportunity_score(70.0, 80.0)
+    }
 
 
 def test_loader_sets_h3_and_backfill_is_idempotent(world):
