@@ -1,6 +1,7 @@
 "use client"
 
 import * as React from "react"
+import { FilterIcon, XIcon } from "lucide-react"
 
 import { LeadDrawer } from "@/components/gtm/lead-drawer"
 import { CellMap, type LeadPoint } from "@/components/need/cell-map"
@@ -169,6 +170,31 @@ export function GtmPage() {
         </span>
       </div>
 
+      {/* Active filters: shared by the map and the list, so they sit above both. */}
+      {chips.length > 0 && (
+        <div className="flex flex-wrap items-center gap-2 border-b bg-primary/5 px-4 py-2 text-sm">
+          <span className="flex items-center gap-1.5 font-medium text-primary">
+            <FilterIcon className="size-4" />
+            Filtering map and list
+          </span>
+          {chips.map((c) => (
+            <button
+              key={c.key}
+              type="button"
+              onClick={c.clear}
+              className="flex items-center gap-1.5 rounded-full bg-primary px-3 py-1 font-medium text-primary-foreground shadow-sm hover:bg-primary/85 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+              title="Remove filter"
+            >
+              {c.label}
+              <XIcon className="size-3.5" aria-label="Remove" />
+            </button>
+          ))}
+          <Button size="sm" variant="ghost" className="ml-auto" onClick={() => update({ ...EMPTY, sort: filters.sort })}>
+            Clear all
+          </Button>
+        </div>
+      )}
+
       <div className="grid min-h-0 flex-1 grid-cols-1 lg:grid-cols-5">
         <div className="min-h-[360px] lg:col-span-3">
           <CellMap
@@ -203,16 +229,6 @@ export function GtmPage() {
                 ))}
               </select>
             </span>
-            {chips.length > 0 && (
-              <div className="flex w-full flex-wrap gap-1 pt-1">
-                <span className="text-muted-foreground">in view ·</span>
-                {chips.map((c) => (
-                  <button key={c.key} type="button" onClick={c.clear} className="rounded-full border px-2 py-0.5 hover:bg-muted" title="Remove filter">
-                    {c.label} ×
-                  </button>
-                ))}
-              </div>
-            )}
           </div>
 
           <div className="min-h-0 flex-1 overflow-y-auto">
