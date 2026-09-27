@@ -11,7 +11,6 @@ import { OutageBreakdown } from "@/components/need/outage-breakdown"
 import { PropensityBlock } from "@/components/need/propensity"
 import { WeatherBreakdown } from "@/components/need/weather-breakdown"
 import { ConsumptionCard } from "@/components/leads/consumption-card"
-import { StatusControl } from "@/components/leads/status-control"
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet"
 import { apiFetch } from "@/lib/api"
 import { formatLeadMoney, type LeadDetail } from "@/lib/leads"
@@ -90,7 +89,6 @@ export function LeadDrawer({ id, onClose }: { id: number | null; onClose: () => 
                   ))}
                 </ul>
               )}
-              <StatusControl id={shown.id} status={shown.status} />
             </section>
             <ConsumptionCard lead={shown} />
             {shownCell ? (

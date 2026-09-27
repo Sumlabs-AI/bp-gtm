@@ -8,7 +8,6 @@ import { Disclosure } from "@/components/disclosure"
 import { ConsumptionCard } from "@/components/leads/consumption-card"
 import { LeadLocationMap } from "@/components/leads/lead-location-map"
 import { PriorityHelp } from "@/components/leads/priority-help"
-import { StatusControl } from "@/components/leads/status-control"
 import { SiteHeader } from "@/components/site-header"
 import { Badge } from "@/components/ui/badge"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -16,7 +15,7 @@ import { Separator } from "@/components/ui/separator"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { apiFetch } from "@/lib/api"
 import type { ZoneDetail } from "@/lib/grid"
-import { BATTERY_SIZES, STATUS_LABELS, formatLeadMoney, leadReturnHref, signalLabel, valueBasis, type LeadDetail } from "@/lib/leads"
+import { BATTERY_SIZES, formatLeadMoney, leadReturnHref, signalLabel, valueBasis, type LeadDetail } from "@/lib/leads"
 import { cn } from "@/lib/utils"
 
 const formatNumber = (value: number | null) => value === null ? "—" : Math.round(value).toLocaleString("en-US")
@@ -116,7 +115,6 @@ export default async function LeadDetailPage(props: PageProps<"/leads/[id]">) {
         <div className="flex flex-col gap-3">
           <p className="text-sm text-muted-foreground">{[lead.city, lead.zip].filter(Boolean).join(" · ")}</p>
           <div className="flex flex-wrap items-center gap-2">
-            <Badge variant="outline">{STATUS_LABELS[lead.status]}</Badge>
             {lead.trigger && <Badge variant="secondary">
               Latest signal: {signalLabel(lead.trigger)}
             </Badge>}
@@ -142,13 +140,6 @@ export default async function LeadDetailPage(props: PageProps<"/leads/[id]">) {
               {lead.sizing_reason && <p className="text-sm text-muted-foreground">{lead.sizing_reason}</p>}
               {lead.value !== null && <p className="text-xs text-muted-foreground">Historical grid value to Base: {formatLeadMoney(lead.value)}/yr · {valueBasis(basisValue).toLowerCase()}, based on this Load Zone.</p>}
             </CardContent>
-          </Card>
-          <Card>
-            <CardHeader>
-              <CardTitle>Review lead</CardTitle>
-              <CardDescription>Record your review progress.</CardDescription>
-            </CardHeader>
-            <CardContent><StatusControl key={lead.id} id={lead.id} status={lead.status} /></CardContent>
           </Card>
         </div>
 

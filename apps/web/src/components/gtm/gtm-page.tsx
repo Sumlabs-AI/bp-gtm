@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { apiFetch } from "@/lib/api"
 import { scoreColor } from "@/lib/grid"
-import { STATUS_LABELS, formatLeadMoney, type LeadItem, type LeadPage, type LeadStatus } from "@/lib/leads"
+import { formatLeadMoney, type LeadItem, type LeadPage } from "@/lib/leads"
 import { NEED_BANDS } from "@/lib/need"
 
 const PAGE_SIZE = 50
@@ -29,10 +29,9 @@ type Filters = {
   forecast: boolean
   gridStress: boolean
   newOnly: boolean
-  status: LeadStatus | ""
   sort: Sort
 }
-const EMPTY: Filters = { bands: [], cells: [], alert: false, forecast: false, gridStress: false, newOnly: false, status: "", sort: "need" }
+const EMPTY: Filters = { bands: [], cells: [], alert: false, forecast: false, gridStress: false, newOnly: false, sort: "need" }
 
 type Points = { type: "FeatureCollection"; features: LeadPoint[]; aggregated?: boolean }
 
@@ -45,7 +44,6 @@ function params(f: Filters, bbox: string | null, extra: Record<string, string> =
   if (f.forecast) p.set("forecast", "true")
   if (f.gridStress) p.set("grid_stress", "true")
   if (f.newOnly) p.set("new_only", "true")
-  if (f.status) p.set("status", f.status)
   return p
 }
 
@@ -126,7 +124,6 @@ export function GtmPage() {
   if (filters.forecast) chips.push({ key: "forecast", label: "Forecast risk 48 h", clear: () => update({ forecast: false }) })
   if (filters.gridStress) chips.push({ key: "grid", label: "ERCOT grid stress", clear: () => update({ gridStress: false }) })
   if (filters.newOnly) chips.push({ key: "new", label: "New this week", clear: () => update({ newOnly: false }) })
-  if (filters.status) chips.push({ key: "status", label: STATUS_LABELS[filters.status], clear: () => update({ status: "" }) })
 
   const summary = page?.summary
   const total = page?.total ?? 0
@@ -149,16 +146,6 @@ export function GtmPage() {
         <Button size="sm" variant={filters.newOnly ? "secondary" : "outline"} onClick={() => update({ newOnly: !filters.newOnly })}>
           New this week
         </Button>
-        <select
-          className="rounded-md border bg-background px-2 py-1"
-          value={filters.status}
-          onChange={(e) => update({ status: e.target.value as LeadStatus | "" })}
-        >
-          <option value="">Any status</option>
-          {(Object.keys(STATUS_LABELS) as LeadStatus[]).map((s) => (
-            <option key={s} value={s}>{STATUS_LABELS[s]}</option>
-          ))}
-        </select>
       </div>
 
       {/* Active filters: shared by the map and the list, so they sit above both. */}
@@ -233,7 +220,6 @@ export function GtmPage() {
                     <TableHead>Now</TableHead>
                     <TableHead className="text-right" title="Estimated electricity use, kWh per year">Use</TableHead>
                     <TableHead className="text-right" title="Expected Value, $ per year">EV</TableHead>
-                    <TableHead>Status</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -260,7 +246,6 @@ export function GtmPage() {
                       <TableCell><LiveFlags lead={lead} /></TableCell>
                       <TableCell className="text-right tabular-nums">{lead.annual_kwh ? Math.round(lead.annual_kwh).toLocaleString("en-US") : "—"}</TableCell>
                       <TableCell className="text-right tabular-nums">{lead.expected_value !== null ? formatLeadMoney(lead.expected_value) : "—"}</TableCell>
-                      <TableCell>{STATUS_LABELS[lead.status]}</TableCell>
                     </TableRow>
                   ))}
                 </TableBody>
