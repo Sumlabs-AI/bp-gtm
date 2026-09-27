@@ -5,7 +5,6 @@ import { FilterIcon, XIcon } from "lucide-react"
 
 import { LeadDrawer } from "@/components/gtm/lead-drawer"
 import { CellMap, type LeadPoint } from "@/components/need/cell-map"
-import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { apiFetch } from "@/lib/api"
@@ -160,14 +159,6 @@ export function GtmPage() {
             <option key={s} value={s}>{STATUS_LABELS[s]}</option>
           ))}
         </select>
-        <span className="ml-auto text-muted-foreground">
-          {summary?.grid_state && (
-            <Badge variant={summary.grid_state === "normal" ? "outline" : "destructive"} className="mr-2">
-              ERCOT {summary.grid_state}
-            </Badge>
-          )}
-          Leads are loaded for Harris County (Houston); Travis shows Need only.
-        </span>
       </div>
 
       {/* Active filters: shared by the map and the list, so they sit above both. */}
