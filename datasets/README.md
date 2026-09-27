@@ -44,6 +44,8 @@ zeros). Parcel files join on the Travis Central Appraisal District property id (
 
 ## Column notes
 
+CSV files start with a one-line license comment: read them with `pd.read_csv(path, comment="#")`.
+
 **Fit features** (`fit_features_*`): see `fit_features_data_dictionary.csv`. Proportions are on a
 0–1 scale despite the `_pct` suffix. Reliability: `_rel` = high (CV < 12%), medium (12–40%), low
 (> 40%); year medians use the MOE in years (≤ 5 / ≤ 15 / > 15). `_rel_reason` = `zero_estimate`,
@@ -119,4 +121,4 @@ Retrieved 2026-09-26 (permits: 2026-09-27).
 | Personal data | No owner names, owner IDs or mailing addresses in any file. Install flags come from public permits and describe properties, not people; do not combine them with other data to identify residents. The owner-occupancy flag is computed without storing the mailing address. |
 | Health data | emPOWER counts are aggregated and suppressed by the source (1–10 published as 11). Use them only as an area-level signal, never to single out a household or person. |
 | Accuracy | Screening estimates, provided "as is" without warranty. ACS block-group values carry sampling error: keep the MOE / reliability or use the `_eb` columns. |
-| In-file notice | Every Parquet file carries this copyright, license and source notice in its metadata (`copyright`, `license`, `sources`, `compliance` keys). |
+| In-file notice | Every Parquet file carries this copyright, license and source notice in its metadata (`copyright`, `license`, `sources`, `compliance` keys); every CSV starts with a one-line license comment. |
