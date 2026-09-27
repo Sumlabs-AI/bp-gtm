@@ -1,0 +1,38 @@
+GTM DATASETS v1 — LICENSE NOTICE
+
+Copyright (c) 2026 Igor Eduardo. All rights reserved, except as granted in section 2.
+
+1. Ownership. The files published in release "datasets-v1" of this repository (the "Datasets")
+   were produced by Igor Eduardo for his hackathon team. They are his original work: the
+   selection, arrangement, cleaning, derived fields, allocations, stabilized estimates,
+   installability gates and compilation. Publishing them in this repository does not transfer
+   or assign any right in them to anyone.
+
+2. Hackathon team grant. The members of the hackathon team working in this repository may use,
+   copy and modify the Datasets, free of charge, to build, test and present the team's
+   hackathon project. This grant is personal to the team members, non-exclusive and
+   non-transferable. It does not extend to any company or organization, including the
+   hackathon's sponsor and its affiliates.
+
+3. Sponsor and third parties: license required. Any other use requires a separate written
+   license signed by Igor Eduardo. This applies in particular to the hackathon sponsor, its
+   affiliates, employees and contractors, and to any use of the Datasets, or of data, products,
+   models or services derived from them, after the hackathon or outside the team's project.
+   Receiving, viewing or downloading the Datasets through the hackathon does not grant such a
+   license.
+
+4. Licensing. To license the Datasets, contact Igor Eduardo.
+
+5. Underlying source data. The Datasets are derived from public sources, listed in
+   DATASETS_README.md: U.S. Census Bureau, HHS emPOWER, Travis County / Travis Central Appraisal
+   District GIS, and TxGIO StratMap. This notice claims no rights in the original source records,
+   which remain subject to their publishers' terms. It covers the Datasets as produced and
+   compiled by Igor Eduardo.
+
+6. No warranty. The Datasets are provided "as is", without warranty of any kind. They are
+   screening estimates and carry the sampling and source errors described in DATASETS_README.md.
+
+7. Sensitive data. The emPOWER-derived files describe an electricity-dependent population and
+   may only be used as an area-level signal, never to single out a household or person.
+   Parcel-level files contain no owner names or mailing addresses and must not be combined with
+   other data to add them.

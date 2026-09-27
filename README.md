@@ -355,6 +355,7 @@ After adding a dependency, rebuild that container: `docker compose up -d --build
 | How the zone scores are computed, data sources, caveats | [wiki/grid-economics.md](wiki/grid-economics.md) |
 | Backend, database and migration rules | [wiki/backend.md](wiki/backend.md), [wiki/database.md](wiki/database.md) |
 | Frontend structure and gotchas | [wiki/frontend.md](wiki/frontend.md) |
+| GTM datasets (ACS Fit, emPOWER, Travis parcels): © Igor Eduardo, free for the hackathon team, license required for sponsor use | [datasets/README.md](datasets/README.md) |
 | Need Engine: H3 cells, Baseline Need, live signals, every source and threshold | [wiki/need-engine.md](wiki/need-engine.md) |
 | Handing features to the ML propensity model, importing predictions | [wiki/ml-contract.md](wiki/ml-contract.md) |
 | The glossary every name in the code follows | [CONTEXT.md](CONTEXT.md) |
