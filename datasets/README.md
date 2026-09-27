@@ -36,6 +36,11 @@ zeros). Parcel files join on the Travis Central Appraisal District property id (
 | `travis_bg_parcel_aggregates.csv` | 766 | Block group, Travis | Parcel counts and medians per block group, next to the ACS owner-occupied single-family count |
 | `travis_parcels_clean_part1.parquet` + `_part2.parquet` | 380,917 | Parcel, Travis | StratMap 2025 parcels, cleaned and deduplicated, with polygons (split in two files; read both and concatenate) |
 | `household_install_table.parquet` (+ `household_install_table_dictionary.csv`) | 373,524 | Parcel, Travis | One row per parcel: market value, eligibility gates, and whether the home has a permitted backup-power install (generator, battery, Base Power), with first install date and install event counts |
+| `austin_value_quantiles.csv` | 37 | Aggregate | Home value quantiles (P10–P95, mean) of all eligible homes and of homes with a backup install, generator, battery or Base Power 2026, per universe |
+| `austin_value_percentiles.csv` | 24 | Aggregate | Where each buyer group sits in the local value distribution (median percentile, share above P75/P85/P90/P95) |
+| `austin_install_rates_by_value.csv` | 30 | Aggregate | Homes with a backup install per 1,000 eligible homes by value band (<$300k … $1.5M+), with 95% CI and rate vs the universe average, by product |
+| `austin_install_rates_by_value_percentile.csv` | 90 | Aggregate | The same rate by value decile and top 10% / 5% / 1% |
+| `austin_generator_vs_battery.csv` | 24 | Aggregate | Home value of generator-only vs battery-only homes, and Base Power 2026 vs other buyers: medians, differences with 95% CI, effect sizes |
 
 ## Column notes
 
@@ -78,6 +83,8 @@ backup equipment and replacements). `in_coa_entity02` = parcel taxed by the City
 permit source covers City of Austin jurisdiction only, so homes outside it show no permits).
 `acs_bg_median_home_value` = ACS median home value of the parcel's block group. Totals: 5,278
 homes with a backup install, 3,179 generator, 2,166 battery, 302 Base Power 2026.
+
+**Austin install results** (`austin_*.csv`): universes of eligible homes — `A_travis_strict` (`installable` = 1), `B_travis_relaxed` (`installable_relaxed` = 1), `C_situsAustin_strict` / `D_situsAustin_relaxed` (same, situs city = Austin), `E_suppl_CoAentity_strict` / `F_suppl_CoAentity_relaxed` (same, parcel taxed by the City of Austin). Value = TCAD market value. Rates count homes, not permits. Permits cover City of Austin jurisdiction only.
 
 **StratMap parcels** (`travis_parcels_clean_part*`): one row per `prop_id`; `n_accounts` = appraisal
 accounts on the parcel; `lot_sqft`, `lot_acres` (and `lot_acres_3083`, equal-area) from the polygon;
