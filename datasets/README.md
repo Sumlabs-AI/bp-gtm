@@ -27,11 +27,11 @@ zeros). Parcel files join on the Travis Central Appraisal District property id (
 | `fit_features_TX_bg_acs2024.parquet` (also `.csv.gz`) | 18,638 | Block group, Texas | 26 Fit features, each with `_moe`, `_cv`, `_rel` (high / medium / low) and `_rel_reason` when reliability is unavailable; context counts; `owner_sfd_units`; `owner_electric_heat_pct_tract` |
 | `fit_features_Travis_bg_acs2024.csv` | 766 | Block group, Travis | Travis subset of the file above |
 | `fit_features_data_dictionary.csv` | 29 | — | Every feature: ACS table, cells, universe, notes, coverage, Texas and Travis medians |
-| `fit_features_TX_bg_acs2024_eb.parquet` | 18,638 | Block group, Texas | Stabilized version of each feature (`<feature>_eb`), its weight on the block group's own estimate (`_eb_w`), its source (`_eb_src`) and reference value (`_eb_target`) |
+| `fit_features_TX_bg_acs2024_eb.parquet` | 18,638 | Block group, Texas | Stabilized version of each feature (`<feature>_eb`), with quality columns `_eb_w`, `_eb_src` and `_eb_target` |
 | `fit_features_TX_tract_acs2024.parquet` | 6,896 | Tract, Texas | The same features at tract level |
 | `fit_features_TX_bg_acs2024_geo.parquet` | 18,626 | Block group, Texas | Features + stabilized features on block-group polygons, with `ALAND`, `AWATER`, `hh_per_km2` |
 | `empower_TX_zip.parquet` | 1,850 | ZIP, Texas | HHS emPOWER counts per ZIP (polygons), with `<count>_masked` flags |
-| `empower_TX_bg.parquet` | 18,626 | Block group, Texas | emPOWER counts allocated to block groups (`*_bg_alloc`), `dominant_zip`, `dme_per_1k_medicare`, `dme_per_1k_owner_sfd`, `any_service_per_1k_medicare` |
+| `empower_TX_bg.parquet` | 18,626 | Block group, Texas | emPOWER counts per block group (`*_bg_alloc`), `dominant_zip`, `dme_per_1k_medicare`, `dme_per_1k_owner_sfd`, `any_service_per_1k_medicare` |
 | `travis_parcels_installability.parquet` | 373,524 | Parcel, Travis | County appraisal parcels with footprints, installability gates and block group |
 | `travis_bg_parcel_aggregates.csv` | 766 | Block group, Travis | Parcel counts and medians per block group, next to the ACS owner-occupied single-family count |
 | `travis_parcels_clean_part1.parquet` + `_part2.parquet` | 380,917 | Parcel, Travis | StratMap 2025 parcels, cleaned and deduplicated, with polygons (split in two files; read both and concatenate) |
@@ -58,11 +58,11 @@ CSV files start with a one-line license comment: read them with `pd.read_csv(pat
 block groups (the source table is not published at block group).
 
 **Stabilized features** (`_eb` file): `_eb_src` = `eb` (stabilized), `raw` or `raw_single_bg` (the
-block group's own estimate), `tract_fill` (block group estimate missing, reference value used),
+block group's own estimate), `tract_fill` (block group estimate missing, tract value used),
 `no_universe` (nobody in the universe: left empty), `missing`. Prefer `_eb` over the raw estimate
 for noisy features (vacancy, work from home, cost burden, household size). Use
-`single_family_attached_pct` at tract level only. Because stabilized values borrow from the tract,
-validate models with folds grouped by tract or county.
+`single_family_attached_pct` at tract level only. Validate models with folds grouped by tract or
+county.
 
 **emPOWER**: counts of 1–10 are suppressed by the source and published as 11; `_masked = True`
 means "between 1 and 11". Medicare fee-for-service and Medicare Advantage beneficiaries.
@@ -80,16 +80,16 @@ proxy (216,768 and 286,084 parcels). Footprint columns: `n_buildings`, `n_reside
 **Household install table** (`household_install_table`): one row per TCAD parcel (same
 parcels and gates as `travis_parcels_installability`), keyed by `prop_id`. `has_generator`,
 `has_battery`, `has_base_power`, `has_backup_install` (any of them) and `first_*_date` come from
-City of Austin issued permits matched to the parcel; `has_base_power_2026` = Base Power permit
+City of Austin issued permits on the parcel; `has_base_power_2026` = Base Power permit
 issued in 2026. `n_*_events` = distinct installation events (`n_backup_events_90d` with a 90-day
-window). `match_confidence_best` = best permit-to-parcel link confidence (high / medium / low).
-Variants: `*_hc` = high-confidence matches only; `*_broad` = broader backup definition (adds other
+window). `match_confidence_best` = confidence that the permit belongs to this parcel (high / medium / low).
+Variants: `*_hc` = high-confidence parcels only; `*_broad` = broader backup definition (adds other
 backup equipment and replacements). `in_coa_entity02` = parcel taxed by the City of Austin (the
 permit source covers City of Austin jurisdiction only, so homes outside it show no permits).
 `acs_bg_median_home_value` = ACS median home value of the parcel's block group. Totals: 5,291
 homes with a backup install, 3,190 generator, 2,172 battery, 304 Base Power 2026.
 
-**Austin backup permits** (`austin_backup_permits`): one row per permit, with the City of Austin's original fields (number, type, work class, description, dates, status, address, coordinates, `tcad_id`, contractor, valuations). `backup_category` = GENERATOR, BATTERY, BASE_POWER or OTHER_BACKUP; `install_kind` = install, support or replacement; `in_main_definition` / `in_broad_definition` = counted in the household table's main / `_broad` flags; `prop_id` = matched TCAD parcel (empty when unmatched, e.g. outside Travis or no location); `parcel_match_confidence` = high, medium or low. Links were revised on 2026-09-27: the parcel id filed on some permits points to the lot next door, and 217 permits now point to the correct house (8,683 permits linked).
+**Austin backup permits** (`austin_backup_permits`): one row per permit, with the City of Austin's original fields (number, type, work class, description, dates, status, address, coordinates, `tcad_id`, contractor, valuations). `backup_category` = GENERATOR, BATTERY, BASE_POWER or OTHER_BACKUP; `install_kind` = install, support or replacement; `in_main_definition` / `in_broad_definition` = counted in the household table's main / `_broad` flags; `prop_id` = matched TCAD parcel (empty when unmatched, e.g. outside Travis or no location); `parcel_match_confidence` = high, medium or low. Updated 2026-09-27: 217 permits now point to the correct house (8,683 permits with a parcel).
 
 **Austin install results** (`austin_*.csv`): universes of eligible homes — `A_travis_strict` (`installable` = 1), `B_travis_relaxed` (`installable_relaxed` = 1), `C_situsAustin_strict` / `D_situsAustin_relaxed` (same, situs city = Austin), `E_suppl_CoAentity_strict` / `F_suppl_CoAentity_relaxed` (same, parcel taxed by the City of Austin). Value = TCAD market value. Rates count homes, not permits. Permits cover City of Austin jurisdiction only.
 
