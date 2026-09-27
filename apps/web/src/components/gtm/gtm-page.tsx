@@ -1,7 +1,7 @@
 "use client"
 
 import * as React from "react"
-import { FilterIcon, XIcon } from "lucide-react"
+import { XIcon } from "lucide-react"
 
 import { LeadDrawer } from "@/components/gtm/lead-drawer"
 import { CellMap, type LeadPoint } from "@/components/need/cell-map"
@@ -164,10 +164,6 @@ export function GtmPage() {
       {/* Active filters: shared by the map and the list, so they sit above both. */}
       {chips.length > 0 && (
         <div className="flex flex-wrap items-center gap-2 border-b bg-primary/5 px-4 py-2 text-sm">
-          <span className="flex items-center gap-1.5 font-medium text-primary">
-            <FilterIcon className="size-4" />
-            Filtering map and list
-          </span>
           {chips.map((c) => (
             <button
               key={c.key}
