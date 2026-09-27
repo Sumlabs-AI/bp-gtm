@@ -19,6 +19,7 @@ import { PropensityBlock } from "@/components/need/propensity"
 import { WeatherBreakdown } from "@/components/need/weather-breakdown"
 import { apiFetch } from "@/lib/api"
 import { scoreColor } from "@/lib/grid"
+import type { View } from "@/lib/leads"
 import { H3_MAP_MIN_ZOOM, MARKET_ZOOM, MARKETS, type CellCollection, type CellDetail } from "@/lib/need"
 
 const BASEMAP = "https://tiles.openfreemap.org/styles/positron"
@@ -36,6 +37,11 @@ type Hover = {
   forecastLevel: string | null
 }
 
+const VIEWS: { key: View; label: string; title: string }[] = [
+  { key: "overview", label: "Overview", title: "Every Cell and every home in view" },
+  { key: "leads", label: "Leads", title: "Only the top-Opportunity Cells of each county: the homes to go after" },
+]
+
 export type LeadPoint = {
   type: "Feature"
   geometry: { type: "Point"; coordinates: [number, number] }
@@ -44,13 +50,17 @@ export type LeadPoint = {
 
 /**
  * The Need map. On its own it explains Cells in a sheet. In controlled mode (the GTM page)
- * it is a filter: it reports the viewport, toggles Cells, dims what's filtered
+ * it is a filter: it reports the viewport, toggles Cells and the Leads/Overview view, dims what's filtered
  * out, and shows the leads inside the filter as points once zoomed in.
  */
 export function CellMap({
   className,
   selectedCells,
   onToggleCell,
+  view,
+  onViewChange,
+  leadCells,
+  leadMinScore,
   onViewport,
   points,
   onPointClick,
@@ -59,6 +69,10 @@ export function CellMap({
   className?: string
   selectedCells?: string[]
   onToggleCell?: (h3: string, additive: boolean) => void
+  view?: View
+  onViewChange?: (view: View) => void
+  leadCells?: string[] | null // Leads view: the Cells kept; the others dim
+  leadMinScore?: Record<string, number> // county -> its Lead Cells' cutoff, shown on the Leads button
   onViewport?: (bbox: string, zoom: number) => void
   points?: { type: "FeatureCollection"; features: LeadPoint[] } | null
   onPointClick?: (id: number) => void
@@ -143,11 +157,13 @@ export function CellMap({
   }
 
   const highlighted = [...(controlled ? (selectedCells ?? []) : [selected ?? ""]), hover?.h3 ?? ""]
-  // Clicked Cells narrow the list to themselves, so the others dim too.
-  const focus: ExpressionSpecification[] =
-    controlled && selectedCells?.length
+  // Lead Cells and clicked Cells narrow the list to themselves, so the others dim too.
+  const focus: ExpressionSpecification[] = [
+    ...(controlled && leadCells ? [["in", ["get", "h3"], ["literal", leadCells]] as ExpressionSpecification] : []),
+    ...(controlled && selectedCells?.length
       ? [["in", ["get", "h3"], ["literal", selectedCells]] as ExpressionSpecification]
-      : []
+      : []),
+  ]
   const inFocus: ExpressionSpecification | null = focus.length ? (["all", ...focus] as ExpressionSpecification) : null
 
   return (
@@ -286,6 +302,21 @@ export function CellMap({
             </DropdownMenuContent>
           </DropdownMenu>
         </div>
+
+        {onViewChange && (
+          <div className="absolute top-3 right-12 flex items-center gap-1 rounded-md border bg-background/90 px-2 py-1.5 text-xs shadow-sm">
+            {VIEWS.map((v) => {
+              // The cutoff differs by county; show the one of the market picked on the left.
+              const cutoff = v.key === "leads" ? leadMinScore?.[market] : undefined
+              return (
+                <Button key={v.key} size="sm" variant={view === v.key ? "secondary" : "ghost"} title={v.title} onClick={() => onViewChange(v.key)}>
+                  {v.label}
+                  {cutoff !== undefined && <span className="font-normal text-muted-foreground">(Opportunity Score ≥ {cutoff.toFixed(1)})</span>}
+                </Button>
+              )
+            })}
+          </div>
+        )}
 
         {(status === "zoom-in" || status === "too-many") && (
           <div className="pointer-events-none absolute inset-0 flex items-center justify-center">

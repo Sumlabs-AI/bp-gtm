@@ -8,17 +8,18 @@ from dataclasses import dataclass
 from datetime import datetime
 from functools import cached_property
 
-from sqlalchemy import or_, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
-from app.models import Cell, CellBaselineNeed, CellPropensity
+from app.models import Cell, CellBaselineNeed, CellPropensity, Lead, Property
 from app.need.config import NEED_BANDS, NEED_BANDS_TOP
+from app.need.config import opportunity as opportunity_config
 from app.need.live.forecast_store import active_forecast, most_severe_level
 from app.need.live.grid import grid_live, is_stale, latest_condition
 from app.need.live.store import active_alerts
 from app.need.ml import latest_propensity
-from app.need.opportunity import opportunity_score
-from app.need.timing import timing_by_cell
+from app.need.opportunity import LeadCells, opportunity_score, opportunity_sql, pick_lead_cells
+from app.need.timing import timing_by_cell, timing_sql
 
 
 def latest_propensity_subquery():
@@ -78,6 +79,33 @@ class LiveCells:
     def grid_stress(self) -> set[str]:
         """Reliability stress applies to every Cell, a zone price spike to its zone's Cells."""
         return {h for h, g in grid_live(self.db, self.all, self.now).items() if g["stressSignals"]}
+
+    @cached_property
+    def lead(self) -> dict[str, LeadCells]:
+        return lead_cells(self.db, self.now)
+
+
+def lead_cells(db: Session, now: datetime) -> dict[str, LeadCells]:
+    """county -> its Lead Cells and cutoff at `now` (Timing included), see pick_lead_cells."""
+    propensity = latest_propensity_subquery()
+    timing = timing_sql(db, now)
+    multiplier = func.coalesce(timing.c.multiplier, 1.0) if timing is not None else 1.0
+    score = opportunity_sql(
+        propensity.c.propensity_score, CellBaselineNeed.baseline_need, multiplier
+    )
+    query = (
+        select(Property.county, Property.h3_index, func.count(), score)
+        .select_from(Lead)
+        .join(Property)
+        .outerjoin(CellBaselineNeed, CellBaselineNeed.h3_index == Property.h3_index)
+        .outerjoin(propensity, propensity.c.h3_index == Property.h3_index)
+        .where(Property.h3_index.is_not(None))
+        .group_by(Property.county, Property.h3_index, score)
+    )
+    if timing is not None:
+        query = query.outerjoin(timing, timing.c.h3_index == Property.h3_index)
+    rows = [(c, h, n, float(s) if s is not None else None) for c, h, n, s in db.execute(query)]
+    return pick_lead_cells(rows, opportunity_config.lead_share)
 
 
 def cell_blocks(db: Session, h3s: set[str], now: datetime) -> dict[str, dict]:

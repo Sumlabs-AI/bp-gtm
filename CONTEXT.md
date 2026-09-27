@@ -140,6 +140,10 @@ _Avoid_: priority, expected value
 Per-Cell weighted geometric mean of Propensity (weight 0.6) and Baseline Need (weight 0.4), times Timing. A Cell needs the right homes, a real reason for backup, and ideally a recent storm. It's 0–100 before Timing and up to 150 in a post-storm window. A rank, not a probability. Null when Propensity or Baseline Need is missing. No Eligibility, Installable, Forecast or grid factor yet.
 _Avoid_: priority score, opportunity (unqualified, when meaning the number), expected value
 
+**Lead Cell**:
+One of the highest-Opportunity Cells of a county: taken whole, from the top down, until they hold 0.1% of the county's eligible homes (`lead_share`). Per county, because Baseline Need is a Texas percentile and a single fixed score would leave Austin out. Moves with Timing. The GTM page's **Leads** view shows only these; **Overview** shows every home.
+_Avoid_: hot cell, top cell
+
 ### Leads
 
 **Lead**:
@@ -151,7 +155,7 @@ Per-Lead heuristic fit score (0–100) from weighted drivers such as home size, 
 _Avoid_: propensity, fit score, score (unqualified), using it as a ranking
 
 **GTM page**:
-The home page: the list of Leads is the product, the map is the lens. Every Lead joins its Cell by `h3_index` (the master key; Cell scores are never copied onto Leads). The map's viewport, legend bands, clicked Cells and live-signal chips all filter the one list.
+The home page: the list of Leads is the product, the map is the lens. Every Lead joins its Cell by `h3_index` (the master key; Cell scores are never copied onto Leads). The map's Leads/Overview toggle (Lead Cells only, or every home), viewport, clicked Cells and live-signal chips all filter the one list.
 _Avoid_: dashboard, leads map (when meaning this page)
 
 **Lead Evidence**:

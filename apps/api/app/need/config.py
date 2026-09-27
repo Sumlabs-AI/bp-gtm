@@ -196,6 +196,10 @@ class OpportunityConfig(BaseModel):
     # needed it is. Must sum to 1 so the score stays on 0-100.
     propensity_weight: float = 0.6
     need_weight: float = 0.4
+    # Lead Cells: the highest-Opportunity Cells of each county, whole Cells, until they hold
+    # this share of the county's eligible homes (0.1% gives ~900 in Harris + Travis).
+    # Per county because Baseline Need is a Texas percentile: one fixed score leaves Austin out.
+    lead_share: float = 0.001
 
 
 opportunity = OpportunityConfig()
