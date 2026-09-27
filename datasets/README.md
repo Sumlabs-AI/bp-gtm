@@ -8,10 +8,10 @@
 ## Download
 
 The files are attached to the release, not committed (about 260 MB):
-https://github.com/mamalovesyou/bp-gtm/releases/tag/datasets-v1
+https://github.com/Sumlabs-AI/bp-gtm/releases/tag/datasets-v1
 
 ```bash
-gh release download datasets-v1 -R mamalovesyou/bp-gtm -D datasets/files
+gh release download datasets-v1 -R Sumlabs-AI/bp-gtm -D datasets/files
 ```
 
 Data-map layers for GTM: **Fit** (Census ACS, every Texas block group), **Need** (HHS emPOWER
