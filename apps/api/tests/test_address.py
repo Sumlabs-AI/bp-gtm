@@ -11,6 +11,7 @@ from app.leads.address import address_key, zip5
         ("1200 N. Oak St.", 77002),
         ("1200 n oak st apt 4", "77002"),
         ("1200 N OAK ST # 4", "770021234"),
+        ("01200     N     OAK      ST", "770021234"),  # Oncor's ESI ID extract layout
     ],
 )
 def test_variants_share_a_key(street, zip_code):
@@ -36,6 +37,10 @@ def test_parkway_spellings_match():
     assert address_key("14006 BRIARHILLS PKY", "77077") == address_key(
         "14006 Briarhills Parkway", "77077"
     )
+
+
+def test_house_number_zero_is_kept():
+    assert address_key("0 OAKSHIRE DR", "77027") == "0 OAKSHIRE DR 77027"
 
 
 def test_zip5():

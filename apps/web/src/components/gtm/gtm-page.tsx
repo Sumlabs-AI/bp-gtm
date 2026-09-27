@@ -9,21 +9,18 @@ import { Button } from "@/components/ui/button"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { apiFetch } from "@/lib/api"
 import { scoreColor } from "@/lib/grid"
-import { countyName, formatLeadMoney, type LeadItem, type LeadPage } from "@/lib/leads"
-import { NEED_BANDS } from "@/lib/need"
+import { countyName, type LeadItem, type LeadPage } from "@/lib/leads"
 
 const PAGE_SIZE = 50
 const POINTS_MIN_ZOOM = 13
 const SORTS = [
-  { key: "need", label: "Need, then use" },
-  { key: "priority", label: "Expected Value" },
+  { key: "opportunity", label: "Opportunity, then use" },
   { key: "consumption", label: "Estimated use" },
   { key: "triggered_at", label: "Newest signal" },
 ] as const
 type Sort = (typeof SORTS)[number]["key"]
 
 type Filters = {
-  bands: string[]
   cells: string[]
   alert: boolean
   forecast: boolean
@@ -31,7 +28,7 @@ type Filters = {
   newOnly: boolean
   sort: Sort
 }
-const EMPTY: Filters = { bands: [], cells: [], alert: false, forecast: false, gridStress: false, newOnly: false, sort: "need" }
+const EMPTY: Filters = { cells: [], alert: false, forecast: false, gridStress: false, newOnly: false, sort: "opportunity" }
 
 type Points = { type: "FeatureCollection"; features: LeadPoint[]; aggregated?: boolean }
 
@@ -39,7 +36,6 @@ function params(f: Filters, bbox: string | null, extra: Record<string, string> =
   const p = new URLSearchParams(extra)
   if (bbox && !f.cells.length) p.set("bbox", bbox) // clicked Cells define the area themselves
   f.cells.forEach((c) => p.append("cells", c))
-  f.bands.forEach((b) => p.append("need_band", b))
   if (f.alert) p.set("alert", "true")
   if (f.forecast) p.set("forecast", "true")
   if (f.gridStress) p.set("grid_stress", "true")
@@ -119,7 +115,6 @@ export function GtmPage({ initialLead = null }: { initialLead?: number | null })
 
   const chips: { key: string; label: string; clear: () => void }[] = []
   if (filters.cells.length) chips.push({ key: "cells", label: `${filters.cells.length} Cell${filters.cells.length > 1 ? "s" : ""} selected`, clear: () => update({ cells: [] }) })
-  filters.bands.forEach((b) => chips.push({ key: `band:${b}`, label: `Need ${NEED_BANDS.find((x) => x.key === b)?.label}`, clear: () => update({ bands: filters.bands.filter((x) => x !== b) }) }))
   if (filters.alert) chips.push({ key: "alert", label: "Active NWS alert", clear: () => update({ alert: false }) })
   if (filters.forecast) chips.push({ key: "forecast", label: "Forecast risk 48 h", clear: () => update({ forecast: false }) })
   if (filters.gridStress) chips.push({ key: "grid", label: "ERCOT grid stress", clear: () => update({ gridStress: false }) })
@@ -174,8 +169,6 @@ export function GtmPage({ initialLead = null }: { initialLead?: number | null })
             className="h-full p-2"
             selectedCells={filters.cells}
             onToggleCell={(h3, additive) => update({ cells: additive ? toggleIn(filters.cells, h3) : filters.cells.length === 1 && filters.cells[0] === h3 ? [] : [h3] })}
-            bands={filters.bands}
-            onToggleBand={(b) => update({ bands: toggleIn(filters.bands, b) })}
             onViewport={(box, z) => {
               setZoom(z)
               setBbox((prev) => (prev === box ? prev : box))
@@ -207,18 +200,16 @@ export function GtmPage({ initialLead = null }: { initialLead?: number | null })
           <div className="min-h-0 flex-1 overflow-y-auto">
             {page && page.items.length === 0 && !loading ? (
               <p className="p-6 text-sm text-muted-foreground">
-                No leads in this view. Leads are loaded for Harris County (Houston) only; pan there or clear a filter.
+                No leads in this view. Leads are loaded for Harris County (Houston) and Austin Energy homes in Travis County (Austin); pan there or clear a filter.
               </p>
             ) : (
               <Table>
                 <TableHeader>
                   <TableRow className="text-xs">
                     <TableHead>Home</TableHead>
-                    <TableHead className="text-right" title="Baseline Need of the home's Cell (Texas percentile)">Need</TableHead>
-                    <TableHead className="text-right" title="ML propensity of the home's Cell (when imported)">Prop.</TableHead>
+                    <TableHead className="text-right" title="How promising this home's area is, 0–100: likely buyers, backup-power need, and a boost right after a storm">Opportunity</TableHead>
                     <TableHead>Now</TableHead>
                     <TableHead className="text-right" title="Estimated electricity use, kWh per year">Use</TableHead>
-                    <TableHead className="text-right" title="Expected Value, $ per year">EV</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -247,11 +238,9 @@ export function GtmPage({ initialLead = null }: { initialLead?: number | null })
                           </div>
                         </div>
                       </TableCell>
-                      <TableCell className="text-right"><Score value={lead.cell?.baseline_need} /></TableCell>
-                      <TableCell className="text-right"><Score value={lead.cell?.propensity_score} /></TableCell>
+                      <TableCell className="text-right"><Score value={lead.cell?.opportunity_score} /></TableCell>
                       <TableCell><LiveFlags lead={lead} /></TableCell>
                       <TableCell className="text-right tabular-nums">{lead.annual_kwh ? Math.round(lead.annual_kwh).toLocaleString("en-US") : "—"}</TableCell>
-                      <TableCell className="text-right tabular-nums">{lead.expected_value !== null ? formatLeadMoney(lead.expected_value) : "—"}</TableCell>
                     </TableRow>
                   ))}
                 </TableBody>

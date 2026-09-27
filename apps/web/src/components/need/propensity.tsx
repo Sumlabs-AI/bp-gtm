@@ -10,8 +10,8 @@ export function PropensityBlock({ propensity }: { propensity: Propensity | null 
       </div>
       <p className="text-xs text-muted-foreground">
         Likelihood of battery adoption here, predicted by the ML propensity model from permit
-        history and static Need features. Not Need, not Opportunity: shown beside Baseline Need,
-        not combined with it.
+        history and home values, ranked within the metro. Not Need: combined with Baseline Need
+        only in the Opportunity Score.
       </p>
       {propensity ? (
         <dl className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs">

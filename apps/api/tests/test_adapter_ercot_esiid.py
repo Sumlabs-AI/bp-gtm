@@ -1,5 +1,7 @@
 """Offline tests using trimmed, anonymized ERCOT CenterPoint ZIPs."""
 
+import io
+import zipfile
 from pathlib import Path
 
 import httpx
@@ -55,6 +57,8 @@ def test_fingerprint_uses_current_full_and_every_later_daily(monkeypatch) -> Non
         _document("4", "2026-09-24T05:47:40-05:00", "CENTERPOINT__DAILY"),
         _document("1", "2026-08-04T18:11:58-05:00", "CENTERPOINT__FUL"),
         _document("6", "2026-09-25T05:58:32-05:00", "ONCOR_ELEC___DAILY"),
+        _document("7", "2026-09-07T18:11:39-05:00", "ONCOR_ELEC___FUL"),
+        _document("8", "2026-09-07T18:11:39-05:00", "AEP_NORTH____FUL"),
     ]
 
     def listing(url: str, **kwargs) -> httpx.Response:
@@ -71,7 +75,7 @@ def test_fingerprint_uses_current_full_and_every_later_daily(monkeypatch) -> Non
         )
 
     monkeypatch.setattr(ercot_esiid.httpx, "get", listing)
-    assert ercot_esiid.fingerprint() == "3,4,5"
+    assert ercot_esiid.fingerprint() == "7,3,4,5,6"
 
 
 def test_fetch_saves_metadata_and_reuses_downloads(monkeypatch, tmp_path: Path) -> None:
@@ -101,3 +105,22 @@ def test_fetch_saves_metadata_and_reuses_downloads(monkeypatch, tmp_path: Path) 
     assert requested == ["1271779092", "1278757464"]
     assert ercot_esiid.fetch(tmp_path) == paths
     assert requested == ["1271779092", "1278757464"]
+
+
+def test_parse_keeps_oncor_and_drops_other_tdsps(tmp_path: Path) -> None:
+    rows = (
+        '"9990000000000000000101","01718     OAK                         ST",,"PFLUGERVILLE",'
+        '"TX","786601234","TRAVIS","1039940674000","13","Active","Residential"\n'
+        '"9990000000000000000102","5 FAKE ST",,"ABILENE","TX","79601","TAYLOR","007923311",'
+        '"13","Active","Residential"\n'
+    )
+    path = tmp_path / "7_20260907T181139-0500_ONCOR_ELEC___FUL.zip"
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(buffer, "w") as archive:
+        archive.writestr("oncor.csv", rows)
+    path.write_bytes(buffer.getvalue())
+
+    frame = ercot_esiid.parse([path])
+    assert frame["esiid"].tolist() == ["9990000000000000000101"]
+    assert frame.loc[0, "tdsp"] == "oncor"
+    assert frame.loc[0, "county"] == "travis"

@@ -86,6 +86,7 @@ def normalize_street(street: str | None) -> str | None:
     # Must start with a house number (allow e.g. "123A").
     if not out or not re.match(r"^\d+[A-Z]?$", out[0]):
         return None
+    out[0] = out[0].lstrip("0") or "0"  # Oncor zero-pads house numbers: "01718" is "1718"
     return " ".join(out)
 
 

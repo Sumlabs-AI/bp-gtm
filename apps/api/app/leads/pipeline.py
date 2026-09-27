@@ -26,6 +26,9 @@ SOURCES: dict[str, tuple[str, str]] = {
     "ercot_esiid": ("app.leads.adapters.ercot_esiid", "meter"),
     "harris_permits": ("app.leads.adapters.harris_permits", "permit"),
     "houston_permits": ("app.leads.adapters.houston_permits", "permit"),
+    "tcad": ("app.leads.adapters.tcad", "property"),
+    "tcad_parcels": ("app.leads.adapters.tcad_parcels", "location"),  # after tcad
+    "austin_permits": ("app.leads.adapters.austin_permits", "permit"),
 }
 
 # Refuse to load a refresh that shrinks a source by more than this share: it usually means

@@ -14,6 +14,21 @@ pnpm down        # docker compose down
 docker compose down -v   # also wipe the database volume
 ```
 
+## Data snapshot (real scores out of the box)
+
+The product only reads Postgres. The computed data it shows (Cells with Baseline Need and Propensity, Houston + Austin leads and their homes, grid values) is committed in `apps/api/snapshot/` (~100 MB of gzipped CSV, every file far under GitHub's 100 MB limit). On `pnpm up`, the api container loads it **when the database has no leads yet** (`python -m app.snapshot load`, ~35 s), so a fresh clone needs nothing else:
+
+```bash
+git clone … && cd bp-gtm && pnpm up    # http://localhost:3000/gtm
+```
+
+- Not in it: owner names and mailing addresses; the ERCOT meters and raw grid prices (inputs to re-scoring); live data (NWS alerts, forecasts, ERCOT condition), which the worker fetches once running.
+- It records its Alembic revision; after a migration, the load is skipped until the snapshot is re-exported.
+- Replace existing data with it: `docker compose exec api python -m app.snapshot load --force`.
+- Refresh it after re-running the pipelines: `pnpm snapshot:export`, then commit `apps/api/snapshot/`. Every export adds ~100 MB to git history: refresh rarely.
+
+Everything below rebuilds the same data from the public sources instead (hours, ~15 GB of downloads).
+
 ## Load grid data
 
 A fresh database has no prices, so `/grid` is empty. Load and score them (details in [grid-economics.md](grid-economics.md)):
@@ -31,7 +46,8 @@ docker compose exec api python -m app.need outage download   # optional: ~6 GB, 
 docker compose exec api python -m app.need outage compute    # Outage Need colours on /need
 docker compose exec api python -m app.need weather download  # optional: ~60 MB warnings + temperature
 docker compose exec api python -m app.need weather compute   # Weather Need colours on /need
-docker compose exec api python -m app.need baseline compute  # Baseline Need (default colour on /need)
+docker compose exec api python -m app.need baseline compute  # Baseline Need
+cd apps/api && uv run python -m app.need import-propensity ../../ml/output/propensity.parquet && cd -  # Propensity -> Opportunity Score (default colour on /need)
 docker compose exec api python -m app.need live refresh      # live NWS alerts now (the worker repeats every 5 min)
 docker compose exec api python -m app.need live forecast     # 48 h forecast signals (the worker repeats hourly)
 ```

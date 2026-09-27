@@ -19,6 +19,9 @@ export type CellFeature = {
     needScore: number | null
     baselineNeed: number | null
     propensityScore: number | null
+    opportunityScore: number | null
+    timingMultiplier: number
+    timingPhase: Timing["phase"]
     outageNeed: number | null
     weatherNeed: number | null
     activeAlerts: number
@@ -49,6 +52,8 @@ export type CellDetail = {
   needScore: number | null
   baseline: BaselineNeed | null
   propensity: Propensity | null
+  opportunity: Opportunity
+  timing: Timing
   components: { outage?: OutageComponent; weather?: WeatherComponent }
   live: { weather: { alerts: AlertFeed; forecast: ForecastFeed }; grid: LiveGrid }
 }
@@ -118,14 +123,29 @@ export type OutageComponent = {
   notes: string[]
 }
 
-// Map colouring: which Need Component shades the Cells.
-export type ColorBy = "baselineNeed" | "propensityScore" | "outageNeed" | "weatherNeed"
-export const COLOR_BY: { key: ColorBy; label: string }[] = [
-  { key: "baselineNeed", label: "Baseline Need" },
-  { key: "propensityScore", label: "Propensity" },
-  { key: "outageNeed", label: "Outage Need" },
-  { key: "weatherNeed", label: "Weather Need" },
-]
+// Timing: when to knock. Highest in the weeks after a storm warning ended over the Cell.
+export type Timing = {
+  multiplier: number
+  phase: "none" | "pre_event" | "peak" | "fading"
+  event: string | null
+  endsAt: string | null
+  daysSince: number | null
+  major: boolean
+  method: string
+  limitations: string[]
+}
+
+// Opportunity Score: Propensity x Baseline Need (base, 0-100) x Timing (1.0-1.5); null when
+// Propensity or Baseline Need is missing. Up to 150 in the weeks after a storm.
+export type Opportunity = {
+  score: number | null
+  baseScore: number | null
+  propensity: number | null
+  baselineNeed: number | null
+  timing: number
+  method: string
+  limitations: string[]
+}
 
 // Weather Need Component (Baseline): Storm Exposure from the Cell's res-6 parent (~36 km²)
 // and Temperature Extremes Exposure from its county, each a Texas percentile.
@@ -248,12 +268,3 @@ export type Propensity = {
   scoredAt: string
   importedAt: string
 }
-
-// Baseline Need bands: the map legend and the lead filter share them (mirrors NEED_BANDS in
-// the API config). Lower edge inclusive, upper exclusive, except the top band, which includes 100.
-export const NEED_BANDS: { key: string; label: string; low: number; high: number; top?: true }[] = [
-  { key: "0-40", label: "0–40", low: 0, high: 40 },
-  { key: "40-60", label: "40–60", low: 40, high: 60 },
-  { key: "60-80", label: "60–80", low: 60, high: 80 },
-  { key: "80-100", label: "80–100", low: 80, high: 100, top: true },
-]

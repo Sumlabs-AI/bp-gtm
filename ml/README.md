@@ -36,6 +36,7 @@ cp .env.example .env   # then set TYPESAFE_API_KEY
 | `train/model.py` | Propensity v1: LightGBM Poisson, per-city offset, spatial / temporal / leave-one-city-out evaluation |
 | `train/homes.py` | Home-level test: per-home appraised value vs block-group home value vs LightGBM on parcel features |
 | `score/homes.py` | Home propensity score for every owner-occupied single-family parcel (22 counties) + H3 res-8 cell layer |
+| `score/export_propensity.py` | Harris + Travis H3 cells → `output/propensity.parquet` (committed) for the Need Engine import (`wiki/ml-contract.md`), where it feeds the Opportunity Score |
 | `train/baselines.py` | Income / home value / past-installs baselines, scored within city on 2024-2025 installs |
 | `docs/typesafe/` | Jev docs snapshot (SDK, primitives, confidence, jev-1.13 limits) |
 | `data/` | Git-ignored. `raw/` downloads, `interim/` normalized tables, `gold/` labels, `processed/` outputs |
@@ -72,6 +73,7 @@ uv run python -m train.baselines
 uv run python -m train.model         # ~35 s -> data/processed/model_v1*.txt, train_bg_oof.parquet
 uv run python -m train.homes         # ~40 s -> data/processed/train_home.parquet
 uv run python -m score.homes         # ~20 s -> data/processed/home_scores.parquet, h3_scores.parquet
+uv run python -m score.export_propensity   # -> output/propensity.parquet (committed; then app.need import-propensity)
 ```
 
 LightGBM on macOS needs OpenMP: `brew install libomp`.

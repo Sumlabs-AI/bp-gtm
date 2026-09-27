@@ -1,10 +1,12 @@
 """Turn properties + meters + permits into scored, explained leads.
 
 Eligibility (all required): single-family, homestead (owner-occupied), not confidential,
-and the address matches an active residential meter on a TDSP Base serves.
+and the address matches an active residential meter on a TDSP Base serves, or the parcel lies
+in a partner utility's load zone (PARTNER_UTILITY_ZONES: Austin Energy).
 
-Drivers are 0-100: home size and value are percentiles among eligible homes; the other
-drivers are yes/no signals (100 or 0). Score = weighted average (weights in config.py).
+Drivers are 0-100: home size and value are percentiles among eligible homes of the same
+county; the other drivers are yes/no signals (100 or 0). Score = weighted average (weights in
+config.py) over the drivers known for the home (cfg.unknown_drivers).
 """
 
 from dataclasses import dataclass
@@ -15,7 +17,8 @@ from sqlalchemy import and_, case, or_, text
 from sqlalchemy.dialects.postgresql import insert
 
 from app.db import engine
-from app.leads.config import BASE_TDSPS, LeadScoringConfig
+from app.grid.zones import zone_for_points
+from app.leads.config import BASE_TDSPS, PARTNER_UTILITY_ZONES, LeadScoringConfig
 from app.leads.consumption import electric_heat_prob, estimate, load_model
 from app.leads.value import assign_zones, recommend_battery, zone_battery_values
 from app.models import Lead
@@ -67,7 +70,7 @@ def score_leads(now: datetime, cfg: LeadScoringConfig, baseline: bool = False) -
 
     homes = _read(
         """
-        SELECT id AS property_id, address_key, market_value, heated_sqft, year_built,
+        SELECT id AS property_id, county, address_key, market_value, heated_sqft, year_built,
                owner_changed_at, has_solar, has_pool, lat, lon, bedrooms, stories
         FROM properties
         WHERE is_single_family AND homestead AND NOT confidential AND address_key IS NOT NULL
@@ -76,8 +79,11 @@ def score_leads(now: datetime, cfg: LeadScoringConfig, baseline: bool = False) -
     meters = _read(
         """
         SELECT DISTINCT ON (address_key) address_key, esiid, tdsp, first_seen_at,
-               first_seen_at > (SELECT min(first_seen_at) FROM meters) AS is_new
+               first_seen_at > b.baseline AS is_new
         FROM meters
+        -- Per TDSP, so a utility's first load isn't "new meters since baseline".
+        JOIN (SELECT tdsp, min(first_seen_at) AS baseline FROM meters GROUP BY tdsp) b
+          USING (tdsp)
         WHERE tdsp = ANY(:tdsps) AND premise_type = 'residential' AND status = 'active'
           AND address_key IS NOT NULL
         ORDER BY address_key, first_seen_at
@@ -98,7 +104,11 @@ def score_leads(now: datetime, cfg: LeadScoringConfig, baseline: bool = False) -
     )
     existing = _read("SELECT property_id, first_seen_at, status FROM leads")
 
-    eligible = homes.merge(meters, on="address_key", how="inner")
+    eligible = pd.concat(
+        [homes.merge(meters, on="address_key", how="inner"), _partner_homes(homes, meters)],
+        ignore_index=True,
+    )
+    eligible["is_new"] = eligible["is_new"].astype(bool)
     summary = {"candidates": len(homes), "eligible": len(eligible)}
     if eligible.empty:
         with engine.begin() as conn:
@@ -107,8 +117,10 @@ def score_leads(now: datetime, cfg: LeadScoringConfig, baseline: bool = False) -
 
     # Percentile drivers.
     drivers = pd.DataFrame(index=eligible.index)
-    drivers["home_size"] = eligible["heated_sqft"].rank(pct=True).fillna(0) * 100
-    drivers["home_value"] = eligible["market_value"].rank(pct=True).fillna(0) * 100
+    # Ranked within the county: appraisal levels and records differ between districts.
+    by_county = eligible.groupby("county")
+    drivers["home_size"] = by_county["heated_sqft"].rank(pct=True).fillna(0) * 100
+    drivers["home_value"] = by_county["market_value"].rank(pct=True).fillna(0) * 100
 
     by_key = permits.groupby("address_key")
     has = {cat: set(permits.loc[permits.category == cat, "address_key"]) for cat in PERMIT_SIGNALS}
@@ -122,8 +134,9 @@ def score_leads(now: datetime, cfg: LeadScoringConfig, baseline: bool = False) -
     owner_changed = pd.to_datetime(eligible["owner_changed_at"], utc=True)
     drivers["new_owner"] = (owner_changed >= since).fillna(False) * 100.0
 
-    total = sum(cfg.weights.values())
-    eligible["score"] = sum(drivers[k] * w for k, w in cfg.weights.items()) / total
+    known = _known_drivers(eligible, cfg)
+    weights = pd.DataFrame({k: known[k] * w for k, w in cfg.weights.items()})
+    eligible["score"] = (drivers[list(cfg.weights)] * weights).sum(axis=1) / weights.sum(axis=1)
     eligible["load_zone"] = assign_zones(eligible)
     battery_values = zone_battery_values()
     usage = _consumption(eligible)
@@ -219,6 +232,7 @@ def score_leads(now: datetime, cfg: LeadScoringConfig, baseline: bool = False) -
                 "drivers": {
                     k: {"score": scores[k], "value": _driver_value(k, home, scores)}
                     for k in cfg.weights
+                    if known.at[i, k]
                 },
                 "signals": signals,
                 "reasons": reasons(scores, cfg.weights),
@@ -233,6 +247,26 @@ def score_leads(now: datetime, cfg: LeadScoringConfig, baseline: bool = False) -
     window = now - timedelta(days=cfg.new_window_days)
     new = sum(1 for r in rows if r["triggered_at"] is not None and r["triggered_at"] >= window)
     return summary | {"new": new}
+
+
+def _partner_homes(homes: pd.DataFrame, meters: pd.DataFrame) -> pd.DataFrame:
+    """Homes without a matched meter whose parcel lies in a partner utility's zone
+    (PARTNER_UTILITY_ZONES): eligible with that utility, no ESI ID."""
+    rest = homes[~homes["address_key"].isin(meters["address_key"]) & homes["lat"].notna()]
+    zone = zone_for_points(rest["lat"], rest["lon"])
+    partner = rest.assign(tdsp=zone.map(PARTNER_UTILITY_ZONES))
+    partner = partner[partner["tdsp"].notna()]
+    return partner.assign(esiid=None, first_seen_at=pd.NaT, is_new=False)
+
+
+def _known_drivers(homes: pd.DataFrame, cfg: LeadScoringConfig) -> pd.DataFrame:
+    """True where a driver can be scored for the home (see cfg.unknown_drivers)."""
+    known = pd.DataFrame(True, index=homes.index, columns=list(cfg.weights))
+    for county, keys in cfg.unknown_drivers.items():
+        for key in keys & set(cfg.weights):
+            known.loc[homes["county"] == county, key] = False
+    known["home_size"] &= homes["heated_sqft"].notna()
+    return known
 
 
 def _consumption(homes: pd.DataFrame) -> dict:

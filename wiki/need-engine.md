@@ -2,11 +2,12 @@
 
 Scores **how useful backup power is** in a place, per **Cell** (H3 resolution-8 hexagon, ~0.74 km²). It is separate from lead scoring and from the ML Propensity Score, which join onto the same Cells by `h3_index`. Terms: [`CONTEXT.md`](../CONTEXT.md). Why PostGIS: [ADR 0001](../docs/adr/0001-postgis.md).
 
-Status: **Milestones 1–6**. Cells exist for Harris and Travis counties, each with its ERCOT Load Zone and county.
+Status: **Milestones 1–7**. Cells exist for Harris and Travis counties, each with its ERCOT Load Zone and county.
 - **Baseline Need** (M6) combines the Baseline Outage and Weather Need Components.
 - **Live** signals are observed, not scored: weather (official NWS Alerts vs derived Forecast Signals) and grid (official ERCOT Grid Condition vs derived Grid Stress Signals).
 - **ML contract** (M7): `export-ml` writes the static features (res 8 + res-6 reference) and `import-propensity` loads the ML workstream's Propensity Scores; see [ml-contract.md](ml-contract.md).
-- `needScore` stays null until Live Need scoring exists. Baseline Need is **not** Propensity and **not** the GTM Opportunity; Propensity is shown beside it, never combined here.
+- **Opportunity Score**: Propensity and Baseline Need combined per Cell (`app/need/opportunity.py`), computed on read; see [ml-contract.md](ml-contract.md#opportunity-score).
+- `needScore` stays null until Live Need scoring exists. Baseline Need is **not** Propensity; the two meet only in the Opportunity Score.
 
 ## The Cell contract (shared with ML)
 
@@ -191,6 +192,37 @@ Cell (res 8) ─┬─ res-6 parent ── IEM SV/TO/EW warning-days 5y ── T
   - center rule vs overlap (a box over a Cell corner doesn't count)
   - write failures logged as failed Snapshots
 
+## Timing (post-storm sales window)
+
+"When to knock": the third factor of the Opportunity Score (`Opportunity = 100 × P^0.6 × N^0.4 × Timing`). It moves the map colour, `GET /leads?sort=opportunity` and every Opportunity panel. Code: `app/need/timing.py`. Settings: `TimingConfig` in `app/need/config.py`.
+
+- **Why after the storm, not before it.** In Austin and San Antonio, backup permits (generators + batteries, Base's own removed, by application month) show this pattern:
+  - **Uri (Feb 2021):** permits went from 2–5/week to 19 the week after. By March they were about 7× the 2020 level. They never went back: still 70–110/month in 2022, partly because of generator backorders.
+  - **Feb 2023 ice storm:** permits ran about 2.5× baseline from week 3 to week 8, then faded by April–May.
+  - **Timing of decisions:** buying decisions come 2–4 weeks before the permit, so the sales window is roughly weeks 1–4 after the event.
+  - **Seasonal pattern:** Austin also peaks every Sep–Nov (pre-winter).
+  - **No Houston permits,** so Beryl and the 2024 derecho are unmeasured.
+- **Rule** (the strongest phase wins; one storm's alerts never stack):
+
+  | Phase | When | × |
+  | --- | --- | --- |
+  | `pre_event` | any allowlisted alert in effect, or taking effect within 72 h | 1.1 |
+  | `peak` | 0–28 days after a warning ends (0–56 after a major one) | 1.5 |
+  | `fading` | linear from 1.5 down to 1.0 at day 56 (day 180 for a major one) | 1.5 → 1.0 |
+  | `none` | otherwise | 1.0 |
+
+  - **Warnings that open a window:** Tornado, Severe Thunderstorm, Extreme Wind, Tropical Storm and Hard Freeze.
+  - **Major warnings:** Ice Storm, Winter Storm, Extreme Cold and Hurricane.
+  - **Watches, advisories, plain Freeze and heat alerts** only give the pre-event bump, since nothing may have happened.
+- **Source:** stored `nws_alerts` history (rows are never deleted), so live outage data isn't needed. An alert that NWS cancelled or replaced ends at its `superseded_at`. One superseded before it took effect is ignored. History only goes back to when the poller started.
+- **Scale:** the score before Timing (`baseScore`) is 0–100. With Timing it can reach 150 after a storm. It isn't capped, so the ranking still holds inside a storm area, and the map colour tops out at 100.
+- **Not multipliers:** the Sep–Nov season and ERCOT grid stress hit every Cell alike, so they can't change the ranking. They belong in the talk track instead.
+- **API:**
+  - `GET /need/cells/{h3}` → `opportunity.{score, baseScore, timing}` and `timing = {multiplier, phase, event, endsAt, daysSince, major, method, limitations}`
+  - map features → `opportunityScore` (with Timing), `timingMultiplier`, `timingPhase`
+  - leads → `cell.opportunity_score` (with Timing) and `cell.timing`. `sort=opportunity` joins the Cells with Timing > 1 as a `VALUES` list.
+  - **`GET /need/feed?limit=50`** → only the Cells with Timing > 1, sorted by Opportunity Score (`baseScore` alongside)
+
 ## Forecast Signals (M4B-2, issue #16)
 
 "Is danger building in the next 48 h?", even when no NWS Alert has been issued. **Forecast Signals are our deterministic reading of NWS/SPC data, not NWS alerts.** Data, API and UI keep them apart: `live.weather.forecast` vs `live.weather.alerts`, a dashed amber outline vs solid red, and the heading "Forecast (our reading of NWS/SPC data)". **No score** (M4B-3 will first measure how alerts, SPC and grid signals overlap for the same event, to avoid double counting).
@@ -325,7 +357,7 @@ Measured (M-series laptop, Docker): seeding Harris creates 5,550 Cells in 0.35 s
 
 ## Map (`/need`)
 
-`components/need/cell-map.tsx`. Cells are hidden and not fetched below zoom `H3_MAP_MIN_ZOOM` (9, in `lib/need.ts`). Above that zoom it refetches on `moveend` (300 ms debounce, aborting the previous request). A **Colour by** toggle shades Cells by `outageNeed` or `weatherNeed` (the neutral tint where null). Hovering shows the index. Clicking opens a sheet with the Cell detail: Load Zone, plus the Outage Need and Weather Need breakdowns with raw metrics, sources and "history through" dates. Shared pieces live in `components/need/score-parts.tsx`. The Houston/Austin buttons fly to each Market.
+`components/need/cell-map.tsx`. Cells are hidden and not fetched below zoom `H3_MAP_MIN_ZOOM` (9, in `lib/need.ts`). Above that zoom it refetches on `moveend` (300 ms debounce, aborting the previous request). Cells are shaded by `opportunityScore` (the neutral tint where null). Hovering shows the index. Clicking opens a sheet with the Cell detail: Load Zone, plus the Outage Need and Weather Need breakdowns with raw metrics, sources and "history through" dates. Shared pieces live in `components/need/score-parts.tsx`. The Houston/Austin buttons fly to each Market.
 
 ## Switching an existing database to PostGIS
 

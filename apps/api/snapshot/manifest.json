@@ -1,0 +1,95 @@
+{
+  "tables": {
+    "cells": {
+      "rows": 8715,
+      "files": [
+        "cells.csv.gz"
+      ]
+    },
+    "storm_features": {
+      "rows": 16697,
+      "files": [
+        "storm_features.csv.gz"
+      ]
+    },
+    "county_temperature_features": {
+      "rows": 254,
+      "files": [
+        "county_temperature_features.csv.gz"
+      ]
+    },
+    "county_outage_features": {
+      "rows": 254,
+      "files": [
+        "county_outage_features.csv.gz"
+      ]
+    },
+    "utility_reliability_features": {
+      "rows": 72,
+      "files": [
+        "utility_reliability_features.csv.gz"
+      ]
+    },
+    "baseline_need_references": {
+      "rows": 16697,
+      "files": [
+        "baseline_need_references.csv.gz"
+      ]
+    },
+    "cell_baseline_needs": {
+      "rows": 8715,
+      "files": [
+        "cell_baseline_needs.csv.gz"
+      ]
+    },
+    "propensity_imports": {
+      "rows": 1,
+      "files": [
+        "propensity_imports.csv.gz"
+      ]
+    },
+    "cell_propensities": {
+      "rows": 6609,
+      "files": [
+        "cell_propensities.csv.gz"
+      ]
+    },
+    "grid_zone_metrics": {
+      "rows": 8,
+      "files": [
+        "grid_zone_metrics.csv.gz"
+      ]
+    },
+    "properties": {
+      "rows": 900896,
+      "files": [
+        "properties.0.csv.gz",
+        "properties.1.csv.gz",
+        "properties.2.csv.gz",
+        "properties.3.csv.gz"
+      ]
+    },
+    "permits": {
+      "rows": 42712,
+      "files": [
+        "permits.csv.gz"
+      ]
+    },
+    "leads": {
+      "rows": 900896,
+      "files": [
+        "leads.0.csv.gz",
+        "leads.1.csv.gz",
+        "leads.2.csv.gz",
+        "leads.3.csv.gz"
+      ]
+    },
+    "source_runs": {
+      "rows": 11,
+      "files": [
+        "source_runs.csv.gz"
+      ]
+    }
+  },
+  "alembic_revision": "ce988e3f631f"
+}

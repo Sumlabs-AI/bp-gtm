@@ -1,4 +1,4 @@
-"""Fetch CenterPoint service points from ERCOT MIS TDSP ESI ID Extract (report 203).
+"""Fetch CenterPoint and Oncor service points from ERCOT MIS TDSP ESI ID Extract (report 203).
 
 ERCOT publishes a monthly full ZIP and daily change ZIPs. Each contains a
 headerless, 22-column CSV described by the TDSP ESI ID Extract layout.
@@ -19,15 +19,19 @@ _MIS_LIST = "https://www.ercot.com/misapp/servlets/IceDocListJsonWS?reportTypeId
 _MIS_DOWNLOAD = "https://www.ercot.com/misdownload/servlets/mirDownload?doclookupId={}"
 _HEADERS = {"User-Agent": "base-power-gtm/0.1"}
 
-# Listing name prefix -> (DUNS in the CSV, canonical TDSP name).
-_TDSPS = {"CENTERPOINT": ("957877905", "centerpoint")}
+# Listing name prefix (padded with "_", then FUL/DAILY) -> (DUNS in the CSV, canonical TDSP name).
+# Oncor serves most of Travis outside Austin Energy (e.g. Pflugerville, Manor).
+_TDSPS = {
+    "CENTERPOINT__": ("957877905", "centerpoint"),
+    "ONCOR_ELEC___": ("1039940674000", "oncor"),
+}
 _CSV_COLUMNS = [0, 1, 2, 3, 5, 6, 7, 9, 10]
 
 
 def _documents() -> list[dict[str, str]]:
     response = httpx.get(_MIS_LIST, headers=_HEADERS, timeout=60)
     response.raise_for_status()
-    names = {f"{prefix}__{kind}" for prefix in _TDSPS for kind in ("FUL", "DAILY")}
+    names = {f"{prefix}{kind}" for prefix in _TDSPS for kind in ("FUL", "DAILY")}
     return [
         item["Document"]
         for item in response.json()["ListDocsByRptTypeRes"]["DocumentList"]
@@ -43,14 +47,14 @@ def _current_documents() -> list[dict[str, str]]:
     documents = _documents()
     selected = []
     for prefix in _TDSPS:
-        fulls = [d for d in documents if d["FriendlyName"] == f"{prefix}__FUL"]
+        fulls = [d for d in documents if d["FriendlyName"] == f"{prefix}FUL"]
         if not fulls:
             raise ValueError(f"No current {prefix} monthly full file in ERCOT MIS")
         full = max(fulls, key=_document_key)
         daily = [
             d
             for d in documents
-            if d["FriendlyName"] == f"{prefix}__DAILY"
+            if d["FriendlyName"] == f"{prefix}DAILY"
             and _document_key(d)[0] > _document_key(full)[0]
         ]
         selected.extend([full, *daily])
@@ -58,7 +62,7 @@ def _current_documents() -> list[dict[str, str]]:
 
 
 def fingerprint() -> str:
-    """Return the DocIDs in the current full-plus-daily CenterPoint snapshot."""
+    """Return the DocIDs in the current full-plus-daily snapshot of every TDSP."""
     return ",".join(document["DocID"] for document in _current_documents())
 
 
