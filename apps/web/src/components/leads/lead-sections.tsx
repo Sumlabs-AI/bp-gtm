@@ -45,7 +45,9 @@ export function AddressCard({ lead }: { lead: LeadDetail }) {
             </p>
           </div>
         </div>
-        <div className="flex flex-wrap items-center gap-1.5 text-xs">
+        {/* pl-6 = the pin icon plus its gap, so the tags line up with the address text. */}
+        <div className="flex flex-wrap items-center gap-1.5 pl-6 text-xs">
+          {lead.load_zone && <Badge variant="outline" className="font-mono">{lead.load_zone}</Badge>}
           {lead.trigger && <Badge variant="secondary">Latest signal: {signalLabel(lead.trigger)}</Badge>}
           {lead.trigger && lead.triggered_at && <span className="text-muted-foreground">detected {formatDate(lead.triggered_at)}</span>}
         </div>
