@@ -13,7 +13,8 @@ apps/web/src/
 │   ├── globals.css        Theme tokens (light/dark)
 │   └── (dashboard)/       Route group — every page inside gets the app shell
 │       ├── layout.tsx     SidebarProvider + AppSidebar + SiteHeader
-│       ├── leads/         Leads list + map (home: "/" redirects here), [id] detail
+│       ├── gtm/           GTM page (home: "/" redirects here): leads ranked by Cell, the map as the filter
+│       ├── leads/[id]/    The full lead page (/leads itself redirects to /gtm)
 │       ├── grid/          Grid Zones: page.tsx (map + ranking), [zone]/page.tsx (detail)
 │       └── data/          Data sources (Operations)
 │       (each has loading.tsx / error.tsx; leads/[id] also not-found.tsx)
@@ -21,8 +22,10 @@ apps/web/src/
 ├── components/
 │   ├── grid/              zone-map (MapLibre), zone-charts (recharts), driver-bars
 │   ├── ui/                shadcn/ui primitives — generated; edit sparingly
-│   ├── leads/             leads-map, status-control, priority-help, lead-return-link
-│   ├── app-sidebar.tsx    Navigation: Leads, Grid Zones; Operations → Data sources
+│   ├── gtm/               gtm-page (filters, list, drawer), lead-drawer
+│   ├── need/              cell-map (MapLibre H3 Cells) and the Need blocks
+│   ├── leads/             status-control, priority-help, lead-return-link, consumption-card
+│   ├── app-sidebar.tsx    Navigation: GTM, Grid Zones; Operations → Data sources
 │   ├── site-header.tsx    Route title / breadcrumb
 │   └── route-error.tsx    Shared error state
 ├── hooks/use-mobile.ts
@@ -34,7 +37,7 @@ apps/web/src/
 
 ## App shell ("Base Radar")
 
-Sales-first: `/` redirects to `/leads` (`next.config.ts`). The sidebar has Leads and Grid Zones, plus Operations → Data sources. The shadcn `dashboard-01` sample content was removed. To add a page inside the shell, create `src/app/(dashboard)/<route>/page.tsx`, add a nav entry in `components/app-sidebar.tsx` and a title in `components/site-header.tsx`. Pages outside the shell (e.g. login) go directly under `src/app/`.
+Sales-first: `/` redirects to `/gtm` (`next.config.ts`). The sidebar has GTM and Grid Zones, plus Operations → Data sources. The shadcn `dashboard-01` sample content was removed. To add a page inside the shell, create `src/app/(dashboard)/<route>/page.tsx`, add a nav entry in `components/app-sidebar.tsx` and a title in `components/site-header.tsx`. Pages outside the shell (e.g. login) go directly under `src/app/`.
 
 UX conventions for leads (agreed in a design review, 2026-09-26):
 - The list opens on the **Unreviewed** queue (`status=new`); "All leads" is `status=all`.
@@ -42,7 +45,7 @@ UX conventions for leads (agreed in a design review, 2026-09-26):
 - Battery values are "Historical grid value to Base", always shown in 25 / 40 / 50 kWh order with the **suggested size** highlighted.
 - Grid value detail uses progressive disclosure (design review with Codex, 2026-09-26): the list, map preview and lead tiles show only the realistic average-year value, always labelled with its basis ("Average year 2019–2025", or "Last 12 months" when history isn't loaded). The lead page's collapsed "Past years and how this is estimated" holds the last 12 months, the lowest/highest full year, the perfect-hindsight ceiling, a year-by-year table (from `GET /grid/zones/{zone}`, optional) and the method. The zone page shows the 25/40/50 estimate vs ceiling and the value-by-year chart by default; panels built on the 39.2 kWh zone battery are labelled "reference battery". Don't present "% of ceiling" as operating performance.
 - Signals: list shows only recorded ones as badges; detail shows Yes/No with "No = not found in available records". Talking points cite the evidence (permit month, appraisal record) and only say "confirm…" for undated appraisal-only flags.
-- Detail links carry a `back` param so returning keeps filters, sort, page and view.
+- "Return to results" on the lead page goes to `/gtm` (the page keeps its own filter state; a `back` param is only honoured when it points at `/gtm`).
 
 ## Grid Zones (`/grid`)
 
@@ -51,19 +54,17 @@ Dollar-led comparison (design review with Codex, 2026-09-26). `/grid` ("Compare 
 - Map: `react-map-gl/maplibre` + OpenFreeMap `positron` basemap (no API key). Zone shapes come from the API (`GET /grid/zones.geojson`, file `apps/api/app/grid/ercot-zones.geojson`), colored client-side with a MapLibre `match` expression from `scoreColor()`.
 - **MapLibre worker gotcha:** MapLibre resolves its worker file relative to its own bundle, which Turbopack doesn't emit (→ 404, blank map). `zone-map.tsx` calls `setWorkerUrl("/maplibre/maplibre-gl-worker.mjs")`, served by `app/maplibre/[file]/route.ts` straight from `node_modules`.
 
-## Leads (`/leads`) and data sources (`/data`)
+## Lead page (`/leads/[id]`) and data sources (`/data`)
 
-`/leads` lists Harris County residential leads with URL-based GET filters (plain `<form method="get">`, no client state) and 50-per-page pagination; `/leads/[id]` shows score drivers, evidence, property facts and a review-status control (`PATCH /leads/{id}` from the browser, then `router.refresh()`). `/data` shows the last refresh of each source from `GET /sources`. `/leads?view=map` (`components/leads/leads-map.tsx`) fetches `GET /leads/geo` for the visible bounds on every move (debounced) with the same filters: points colored by score, or count cells when more than 5,000 leads are in view; `/leads/[id]` shows the home on a small map. Gotcha: `<Layer>`s must be direct children of `<Source>` (or set `source=` explicitly): a Fragment breaks react-map-gl's source injection. Code: `src/app/(dashboard)/{leads,data}`, `src/components/leads/`, `src/lib/leads.ts`. Backend and scoring: [residential-leads.md](residential-leads.md).
+`/leads` redirects to `/gtm` (the old filterable list and its `?view=map` are gone; `GET /leads/geo` now serves the GTM map). `/leads/[id]` shows the home on a small map, Expected Value and battery sizing, evidence, property facts and a review-status control (`PATCH /leads/{id}` from the browser, then `router.refresh()`); the Lead Score ("Fit") and its breakdown are no longer shown (leads rank by their Cell, see below). `/data` shows the last refresh of each source from `GET /sources`. Gotcha: `<Layer>`s must be direct children of `<Source>` (or set `source=` explicitly): a Fragment breaks react-map-gl's source injection. Code: `src/app/(dashboard)/{leads,data}`, `src/components/leads/`, `src/lib/leads.ts`. Backend and scoring: [residential-leads.md](residential-leads.md).
 
 ## GTM page (`/gtm`, the home page)
 
 The list of leads is the product, the map is the lens. `components/gtm/gtm-page.tsx` (client) holds the filters: the map viewport (`bbox`), clicked Cells (`cells`, shift-click adds), Baseline Need legend bands (`need_band`), the live chips (`alert`, `forecast`, `grid_stress`), status and "new this week"; every change refetches `GET /leads` (50 rows, `sort=need` by default) and, at zoom ≥ 13, `GET /leads/geo` for the homes as points inside the same filter. Active filters are removable chips above the list; the summary line comes from the response's `summary`. Clicking a row or a point opens `components/gtm/lead-drawer.tsx`: the home (facts, the consumption card, status control, a link to `/leads/[id]`) plus its Cell's Need breakdown (the same blocks as the Need sheet, from `GET /need/cells/{h3}`).
 
-`components/need/cell-map.tsx` is the same map in *controlled* mode: `selectedCells`/`onToggleCell`, `bands`/`onToggleBand` (dims Cells outside the active bands), `onViewport`, and `points`. Without those props it behaves as before (a Cell click opens the explanatory sheet). `/need` redirects to `/gtm`; `/` redirects to `/gtm`; `/leads` (the full filterable list) stays reachable from the sidebar as "Leads (all)".
+`components/need/cell-map.tsx` is the same map in *controlled* mode: `selectedCells`/`onToggleCell`, `bands`/`onToggleBand` (dims Cells outside the active bands), `onViewport`, and `points`. Without those props it behaves as before (a Cell click opens the explanatory sheet). When Cells are clicked, the viewport (`bbox`) is dropped from the list query: the clicked Cells define the area. Below `H3_MAP_MIN_ZOOM` the map draws no Cells but still reports the viewport, so the list follows the map at every zoom. `/need`, `/leads` and `/` all redirect to `/gtm` (`next.config.ts`, so the redirect is a real 307 and not a streamed meta refresh).
 
-## Need (`/need`)
-
-The H3 Cell map for the Need Engine: `components/need/cell-map.tsx`, types and `H3_MAP_MIN_ZOOM` in `lib/need.ts`. It is a static page, and the client component fetches `GET /need/cells?bbox=` on `moveend` above the minimum zoom. Details: [need-engine.md](need-engine.md).
+The H3 Cell map itself: `components/need/cell-map.tsx`, types and `H3_MAP_MIN_ZOOM` in `lib/need.ts`; it fetches `GET /need/cells?bbox=` on `moveend` above the minimum zoom. Details: [need-engine.md](need-engine.md).
 
 ## Calling the API
 

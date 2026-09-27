@@ -19,6 +19,7 @@ import type { CellDetail } from "@/lib/need"
 export function LeadDrawer({ id, onClose }: { id: number | null; onClose: () => void }) {
   const [lead, setLead] = React.useState<LeadDetail | null>(null)
   const [cell, setCell] = React.useState<CellDetail | null>(null)
+  const [error, setError] = React.useState<{ id: number; message: string } | null>(null)
 
   React.useEffect(() => {
     if (id === null) return
@@ -31,12 +32,15 @@ export function LeadDrawer({ id, onClose }: { id: number | null; onClose: () => 
         }
         setCell(null)
       })
-      .catch(() => {})
+      .catch((e: Error) => {
+        if (!controller.signal.aborted) setError({ id, message: e.message })
+      })
     return () => controller.abort()
   }, [id])
 
   const shown = lead?.id === id ? lead : null
   const shownCell = shown && cell?.h3 === shown.h3_index ? cell : null
+  const failed = error?.id === id ? error.message : null
 
   return (
     <Sheet open={id !== null} onOpenChange={(open) => !open && onClose()}>
@@ -44,7 +48,7 @@ export function LeadDrawer({ id, onClose }: { id: number | null; onClose: () => 
         <SheetHeader>
           <SheetTitle>{shown?.address ?? "Lead"}</SheetTitle>
           <SheetDescription>
-            {shown ? `${shown.city ?? ""} ${shown.zip ?? ""} · ${shown.load_zone ?? "no load zone"}` : "Loading…"}
+            {shown ? `${shown.city ?? ""} ${shown.zip ?? ""} · ${shown.load_zone ?? "no load zone"}` : failed ? "Couldn't load this lead" : "Loading…"}
             {shown && (
               <>
                 {" · "}
@@ -55,6 +59,7 @@ export function LeadDrawer({ id, onClose }: { id: number | null; onClose: () => 
             )}
           </SheetDescription>
         </SheetHeader>
+        {failed && <p className="px-4 text-xs text-destructive">{failed}</p>}
         {shown && (
           <div className="flex flex-col gap-6 overflow-y-auto pb-6">
             <section className="flex flex-col gap-2 px-4 text-sm">
@@ -74,6 +79,15 @@ export function LeadDrawer({ id, onClose }: { id: number | null; onClose: () => 
                 <dt className="text-muted-foreground">Signals</dt>
                 <dd className="text-right">{shown.signals.length ? shown.signals.join(", ") : "—"}</dd>
               </dl>
+              {shown.evidence.length > 0 && (
+                <ul className="flex flex-col gap-1 text-xs text-muted-foreground">
+                  {shown.evidence.map((e, i) => (
+                    <li key={i}>
+                      {e.date ? `${e.date} · ` : ""}{e.detail} <span className="opacity-70">({e.source})</span>
+                    </li>
+                  ))}
+                </ul>
+              )}
               <StatusControl id={shown.id} status={shown.status} />
             </section>
             <ConsumptionCard lead={shown} />
@@ -87,7 +101,7 @@ export function LeadDrawer({ id, onClose }: { id: number | null; onClose: () => 
               </>
             ) : (
               <p className="px-4 text-xs text-muted-foreground">
-                {shown.h3_index ? "Loading the area's Need breakdown…" : "This home is outside every scored area."}
+                {!shown.h3_index ? "This home is outside every scored area." : failed ? "The area's Need breakdown didn't load." : "Loading the area's Need breakdown…"}
               </p>
             )}
           </div>

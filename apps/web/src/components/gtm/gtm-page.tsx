@@ -119,14 +119,14 @@ export function GtmPage() {
     return () => controller.abort()
   }, [filters, bbox, zoom, showPoints])
 
-  const chips: { label: string; clear: () => void }[] = []
-  if (filters.cells.length) chips.push({ label: `${filters.cells.length} Cell${filters.cells.length > 1 ? "s" : ""} selected`, clear: () => update({ cells: [] }) })
-  filters.bands.forEach((b) => chips.push({ label: `Need ${NEED_BANDS.find((x) => x.key === b)?.label}`, clear: () => update({ bands: filters.bands.filter((x) => x !== b) }) }))
-  if (filters.alert) chips.push({ label: "Active NWS alert", clear: () => update({ alert: false }) })
-  if (filters.forecast) chips.push({ label: "Forecast risk 48 h", clear: () => update({ forecast: false }) })
-  if (filters.gridStress) chips.push({ label: "ERCOT grid stress", clear: () => update({ gridStress: false }) })
-  if (filters.newOnly) chips.push({ label: "New this week", clear: () => update({ newOnly: false }) })
-  if (filters.status) chips.push({ label: STATUS_LABELS[filters.status], clear: () => update({ status: "" }) })
+  const chips: { key: string; label: string; clear: () => void }[] = []
+  if (filters.cells.length) chips.push({ key: "cells", label: `${filters.cells.length} Cell${filters.cells.length > 1 ? "s" : ""} selected`, clear: () => update({ cells: [] }) })
+  filters.bands.forEach((b) => chips.push({ key: `band:${b}`, label: `Need ${NEED_BANDS.find((x) => x.key === b)?.label}`, clear: () => update({ bands: filters.bands.filter((x) => x !== b) }) }))
+  if (filters.alert) chips.push({ key: "alert", label: "Active NWS alert", clear: () => update({ alert: false }) })
+  if (filters.forecast) chips.push({ key: "forecast", label: "Forecast risk 48 h", clear: () => update({ forecast: false }) })
+  if (filters.gridStress) chips.push({ key: "grid", label: "ERCOT grid stress", clear: () => update({ gridStress: false }) })
+  if (filters.newOnly) chips.push({ key: "new", label: "New this week", clear: () => update({ newOnly: false }) })
+  if (filters.status) chips.push({ key: "status", label: STATUS_LABELS[filters.status], clear: () => update({ status: "" }) })
 
   const summary = page?.summary
   const total = page?.total ?? 0
@@ -207,7 +207,7 @@ export function GtmPage() {
               <div className="flex w-full flex-wrap gap-1 pt-1">
                 <span className="text-muted-foreground">in view ·</span>
                 {chips.map((c) => (
-                  <button key={c.label} type="button" onClick={c.clear} className="rounded-full border px-2 py-0.5 hover:bg-muted" title="Remove filter">
+                  <button key={c.key} type="button" onClick={c.clear} className="rounded-full border px-2 py-0.5 hover:bg-muted" title="Remove filter">
                     {c.label} ×
                   </button>
                 ))}
@@ -235,7 +235,19 @@ export function GtmPage() {
                 </TableHeader>
                 <TableBody>
                   {page?.items.map((lead) => (
-                    <TableRow key={lead.id} className="cursor-pointer text-xs" onClick={() => setOpenLead(lead.id)}>
+                    <TableRow
+                      key={lead.id}
+                      role="button"
+                      tabIndex={0}
+                      className="cursor-pointer text-xs focus-visible:outline-2 focus-visible:outline-ring"
+                      onClick={() => setOpenLead(lead.id)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" || e.key === " ") {
+                          e.preventDefault()
+                          setOpenLead(lead.id)
+                        }
+                      }}
+                    >
                       <TableCell>
                         <div className="font-medium">{lead.address ?? `Lead ${lead.id}`}</div>
                         <div className="text-muted-foreground">{lead.zip}</div>

@@ -48,15 +48,10 @@ export function formatKwh(value: number): string {
   return `${Math.round(value).toLocaleString("en-US")} kWh`
 }
 
+// Where "Return to results" goes: the GTM page (the ranked list), never an arbitrary URL.
 export function leadReturnHref(value: string | string[] | undefined): string {
   const href = Array.isArray(value) ? value[0] : value
-  if (!href || (href !== "/leads" && !href.startsWith("/leads?"))) return "/leads"
-  const params = new URLSearchParams(href.split("?").slice(1).join("?"))
-  const filters = new URLSearchParams()
-  for (const key of ["status", "min_score", "signals", "new_only", "zip", "zone", "sort", "offset", "view"]) {
-    for (const item of params.getAll(key)) filters.append(key, item)
-  }
-  return `/leads${filters.size ? `?${filters}` : ""}`
+  return href === "/gtm" || href?.startsWith("/gtm?") ? href : "/gtm"
 }
 
 // What a lead's H3 Cell says about it, read from the Need Engine at request time.

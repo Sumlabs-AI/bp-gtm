@@ -16,7 +16,7 @@ import { Separator } from "@/components/ui/separator"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { apiFetch } from "@/lib/api"
 import type { ZoneDetail } from "@/lib/grid"
-import { BATTERY_SIZES, STATUS_LABELS, formatLeadDriverValue, formatLeadMoney, leadReturnHref, signalLabel, valueBasis, type LeadDetail } from "@/lib/leads"
+import { BATTERY_SIZES, STATUS_LABELS, formatLeadMoney, leadReturnHref, signalLabel, valueBasis, type LeadDetail } from "@/lib/leads"
 import { cn } from "@/lib/utils"
 
 const formatNumber = (value: number | null) => value === null ? "—" : Math.round(value).toLocaleString("en-US")
@@ -134,7 +134,6 @@ export default async function LeadDetailPage(props: PageProps<"/leads/[id]">) {
                 <p className="text-3xl font-semibold tabular-nums">
                   {lead.expected_value === null ? "Value unavailable" : `${formatLeadMoney(lead.expected_value)}/yr`}
                 </p>
-                <Badge variant="secondary" className="tabular-nums">Fit {lead.score.toFixed(0)}/100</Badge>
               </div>
               <PriorityHelp />
               <p className="font-medium">{lead.recommended_kwh === null
@@ -286,32 +285,6 @@ export default async function LeadDetailPage(props: PageProps<"/leads/[id]">) {
           </div>
         </div>
 
-        <Card size="sm">
-          <details>
-            <summary className="cursor-pointer px-3 font-medium">Score breakdown <span className="ml-2 text-xs font-normal text-muted-foreground">How fit is calculated</span></summary>
-            <CardContent className="mt-3 flex flex-col gap-3">
-              <p className="text-xs text-muted-foreground">Each driver contributes its score (0–100) multiplied by its weight.</p>
-              <Table>
-                <TableHeader><TableRow>
-                  <TableHead>Driver</TableHead>
-                  <TableHead className="text-right">Weight</TableHead>
-                  <TableHead className="text-right">Points</TableHead>
-                </TableRow></TableHeader>
-                <TableBody>
-                  {lead.drivers.map((driver) => <TableRow key={driver.key}>
-                    <TableCell><span className="font-medium">{driver.label}</span><span className="block text-xs text-muted-foreground">{formatLeadDriverValue(driver)}</span></TableCell>
-                    <TableCell className="text-right tabular-nums">{Math.round(driver.weight * 100)}%</TableCell>
-                    <TableCell className="text-right tabular-nums">{(driver.score * driver.weight).toFixed(1)}</TableCell>
-                  </TableRow>)}
-                  <TableRow>
-                    <TableCell className="font-medium">Fit score</TableCell><TableCell />
-                    <TableCell className="text-right font-medium tabular-nums">{lead.score.toFixed(1)}</TableCell>
-                  </TableRow>
-                </TableBody>
-              </Table>
-            </CardContent>
-          </details>
-        </Card>
 
         <Card size="sm">
           <CardHeader><CardTitle>Evidence &amp; sources</CardTitle></CardHeader>

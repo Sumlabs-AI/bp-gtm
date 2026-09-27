@@ -4,13 +4,15 @@ Cell scores are never copied onto leads: everything here is read at request time
 recomputed Cell or an expired alert shows up on the next request.
 """
 
+from dataclasses import dataclass
 from datetime import datetime
+from functools import cached_property
 
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
 
 from app.models import Cell, CellBaselineNeed
-from app.need.config import NEED_BANDS
+from app.need.config import NEED_BANDS, NEED_BANDS_TOP
 from app.need.live.forecast_store import active_forecast, most_severe_level
 from app.need.live.grid import grid_live, is_stale, latest_condition
 from app.need.live.store import active_alerts
@@ -18,42 +20,55 @@ from app.need.ml import latest_propensity
 
 
 def cells_in_bands(db: Session, bands: list[str]) -> set[str]:
-    """Cells whose Baseline Need falls in any of the named bands."""
-    ranges = [NEED_BANDS[b] for b in bands]
-    result = set()
-    needs = dict(
-        db.execute(select(CellBaselineNeed.h3_index, CellBaselineNeed.baseline_need)).all()
-    )
-    for h3, need in needs.items():
-        if need is not None and any(lo <= need < hi for lo, hi in ranges):
-            result.add(h3)
-    return result
+    """Cells whose Baseline Need falls in any of the named bands (top band includes 100)."""
+    need = CellBaselineNeed.baseline_need
+    ranges = [
+        (need >= lo) & ((need <= hi) if band == NEED_BANDS_TOP else (need < hi))
+        for band, (lo, hi) in ((b, NEED_BANDS[b]) for b in bands)
+    ]
+    return set(db.scalars(select(CellBaselineNeed.h3_index).where(or_(*ranges))))
 
 
-def _all_cells(db: Session) -> list[Cell]:
-    return db.scalars(select(Cell)).all()
+@dataclass(frozen=True)
+class CellRef:
+    """The two Cell attributes the live readers need; loading 8.7k full rows with their
+    PostGIS geometry per request is not."""
+
+    h3_index: str
+    load_zone: str | None
 
 
-def cells_with_alert(db: Session, now: datetime) -> set[str]:
-    cells = _all_cells(db)
-    return {h for h, signals in active_alerts(db, cells, now).items() if signals}
+class LiveCells:
+    """The Cells under each kind of live signal at `now`, each computed at most once per
+    request (the filters and the summary both ask)."""
 
+    def __init__(self, db: Session, now: datetime) -> None:
+        self.db, self.now = db, now
 
-def cells_with_forecast(db: Session, now: datetime) -> set[str]:
-    cells = _all_cells(db)
-    return {h for h, signals in active_forecast(db, cells, now).items() if signals}
+    @cached_property
+    def all(self) -> list[CellRef]:
+        return [CellRef(h, z) for h, z in self.db.execute(select(Cell.h3_index, Cell.load_zone))]
 
+    @cached_property
+    def alert(self) -> set[str]:
+        return {h for h, s in active_alerts(self.db, self.all, self.now).items() if s}
 
-def cells_with_grid_stress(db: Session, now: datetime) -> set[str]:
-    """Reliability stress (reserves / margin) applies to every Cell; a zone price spike to
-    the Cells of that zone. Reuses the live grid module's per-Cell reading."""
-    cells = _all_cells(db)
-    return {h for h, g in grid_live(db, cells, now).items() if g["stressSignals"]}
+    @cached_property
+    def forecast(self) -> set[str]:
+        return {h for h, s in active_forecast(self.db, self.all, self.now).items() if s}
+
+    @cached_property
+    def grid_stress(self) -> set[str]:
+        """Reliability stress applies to every Cell, a zone price spike to its zone's Cells."""
+        return {h for h, g in grid_live(self.db, self.all, self.now).items() if g["stressSignals"]}
 
 
 def cell_blocks(db: Session, h3s: set[str], now: datetime) -> dict[str, dict]:
     """h3_index -> what a lead row shows about its Cell (a few queries, whatever the count)."""
-    cells = db.scalars(select(Cell).where(Cell.h3_index.in_(h3s))).all()
+    cells = [
+        CellRef(h, z)
+        for h, z in db.execute(select(Cell.h3_index, Cell.load_zone).where(Cell.h3_index.in_(h3s)))
+    ]
     if not cells:
         return {}
     ids = [c.h3_index for c in cells]

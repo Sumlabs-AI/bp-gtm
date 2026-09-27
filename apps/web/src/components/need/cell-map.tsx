@@ -74,6 +74,7 @@ export function CellMap({
   const [hover, setHover] = React.useState<Hover | null>(null)
   const [colorBy, setColorBy] = React.useState<ColorBy>("baselineNeed")
   const [selected, setSelected] = React.useState<string | null>(null)
+  const [overPoint, setOverPoint] = React.useState(false)
   // Keyed by Cell so a stale detail never shows under a newly selected Cell.
   const [detail, setDetail] = React.useState<CellDetail | null>(null)
   const shownDetail = detail?.h3 === selected ? detail : null
@@ -83,17 +84,18 @@ export function CellMap({
   function readViewport() {
     const map = mapRef.current
     if (!map) return
+    const b = map.getBounds()
+    const box = [b.getWest(), b.getSouth(), b.getEast(), b.getNorth()].map((v) => v.toFixed(5)).join(",")
+    // The list follows the viewport at every zoom; only the Cells wait for the minimum.
+    onViewport?.(box, map.getZoom())
     if (map.getZoom() < H3_MAP_MIN_ZOOM) {
       setBbox(null)
       setData(null)
       setStatus("zoom-in")
       return
     }
-    const b = map.getBounds()
     setStatus("loading")
-    const box = [b.getWest(), b.getSouth(), b.getEast(), b.getNorth()].map((v) => v.toFixed(5)).join(",")
     setBbox(box)
-    onViewport?.(box, map.getZoom())
   }
 
   React.useEffect(() => {
@@ -126,7 +128,9 @@ export function CellMap({
   }, [])
 
   function onMove(e: MapLayerMouseEvent) {
-    const properties = e.features?.[0]?.properties
+    const feature = e.features?.[0]
+    setOverPoint(feature?.layer?.id === "lead-points")
+    const properties = feature?.properties
     setHover(
       properties?.h3
         ? {
@@ -151,10 +155,18 @@ export function CellMap({
           ...activeBands.map((b) => [
             "all",
             [">=", ["get", "baselineNeed"], b.low],
-            ["<", ["get", "baselineNeed"], b.high],
+            [b.top ? "<=" : "<", ["get", "baselineNeed"], b.high],
           ]),
         ] as ExpressionSpecification)
       : null
+  // Clicked Cells narrow the list to themselves, so the others dim too.
+  const focus: ExpressionSpecification[] = [
+    ...(bandFilter ? [bandFilter] : []),
+    ...(controlled && selectedCells?.length
+      ? [["in", ["get", "h3"], ["literal", selectedCells]] as ExpressionSpecification]
+      : []),
+  ]
+  const inFocus: ExpressionSpecification | null = focus.length ? (["all", ...focus] as ExpressionSpecification) : null
 
   return (
     <div className={className}>
@@ -184,7 +196,7 @@ export function CellMap({
               setSelected(h3)
             }
           }}
-          cursor={hover ? "pointer" : "grab"}
+          cursor={hover || overPoint ? "pointer" : "grab"}
           attributionControl={{ compact: true }}
         >
           {data && (
@@ -209,7 +221,7 @@ export function CellMap({
                       "case",
                       ["==", ["get", colorBy], null],
                       0.08,
-                      bandFilter ? ["case", bandFilter, 0.45, 0.06] : 0.45,
+                      inFocus ? ["case", inFocus, 0.45, 0.06] : 0.45,
                     ],
                   }}
                 />,

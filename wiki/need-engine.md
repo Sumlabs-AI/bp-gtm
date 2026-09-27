@@ -280,7 +280,7 @@ A home joins the Need Engine through **`properties.h3_index`** (its H3 res-8 Cel
 
 - ranking `sort=need`: the Cell's Baseline Need, then the home's estimated consumption, then Expected Value (the Lead Score is no longer a sort or a UI column; it's still computed by the pipeline);
 - each item carries `h3_index` and a `cell` block (`baseline_need`, `propensity_score`, `active_alerts`, `forecast_level`, `grid_stress_signals`), read from the Need tables per page (`app/need/for_leads.py`);
-- Cell filters: `cells` (res-8 ids), `need_band` (`NEED_BANDS` in `app/need/config.py`, lower edge inclusive), `alert`, `forecast`, `grid_stress` (Cells with an active signal at request time), `bbox`. Any Cell filter drops homes outside every seeded Cell (~2,600 at the county edge);
+- Cell filters: `cells` (res-8 ids), `need_band` (`NEED_BANDS` in `app/need/config.py`, lower edge inclusive), `alert`, `forecast`, `grid_stress` (Cells with an active signal at request time), `bbox`. The top band includes 100. The live sets are computed once per request (`LiveCells`) and shared by the filters and the summary. Any Cell filter drops homes outside every seeded Cell (~2,600 at the county edge);
 - `summary`: leads in the filtered set, their average Baseline Need, how many sit under an active alert / forecast risk / grid stress, and the ERCOT condition.
 
 Only Harris has leads (the pipeline is built on HCAD and CenterPoint); Travis Cells show Need with an empty list. Timing on real data: an unfiltered list is ~1.7 s (the count over 772k rows), a viewport ~0.8 s, a Cell ~0.25 s.

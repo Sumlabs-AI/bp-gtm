@@ -14,7 +14,7 @@ function ReturnLink() {
 
 export function LeadReturnLink() {
   return (
-    <Suspense fallback={<Link href="/leads" className={buttonVariants({ variant: "outline" })}>Return to results</Link>}>
+    <Suspense fallback={<Link href="/gtm" className={buttonVariants({ variant: "outline" })}>Return to results</Link>}>
       <ReturnLink />
     </Suspense>
   )

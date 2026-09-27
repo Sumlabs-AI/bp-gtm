@@ -154,6 +154,16 @@ def test_filter_by_need_band_includes_the_lower_edge(client, world):
     assert client.get("/leads", params={"need_band": "50-70"}).status_code == 422
     # Any Cell filter excludes leads outside every Cell.
     assert world["out"] not in ids(client, need_band=["0-40", "40-60", "60-80", "80-100"])
+    assert world["out"] not in ids(client, cells=[CELL["A"], CELL["B"], CELL["C"]])
+    # The top band includes exactly 100.
+    with SessionLocal() as db:
+        db.execute(
+            update(CellBaselineNeed)
+            .where(CellBaselineNeed.h3_index == CELL["C"])
+            .values(baseline_need=100.0)
+        )
+        db.commit()
+    assert ids(client, need_band=["80-100"]) == [world["c"], world["a_big"], world["a_small"]]
 
 
 def alert_over(spot: tuple[float, float], start: datetime, end: datetime) -> dict:
@@ -222,6 +232,7 @@ def test_geo_points_respect_the_cell_filters(client, world):
         "/leads/geo", params={"bbox": "-96,29,-93,31", "zoom": 12, "cells": CELL["C"]}
     ).json()
     assert [f["properties"]["id"] for f in body["features"]] == [world["c"]]
+    assert client.get("/leads/geo", params={"zoom": 12}).status_code == 422
 
 
 def test_loader_sets_h3_and_backfill_is_idempotent(world):

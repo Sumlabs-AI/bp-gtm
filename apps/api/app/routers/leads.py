@@ -3,7 +3,7 @@ from typing import Annotated, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
-from sqlalchemy import func, select
+from sqlalchemy import false, func, select
 from sqlalchemy.orm import Session
 
 from app import geo
@@ -222,7 +222,7 @@ class LeadFilters(BaseModel):
     grid_stress: bool = False  # only Cells with a Grid Stress Signal
     bbox: str | None = None  # west,south,east,north: the map viewport
 
-    def cell_set(self, db: Session, now: datetime) -> set[str] | None:
+    def cell_set(self, db: Session, live: for_leads.LiveCells) -> set[str] | None:
         """The Cells the Cell filters allow, or None when no Cell filter is active."""
         allowed: set[str] | None = None
 
@@ -235,14 +235,23 @@ class LeadFilters(BaseModel):
         if self.need_band:
             narrow(for_leads.cells_in_bands(db, self.need_band))
         if self.alert:
-            narrow(for_leads.cells_with_alert(db, now))
+            narrow(live.alert)
         if self.forecast:
-            narrow(for_leads.cells_with_forecast(db, now))
+            narrow(live.forecast)
         if self.grid_stress:
-            narrow(for_leads.cells_with_grid_stress(db, now))
+            narrow(live.grid_stress)
         return allowed
 
-    def apply(self, query, db: Session, now: datetime):
+    def bounds(self) -> tuple[float, float, float, float] | None:
+        if not self.bbox:
+            return None
+        try:
+            west, south, east, north = (float(v) for v in self.bbox.split(","))
+        except ValueError:
+            raise HTTPException(422, "bbox must be west,south,east,north") from None
+        return west, south, east, north
+
+    def apply(self, query, db: Session, live: for_leads.LiveCells):
         unknown = set(self.signals) - set(SIGNAL_TYPES)
         if unknown:
             raise HTTPException(422, f"Unknown signal(s): {', '.join(sorted(unknown))}")
@@ -252,14 +261,11 @@ class LeadFilters(BaseModel):
         bad_cells = [c for c in self.cells if not geo.is_cell(c) or geo.cell_resolution(c) != 8]
         if bad_cells:
             raise HTTPException(422, f"cells must be H3 resolution-8 ids: {bad_cells[:5]}")
-        allowed = self.cell_set(db, now)
+        allowed = self.cell_set(db, live)
         if allowed is not None:
-            query = query.where(Property.h3_index.in_(allowed)) if allowed else query.where(False)
-        if self.bbox:
-            try:
-                west, south, east, north = (float(v) for v in self.bbox.split(","))
-            except ValueError:
-                raise HTTPException(422, "bbox must be west,south,east,north") from None
+            query = query.where(Property.h3_index.in_(allowed)) if allowed else query.where(false())
+        if bounds := self.bounds():
+            west, south, east, north = bounds
             query = query.where(
                 Property.lat.between(south, north), Property.lon.between(west, east)
             )
@@ -321,12 +327,13 @@ def list_leads(
     """Leads ranked by their Cell (Baseline Need), then the home (consumption, then Expected
     Value). Cell scores are joined at request time through the home's h3_index."""
     now = _now()
+    live = for_leads.LiveCells(db, now)
     query = filters.apply(
         select(Lead, Property)
         .join(Property)
         .outerjoin(CellBaselineNeed, CellBaselineNeed.h3_index == Property.h3_index),
         db,
-        now,
+        live,
     )
     total = db.scalar(select(func.count()).select_from(query.subquery()))
     by_home = (Lead.annual_kwh.desc().nulls_last(), Lead.expected_value.desc().nulls_last())
@@ -342,11 +349,11 @@ def list_leads(
     return {
         "total": total,
         "items": [_item(lead, prop, blocks.get(prop.h3_index)) for lead, prop in rows],
-        "summary": _summary(db, query, total, now),
+        "summary": _summary(db, query, total, live),
     }
 
 
-def _summary(db: Session, query, total: int, now: datetime) -> dict:
+def _summary(db: Session, query, total: int, live: for_leads.LiveCells) -> dict:
     """The filtered set by Cell: one small aggregate, then the live sets applied to it."""
     filtered = query.subquery()
     per_cell = dict(
@@ -373,10 +380,10 @@ def _summary(db: Session, query, total: int, now: datetime) -> dict:
     return {
         "leads": total,
         "avg_baseline_need": round(avg, 1) if avg is not None else None,
-        "alert": count(for_leads.cells_with_alert(db, now)) if per_cell else 0,
-        "forecast": count(for_leads.cells_with_forecast(db, now)) if per_cell else 0,
-        "grid_stress": count(for_leads.cells_with_grid_stress(db, now)) if per_cell else 0,
-        "grid_state": for_leads.grid_state(db, now),
+        "alert": count(live.alert) if per_cell else 0,
+        "forecast": count(live.forecast) if per_cell else 0,
+        "grid_stress": count(live.grid_stress) if per_cell else 0,
+        "grid_state": for_leads.grid_state(db, live.now),
     }
 
 
@@ -388,20 +395,16 @@ MAX_MAP_POINTS = 5000
 def leads_geo(
     db: DB,
     filters: Filters,
-    bbox: Annotated[str, Query(description="west,south,east,north in degrees")],
     zoom: Annotated[float, Query(ge=0, le=24)] = 10,
 ):
-    """GeoJSON for the map: lead points, or grid cells (count, avg score) when crowded."""
-    try:
-        west, south, east, north = (float(v) for v in bbox.split(","))
-    except ValueError:
-        raise HTTPException(422, "bbox must be west,south,east,north") from None
+    """GeoJSON for the map: lead points, or grid cells (count, avg score) when crowded.
+    The viewport is the shared `bbox` filter, required here."""
+    bounds = filters.bounds()
+    if bounds is None:
+        raise HTTPException(422, "bbox (west,south,east,north) is required")
+    west, south, east, north = bounds
     in_view = filters.apply(
-        select(Lead, Property)
-        .join(Property)
-        .where(Property.lat.between(south, north), Property.lon.between(west, east)),
-        db,
-        _now(),
+        select(Lead, Property).join(Property), db, for_leads.LiveCells(db, _now())
     ).subquery()
     total = db.scalar(select(func.count()).select_from(in_view))
 
