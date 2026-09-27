@@ -56,7 +56,7 @@ export function LeadDrawer({ id, onClose }: { id: number | null; onClose: () => 
 
   return (
     <Sheet open={id !== null} onOpenChange={(open) => !open && onClose()}>
-      <SheetContent className="sm:max-w-md">
+      <SheetContent className="sm:max-w-md" showCloseButton={false}>
         <SheetHeader className="pb-2">
           <SheetTitle className="sr-only">{shown?.address ?? "Lead"}</SheetTitle>
           <SheetDescription className={shown ? "sr-only" : undefined}>
