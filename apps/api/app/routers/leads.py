@@ -6,7 +6,7 @@ from typing import Annotated, Literal
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
-from sqlalchemy import false, func, select
+from sqlalchemy import and_, false, func, or_, select
 from sqlalchemy.orm import Session
 
 from app import geo
@@ -233,6 +233,7 @@ class LeadFilters(BaseModel):
     alert: bool = False  # only Cells under an active NWS Alert
     forecast: bool = False  # only Cells with a Forecast Signal in the next 48 h
     grid_stress: bool = False  # only Cells with a Grid Stress Signal
+    leads_only: bool = False  # only each county's Lead Cells (for_leads.lead_cells)
     bbox: str | None = None  # west,south,east,north: the map viewport
     county: str | None = None  # appraisal county, e.g. harris, travis
 
@@ -278,6 +279,16 @@ class LeadFilters(BaseModel):
         allowed = self.cell_set(db, live)
         if allowed is not None:
             query = query.where(Property.h3_index.in_(allowed)) if allowed else query.where(false())
+        if self.leads_only:
+            query = query.where(
+                or_(
+                    false(),
+                    *(
+                        and_(Property.county == county, Property.h3_index.in_(lead.cells))
+                        for county, lead in live.lead.items()
+                    ),
+                )
+            )
         if bounds := self.bounds():
             west, south, east, north = bounds
             query = query.where(
@@ -311,6 +322,7 @@ def _filters(
     alert: bool = False,
     forecast: bool = False,
     grid_stress: bool = False,
+    leads_only: bool = False,
     bbox: str | None = None,
     county: str | None = None,
 ) -> LeadFilters:
@@ -326,6 +338,7 @@ def _filters(
         alert=alert,
         forecast=forecast,
         grid_stress=grid_stress,
+        leads_only=leads_only,
         bbox=bbox,
         county=county,
     )
@@ -499,35 +512,18 @@ def _summary(db: Session, query, total: int, live: for_leads.LiveCells) -> dict:
 MAX_MAP_POINTS = 5000
 
 
-class LeadCell(BaseModel):
-    h3: str
-    leads: int
+class LeadCellsOut(BaseModel):
+    cells: list[str]  # every county's Lead Cells
+    min_score: dict[str, float]  # county -> lowest Opportunity Score among its Lead Cells
 
 
-class LeadCells(BaseModel):
-    total: int  # leads in the filter
-    cells: list[LeadCell]
-
-
-@router.get("/leads/cells", response_model=LeadCells)
-def leads_cells(db: DB, filters: Filters):
-    """The Cells holding the filtered leads, for the map's Opportunity Score view.
-    Needs the viewport (`bbox`) or clicked `cells` to stay bounded."""
-    if filters.bounds() is None and not filters.cells:
-        raise HTTPException(422, "bbox (west,south,east,north) or cells is required")
-    in_filter = filters.apply(
-        select(Property.h3_index).select_from(Lead).join(Property),
-        db,
-        for_leads.LiveCells(db, _now()),
-    ).subquery()
-    rows = db.execute(
-        select(in_filter.c.h3_index, func.count().label("n"))
-        .where(in_filter.c.h3_index.is_not(None))
-        .group_by(in_filter.c.h3_index)
-    ).all()
+@router.get("/leads/cells", response_model=LeadCellsOut)
+def lead_cells(db: DB):
+    """The Lead Cells, for the map to show what `leads_only` keeps, and each county's cutoff."""
+    leads = for_leads.lead_cells(db, _now())
     return {
-        "total": sum(r.n for r in rows),
-        "cells": [{"h3": r.h3_index, "leads": r.n} for r in rows],
+        "cells": sorted(set().union(*(lead.cells for lead in leads.values()))),
+        "min_score": {county: round(lead.min_score, 1) for county, lead in leads.items()},
     }
 
 

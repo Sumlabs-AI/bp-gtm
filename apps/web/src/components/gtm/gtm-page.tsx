@@ -5,12 +5,12 @@ import { ArrowUpDownIcon, MapPinIcon, XIcon } from "lucide-react"
 
 import { ExportMenu } from "@/components/gtm/export-buttons"
 import { LeadDrawer } from "@/components/gtm/lead-drawer"
-import { CellMap, type LeadCells, type LeadPoint } from "@/components/need/cell-map"
+import { CellMap, type LeadPoint } from "@/components/need/cell-map"
 import { Button } from "@/components/ui/button"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { apiFetch } from "@/lib/api"
 import { scoreColor } from "@/lib/grid"
-import { countyName, type LeadItem, type LeadPage } from "@/lib/leads"
+import { countyName, type LeadCells, type LeadItem, type LeadPage, type View } from "@/lib/leads"
 
 const PAGE_SIZE = 50
 const POINTS_MIN_ZOOM = 13
@@ -22,6 +22,7 @@ const SORTS = [
 type Sort = (typeof SORTS)[number]["key"]
 
 type Filters = {
+  view: View
   cells: string[]
   alert: boolean
   forecast: boolean
@@ -29,13 +30,14 @@ type Filters = {
   newOnly: boolean
   sort: Sort
 }
-const EMPTY: Filters = { cells: [], alert: false, forecast: false, gridStress: false, newOnly: false, sort: "opportunity" }
+const EMPTY: Filters = { view: "leads", cells: [], alert: false, forecast: false, gridStress: false, newOnly: false, sort: "opportunity" }
 
 type Points = { type: "FeatureCollection"; features: LeadPoint[]; aggregated?: boolean }
 
 function params(f: Filters, bbox: string | null, extra: Record<string, string> = {}): URLSearchParams {
   const p = new URLSearchParams(extra)
   if (bbox && !f.cells.length) p.set("bbox", bbox) // clicked Cells define the area themselves
+  if (f.view === "leads") p.set("leads_only", "true")
   f.cells.forEach((c) => p.append("cells", c))
   if (f.alert) p.set("alert", "true")
   if (f.forecast) p.set("forecast", "true")
@@ -73,15 +75,25 @@ export function GtmPage({ initialLead = null }: { initialLead?: number | null })
   const [offset, setOffset] = React.useState(0)
   const [page, setPage] = React.useState<LeadPage | null>(null)
   const [points, setPoints] = React.useState<Points | null>(null)
-  const [leadCells, setLeadCells] = React.useState<LeadCells | null>(null)
   const [loading, setLoading] = React.useState(false)
   const [openLead, setOpenLead] = React.useState<number | null>(initialLead)
+  const [leadCells, setLeadCells] = React.useState<LeadCells | null>(null)
 
   const update = (patch: Partial<Filters>) => {
     setFilters((f) => ({ ...f, ...patch }))
     setOffset(0)
   }
   const toggleIn = (list: string[], value: string) => (list.includes(value) ? list.filter((v) => v !== value) : [...list, value])
+
+  // The Lead Cells, for the map to dim the rest in the Leads view.
+  React.useEffect(() => {
+    if (filters.view !== "leads" || leadCells) return
+    const controller = new AbortController()
+    apiFetch<LeadCells>("/leads/cells", { signal: controller.signal })
+      .then(setLeadCells)
+      .catch(() => {})
+    return () => controller.abort()
+  }, [filters.view, leadCells])
 
   // The list: whatever the map and the chips currently allow.
   React.useEffect(() => {
@@ -102,16 +114,6 @@ export function GtmPage({ initialLead = null }: { initialLead?: number | null })
     load()
     return () => controller.abort()
   }, [filters, bbox, offset])
-
-  // The Cells holding every lead in the filter (not only this page): the map's Opportunity Score view.
-  React.useEffect(() => {
-    if (!bbox && !filters.cells.length) return
-    const controller = new AbortController()
-    apiFetch<{ total: number; cells: { h3: string; leads: number }[] }>(`/leads/cells?${params(filters, bbox)}`, { signal: controller.signal })
-      .then((response) => setLeadCells({ h3: response.cells.map((c) => c.h3), total: response.total }))
-      .catch(() => {})
-    return () => controller.abort()
-  }, [filters, bbox])
 
   // Homes as points once zoomed in far enough, inside the same filter.
   const showPoints = zoom >= POINTS_MIN_ZOOM
@@ -170,7 +172,7 @@ export function GtmPage({ initialLead = null }: { initialLead?: number | null })
               <XIcon className="size-3.5" aria-label="Remove" />
             </button>
           ))}
-          <Button size="sm" variant="ghost" className="ml-auto" onClick={() => update({ ...EMPTY, sort: filters.sort })}>
+          <Button size="sm" variant="ghost" className="ml-auto" onClick={() => update({ ...EMPTY, view: filters.view, sort: filters.sort })}>
             Clear all
           </Button>
         </div>
@@ -181,6 +183,10 @@ export function GtmPage({ initialLead = null }: { initialLead?: number | null })
           <CellMap
             className="h-full p-2"
             selectedCells={filters.cells}
+            view={filters.view}
+            onViewChange={(view) => update({ view })}
+            leadCells={filters.view === "leads" ? (leadCells?.cells ?? []) : null}
+            leadMinScore={leadCells?.min_score}
             onToggleCell={(h3, additive) => update({ cells: additive ? toggleIn(filters.cells, h3) : filters.cells.length === 1 && filters.cells[0] === h3 ? [] : [h3] })}
             onViewport={(box, z) => {
               setZoom(z)
@@ -189,7 +195,6 @@ export function GtmPage({ initialLead = null }: { initialLead?: number | null })
             points={showPoints ? points : null}
             onPointClick={setOpenLead}
             pointsMinZoom={POINTS_MIN_ZOOM}
-            leadCells={leadCells}
           />
         </div>
 
@@ -204,7 +209,7 @@ export function GtmPage({ initialLead = null }: { initialLead?: number | null })
               </select>
             </span>
             <span className="ml-1 font-medium">
-              {loading ? "Loading…" : `${total.toLocaleString("en-US")} leads`}
+              {loading ? "Loading…" : `${total.toLocaleString("en-US")} ${filters.view === "leads" ? "leads" : "homes"}`}
             </span>
             <span className="ml-auto">
               <ExportMenu query={params(filters, bbox, { sort: filters.sort })} disabled={!total} />
@@ -214,7 +219,9 @@ export function GtmPage({ initialLead = null }: { initialLead?: number | null })
           <div className="min-h-0 flex-1 overflow-y-auto">
             {page && page.items.length === 0 && !loading ? (
               <p className="p-6 text-sm text-muted-foreground">
-                No leads in this view. Leads are loaded for Harris County (Houston) and Austin Energy homes in Travis County (Austin); pan there or clear a filter.
+                {filters.view === "leads"
+                  ? "No Lead Cells in this view. Leads are the top-Opportunity Cells of Harris County (Houston) and Travis County (Austin); pan there, clear a filter or switch to Overview."
+                  : "No homes in this view. Homes are loaded for Harris County (Houston) and Austin Energy homes in Travis County (Austin); pan there or clear a filter."}
               </p>
             ) : (
               <Table>

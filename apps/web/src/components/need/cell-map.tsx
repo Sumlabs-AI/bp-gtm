@@ -19,6 +19,7 @@ import { PropensityBlock } from "@/components/need/propensity"
 import { WeatherBreakdown } from "@/components/need/weather-breakdown"
 import { apiFetch } from "@/lib/api"
 import { scoreColor } from "@/lib/grid"
+import type { View } from "@/lib/leads"
 import { H3_MAP_MIN_ZOOM, MARKET_ZOOM, MARKETS, type CellCollection, type CellDetail } from "@/lib/need"
 
 const BASEMAP = "https://tiles.openfreemap.org/styles/positron"
@@ -36,13 +37,9 @@ type Hover = {
   forecastLevel: string | null
 }
 
-/** The Cells holding the leads in the current filter (GET /leads/cells). */
-export type LeadCells = { h3: string[]; total: number }
-
-type View = "overview" | "opportunity"
 const VIEWS: { key: View; label: string; title: string }[] = [
-  { key: "overview", label: "Overview", title: "Every Cell in its Opportunity Score colour, with live alerts and forecasts" },
-  { key: "opportunity", label: "Opportunity Score", title: "Only the Cells holding the leads in the current filter" },
+  { key: "overview", label: "Overview", title: "Every Cell and every home in view" },
+  { key: "leads", label: "Leads", title: "Only the top-Opportunity Cells of each county: the homes to go after" },
 ]
 
 export type LeadPoint = {
@@ -53,29 +50,33 @@ export type LeadPoint = {
 
 /**
  * The Need map. On its own it explains Cells in a sheet. In controlled mode (the GTM page)
- * it is a filter: it reports the viewport, toggles Cells, dims what's filtered
- * out, and shows the leads inside the filter as points once zoomed in. With `leadCells` it
- * offers two views: Overview (every Cell) and Opportunity Score (only the Cells of the
- * filtered leads).
+ * it is a filter: it reports the viewport, toggles Cells and the Leads/Overview view, dims what's filtered
+ * out, and shows the leads inside the filter as points once zoomed in.
  */
 export function CellMap({
   className,
   selectedCells,
   onToggleCell,
+  view,
+  onViewChange,
+  leadCells,
+  leadMinScore,
   onViewport,
   points,
   onPointClick,
   pointsMinZoom = 13,
-  leadCells,
 }: {
   className?: string
   selectedCells?: string[]
   onToggleCell?: (h3: string, additive: boolean) => void
+  view?: View
+  onViewChange?: (view: View) => void
+  leadCells?: string[] | null // Leads view: the Cells kept; the others dim
+  leadMinScore?: Record<string, number> // county -> its Lead Cells' cutoff, shown on the Leads button
   onViewport?: (bbox: string, zoom: number) => void
   points?: { type: "FeatureCollection"; features: LeadPoint[] } | null
   onPointClick?: (id: number) => void
   pointsMinZoom?: number
-  leadCells?: LeadCells | null
 }) {
   const controlled = Boolean(onToggleCell)
   const mapRef = React.useRef<MapRef>(null)
@@ -87,7 +88,6 @@ export function CellMap({
   const [selected, setSelected] = React.useState<string | null>(null)
   const [overPoint, setOverPoint] = React.useState(false)
   const [market, setMarket] = React.useState(MARKETS[0].name)
-  const [view, setView] = React.useState<View>("opportunity")
   // Keyed by Cell so a stale detail never shows under a newly selected Cell.
   const [detail, setDetail] = React.useState<CellDetail | null>(null)
   const shownDetail = detail?.h3 === selected ? detail : null
@@ -157,19 +157,14 @@ export function CellMap({
   }
 
   const highlighted = [...(controlled ? (selectedCells ?? []) : [selected ?? ""]), hover?.h3 ?? ""]
-  // Clicked Cells narrow the list to themselves, so the others dim too.
-  const focus: ExpressionSpecification[] =
-    controlled && selectedCells?.length
+  // Lead Cells and clicked Cells narrow the list to themselves, so the others dim too.
+  const focus: ExpressionSpecification[] = [
+    ...(controlled && leadCells ? [["in", ["get", "h3"], ["literal", leadCells]] as ExpressionSpecification] : []),
+    ...(controlled && selectedCells?.length
       ? [["in", ["get", "h3"], ["literal", selectedCells]] as ExpressionSpecification]
-      : []
+      : []),
+  ]
   const inFocus: ExpressionSpecification | null = focus.length ? (["all", ...focus] as ExpressionSpecification) : null
-  const hasViews = leadCells !== undefined
-  // Opportunity Score view: the lead Cells already reflect every filter (clicked Cells too).
-  const leadFocus: ExpressionSpecification | null =
-    hasViews && view === "opportunity" && leadCells
-      ? (["in", ["get", "h3"], ["literal", leadCells.h3]] as ExpressionSpecification)
-      : null
-  const dimTo = leadFocus ?? (hasViews && view === "overview" ? null : inFocus)
 
   return (
     <div className={className}>
@@ -223,8 +218,8 @@ export function CellMap({
                     "fill-opacity": [
                       "case",
                       ["==", ["get", "opportunityScore"], null],
-                      dimTo ? ["case", dimTo, 0.2, 0.04] : 0.08,
-                      dimTo ? ["case", dimTo, 0.6, 0.06] : 0.45,
+                      0.08,
+                      inFocus ? ["case", inFocus, 0.45, 0.06] : 0.45,
                     ],
                   }}
                 />,
@@ -281,7 +276,7 @@ export function CellMap({
               />
             </Source>
           )}
-          <NavigationControl position={hasViews ? "bottom-right" : "top-right"} showCompass={false} />
+          <NavigationControl position="top-right" showCompass={false} />
         </Map>
 
         <div className="absolute top-3 left-3 flex items-center gap-2 rounded-md border bg-background/90 px-2 py-1.5 text-xs shadow-sm">
@@ -308,28 +303,18 @@ export function CellMap({
           </DropdownMenu>
         </div>
 
-        {hasViews && (
-          <div className="absolute top-3 right-3 flex flex-col items-end gap-1">
-            <div role="radiogroup" aria-label="Map view" className="flex items-center gap-0.5 rounded-md border bg-background/90 p-0.5 text-xs shadow-sm">
-              {VIEWS.map((v) => (
-                <Button
-                  key={v.key}
-                  size="sm"
-                  role="radio"
-                  aria-checked={view === v.key}
-                  variant={view === v.key ? "default" : "ghost"}
-                  title={v.title}
-                  onClick={() => setView(v.key)}
-                >
+        {onViewChange && (
+          <div className="absolute top-3 right-12 flex items-center gap-1 rounded-md border bg-background/90 px-2 py-1.5 text-xs shadow-sm">
+            {VIEWS.map((v) => {
+              // The cutoff differs by county; show the one of the market picked on the left.
+              const cutoff = v.key === "leads" ? leadMinScore?.[market] : undefined
+              return (
+                <Button key={v.key} size="sm" variant={view === v.key ? "secondary" : "ghost"} title={v.title} onClick={() => onViewChange(v.key)}>
                   {v.label}
+                  {cutoff !== undefined && <span className="font-normal text-muted-foreground">(Opportunity Score ≥ {cutoff.toFixed(1)})</span>}
                 </Button>
-              ))}
-            </div>
-            {view === "opportunity" && leadCells && status === "ready" && (
-              <span className="rounded bg-background/85 px-1.5 py-0.5 text-[11px] text-muted-foreground">
-                {leadCells.h3.length.toLocaleString("en-US")} Cells hold the {leadCells.total.toLocaleString("en-US")} filtered leads
-              </span>
-            )}
+              )
+            })}
           </div>
         )}
 

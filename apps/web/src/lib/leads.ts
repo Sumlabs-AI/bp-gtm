@@ -1,5 +1,11 @@
 // Types for the FastAPI /leads and /sources endpoints.
 
+// GTM page: Leads keeps only each county's Lead Cells (top Opportunity, /leads/cells);
+// Overview shows every home.
+export type View = "leads" | "overview"
+// GET /leads/cells: every county's Lead Cells, and each county's lowest Opportunity Score among them.
+export type LeadCells = { cells: string[]; min_score: Record<string, number> }
+
 export type LeadStatus = "new" | "reviewed" | "qualified" | "excluded"
 export type LeadSignal = "solar" | "ev_charger" | "new_home" | "new_owner" | "new_meter" | "pool"
 export type BatteryKwh = 25 | 40 | 50

@@ -9,6 +9,8 @@ a zero in either gives zero. It is a rank, not a probability: Propensity is a pe
 its metro and Baseline Need a Texas percentile. Null when Propensity or Baseline Need is missing.
 """
 
+from dataclasses import dataclass, field
+
 from sqlalchemy import func
 
 from app.need.config import opportunity as config
@@ -41,6 +43,38 @@ def opportunity_score(
         * timing
     )
     return round(score, 1)
+
+
+@dataclass
+class LeadCells:
+    """A county's Lead Cells and the lowest Opportunity Score among them (its cutoff)."""
+
+    cells: set[str] = field(default_factory=set)
+    min_score: float = 0.0
+
+
+def pick_lead_cells(
+    cells: list[tuple[str, str, int, float | None]], share: float
+) -> dict[str, LeadCells]:
+    """county -> its Lead Cells, from (county, h3_index, homes, opportunity) rows.
+
+    Walks each county's Cells from the highest Opportunity down, whole Cells, until they hold
+    `share` of the county's homes (the Cell that crosses the line is in). Unscored Cells count
+    toward the county's homes but are never Lead Cells."""
+    totals: dict[str, int] = {}
+    for county, _, homes, _ in cells:
+        totals[county] = totals.get(county, 0) + homes
+    ranked = sorted((c for c in cells if c[3] is not None), key=lambda c: (-c[3], c[1]))
+    picked: dict[str, LeadCells] = {}
+    held: dict[str, int] = {}
+    for county, h3_index, homes, score in ranked:
+        if held.get(county, 0) >= share * totals[county]:
+            continue
+        lead = picked.setdefault(county, LeadCells())
+        lead.cells.add(h3_index)
+        lead.min_score = score  # ranked high to low: the last one in is the lowest
+        held[county] = held.get(county, 0) + homes
+    return picked
 
 
 def opportunity_sql(propensity, baseline_need, timing=1.0):
