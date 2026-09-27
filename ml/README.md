@@ -237,7 +237,10 @@ is not counted) are joined to parcels the same way. Solar: 4.1% of Austin homes,
   no solar → solar, by value quintile: 1.1 → 2.7, 1.9 → 7.3, 2.9 → 12.7, 5.3 → 17.4, 15.7 → 41.4. San Antonio
   top quintile 2.2 → 6.1 (lower quintiles have too few installs to read).
 - EV-charger and panel-upgrade permits are too rare in the keyword-filtered permits to conclude anything.
-  Pools are not in the Travis / Bexar parcel layers (Harris has them in HCAD extra features).
+- **Fort Worth per home (Tarrant appraisal district data)**: its battery installs (mostly sold with solar) are not
+  ranked by anything at home level either: appraised value ROC AUC 0.50, LightGBM 0.54. Pools show no consistent
+  effect there (more installs with a pool in the low-value quintiles, fewer in the top one). Pools remain untested
+  against real backup buyers: Travis / Bexar layers have no pool field (Harris has one in HCAD extra features).
 - **Rule: log(value) + log(2) if solar** (value doubled for solar homes): Austin ROC AUC 0.766 / top 20% 59% vs
   0.755 / 58% for value alone, above every LightGBM variant (best 0.762). San Antonio unchanged (11 of 156 test
   installers had solar). Solar homes are few, so the overall gain is small, but it's the best-supported segment.
@@ -259,9 +262,12 @@ Denton 90% / 93%. Williamson has no improvement values but codes `RES`. Each par
 Eligible homes (single-family + owner-occupied) vs ACS per county: ratio 0.78 (Parker) to 1.13 (Brazoria),
 0.95-1.05 for Dallas, Bexar, Harris, Collin, Denton, Williamson, Montgomery, Fort Bend.
 
-**Tarrant has no values in StratMap** (land, improvement and market value all 0; the earlier "market value in
-all six" was wrong for Tarrant). Its homes fall back to the block group's ACS median (`value_source =
-acs_block_group`) until Tarrant Appraisal District's own export is loaded (tad.org/resources/data-downloads).
+**Tarrant comes from Tarrant Appraisal District**, not StratMap (whose Tarrant file has land, improvement and
+market value all 0; the earlier "market value in all six" was wrong for Tarrant). `ParcelView.zip` from
+tad.org/resources/data-downloads (scriptable, 163 MB, updated 2026-07-30) holds polygons with the 2026 appraisal,
+living area, year built, deed date and a **pool flag** (15.8% of eligible homes), in `data/raw/parcels/tarrant_tad/`.
+No exemption codes are public, so owner-occupied is the mailing-address proxy. The `pool` column is NaN in other
+counties. Homes still without an appraisal fall back to the block group's ACS median (`value_source`).
 
 **Score** = log(value) + log(2) if solar-only permit, `pct_metro` = percentile within the metro. Homes with a
 backup permit already (generator / battery / Base Power, any year; Austin, San Antonio, Fort Worth) have

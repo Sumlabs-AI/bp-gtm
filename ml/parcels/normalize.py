@@ -4,6 +4,8 @@
   uv run python -m parcels.normalize --counties dallas
 
 Input:  data/interim/parcels_raw_{county}.parquet   (parcels.fetch: Travis, Bexar county services)
+        data/raw/parcels/tarrant_tad/ParcelView.zip   (Tarrant Appraisal District, tad.org/resources/data-downloads:
+          polygons + 2026 appraisal, living area, pool; StratMap's Tarrant file has no values)
         data/raw/parcels/stratmap25-landparcels_{fips}_lp.zip   (TxGIO statewide schema, DFW counties;
           downloaded by hand in a browser - the CDN blocks scripted downloads)
 Output: data/interim/parcels_{county}.parquet       one row per parcel, canonical columns below
@@ -47,7 +49,7 @@ RAW = ROOT / "data" / "raw" / "parcels"
 
 STRATMAP = {
     # DFW
-    "dallas": "48113", "tarrant": "48439", "collin": "48085", "denton": "48121", "rockwall": "48397",
+    "dallas": "48113", "collin": "48085", "denton": "48121", "rockwall": "48397",
     "kaufman": "48257", "ellis": "48139", "johnson": "48251", "parker": "48367",
     # Austin
     "williamson": "48491", "hays": "48209", "bastrop": "48021",
@@ -68,7 +70,7 @@ ATTACHED_LOT_SQFT = 3_000  # below this a single-family lot is almost always a t
 EQUAL_AREA = 5070
 SQFT_PER_M2 = 10.7639
 COLUMNS = ["county", "prop_id", "state_cd", "type_source", "home_type", "living_sqft", "year_built", "stories", "lot_sqft",
-           "market_value", "homestead", "deed_year", "geometry"]
+           "market_value", "homestead", "deed_year", "pool", "geometry"]
 
 
 def _num(s: pd.Series) -> pd.Series:
@@ -114,8 +116,6 @@ def _code2(s: pd.Series) -> pd.Series:
 
 def stratmap(g: gpd.GeoDataFrame, county: str) -> pd.DataFrame:
     stat, loc = _code2(g["STAT_LAND_"]), _code2(g["LOC_LAND_U"])
-    if county == "tarrant":  # state field holds only the letter
-        stat = loc
     code = stat.where(stat.str.match(STATE_CODE), loc.where(loc.str.match(STATE_CODE), ""))
     source = pd.Series(np.where(code != "", "state_code", ""), index=g.index)
 
@@ -176,7 +176,26 @@ def bexar(g: gpd.GeoDataFrame) -> pd.DataFrame:
     })
 
 
-ADAPTERS = {"travis": travis, "bexar": bexar}
+def tarrant(g: gpd.GeoDataFrame) -> pd.DataFrame:
+    deed = pd.to_datetime(g["Deed_Date"], errors="coerce").dt.year
+    num, street = _situs_parts(g["Situs_Address"])
+    return pd.DataFrame({
+        "prop_id": g["Account_Num"].astype(str).str.strip(),
+        # TAD class "A" = residential single-family (townhomes included; the lot-size rule splits them off)
+        "state_cd": g["Property_Class"].fillna("").str.strip().replace({"A": "A1"}).str[:2],
+        "living_sqft": _num(g["Living_Area"]).where(lambda x: x.between(200, 30_000)),
+        "year_built": _year(g["Year_Built"]),
+        "stories": np.nan,
+        "market_value": _num(g["Total_Value"]),
+        # No exemption codes in the public file: mailing address = property address, as for StratMap counties.
+        "homestead": _owner_occupied(num, street, g["Owner_Address"]),
+        "deed_year": deed.where(deed.between(1950, 2026)),
+        "pool": g["Swimming_Pool_Ind"].eq("Y"),
+    })
+
+
+ADAPTERS = {"travis": travis, "bexar": bexar, "tarrant": tarrant}
+TAD_ZIP = RAW / "tarrant_tad" / "ParcelView.zip"
 
 
 def _stratmap_zip(county: str) -> Path:
@@ -184,6 +203,10 @@ def _stratmap_zip(county: str) -> Path:
 
 
 def read_raw(county: str) -> gpd.GeoDataFrame:
+    if county == "tarrant":
+        g = gpd.read_file(f"zip://{TAD_ZIP}!ParcelView.gdb", engine="pyogrio")
+        g = g[g["RP"] == "R"].drop_duplicates("Account_Num")  # real property, one row per account
+        return g.to_crs(4326)
     if county in STRATMAP:
         z = _stratmap_zip(county)
         gdb = next(n for n in zipfile.ZipFile(z).namelist() if n.endswith(".gdb/")).rstrip("/")
@@ -192,7 +215,8 @@ def read_raw(county: str) -> gpd.GeoDataFrame:
 
 
 def available() -> list[str]:
-    return ([c for c in ADAPTERS if (INTERIM / f"parcels_raw_{c}.parquet").exists()]
+    return ([c for c in ADAPTERS if (INTERIM / f"parcels_raw_{c}.parquet").exists()
+             or (c == "tarrant" and TAD_ZIP.exists())]
             + [c for c in STRATMAP if _stratmap_zip(c).exists()])
 
 
@@ -202,6 +226,8 @@ def normalize(county: str) -> Path:
     df["county"] = county
     if "type_source" not in df:
         df["type_source"] = "state_code"
+    if "pool" not in df:  # only Tarrant publishes it so far
+        df["pool"] = pd.NA
     df["lot_sqft"] = g.geometry.to_crs(EQUAL_AREA).area * SQFT_PER_M2
     df["home_type"] = home_type(df["state_cd"], df["lot_sqft"])
     out = gpd.GeoDataFrame(df, geometry=g.geometry.values, crs=g.crs)[COLUMNS]

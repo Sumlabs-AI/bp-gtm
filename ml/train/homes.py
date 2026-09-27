@@ -29,10 +29,12 @@ from train.build_table import PROCESSED, ROOT, acs_features
 from train.model import spatial_folds
 
 INTERIM = ROOT / "data" / "interim"
-CITY_COUNTY = {"austin": "travis", "san_antonio": "bexar"}
+# Fort Worth: validation only, its label is batteries (generators sit on undescribed trade permits).
+CITY_COUNTY = {"austin": "travis", "san_antonio": "bexar", "fort_worth": "tarrant"}
 HOME_FEATURES = {
     "austin": ["log_value", "rel_value", "year_built", "log_lot", "deed_year"],
     "san_antonio": ["log_value", "rel_value", "year_built", "log_lot", "living_sqft", "stories"],
+    "fort_worth": ["log_value", "rel_value", "year_built", "log_lot", "living_sqft", "deed_year", "pool"],
 }
 # Permit history on the home, known before the 2024-2025 test window. A permit that is itself a backup install
 # (e.g. solar + battery) is the label, not a signal.
@@ -82,6 +84,7 @@ def homes(bg: pd.DataFrame) -> pd.DataFrame:
         p["city"] = city
         out.append(pd.DataFrame(p.drop(columns="geometry")))
     h = pd.concat(out, ignore_index=True)
+    h["pool"] = h["pool"].map({True: 1.0, False: 0.0}) if "pool" in h else np.nan
     h["log_value"] = np.log(h["market_value"].clip(lower=10_000))
     h["rel_value"] = h["market_value"] / h.groupby("GEOID")["market_value"].transform("median")
     h["log_lot"] = np.log(h["lot_sqft"].clip(lower=500))
@@ -158,7 +161,8 @@ def main():
         t = d[test]
         dec = pd.qcut(t["market_value"].rank(method="first"), 5, labels=[f"value q{i}" for i in range(1, 6)])
         print("2024-2025 installs per 1,000 homes, by value quintile and permit history (homes in brackets):")
-        for col in SIGNALS:
+        extra = ["pool"] if t["pool"].notna().all() else []
+        for col in list(SIGNALS) + extra:
             g = t.groupby([dec, t[col]], observed=True)["y_2024_2025"].agg(["mean", "size"])
             tab = (1000 * g["mean"]).round(1).astype(str) + " (" + g["size"].astype(str) + ")"
             print(f"  {col}:", tab.unstack().rename(columns={0: "no", 1: "yes"}).to_dict("index"))

@@ -34,7 +34,7 @@ SOLAR_MULTIPLIER = 2.0
 MIN_VALUE = 10_000
 H3_RES = 8
 TOP_SHARE = 0.2
-COLUMNS = ["county", "prop_id", "type_source", "market_value", "year_built", "living_sqft", "lot_sqft"]
+COLUMNS = ["county", "prop_id", "type_source", "market_value", "year_built", "living_sqft", "lot_sqft", "pool"]
 
 
 def permit_points() -> gpd.GeoDataFrame:
@@ -53,6 +53,8 @@ def load_county(county: str, permits: gpd.GeoDataFrame) -> pd.DataFrame | None:
     p = gpd.read_parquet(path)
     if "type_source" not in p:  # files normalized before type_source existed (county-service adapters)
         p["type_source"] = "state_code"
+    if "pool" not in p:  # only Tarrant publishes pools so far
+        p["pool"] = pd.NA
     p = p[(p["home_type"] == "sfr_detached") & p["homestead"]]
     p = p.reset_index(drop=True)
     hit = gpd.sjoin(permits.to_crs(p.crs), p[["geometry"]], how="inner", predicate="within")
