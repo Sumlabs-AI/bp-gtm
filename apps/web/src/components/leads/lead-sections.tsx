@@ -1,10 +1,9 @@
 "use client"
 
 import Link from "next/link"
-import { ExternalLinkIcon, HistoryIcon, MapPinIcon } from "lucide-react"
+import { HistoryIcon, MapPinIcon } from "lucide-react"
 
 import { Disclosure } from "@/components/disclosure"
-import { LeadLocationMap } from "@/components/leads/lead-location-map"
 import { PriorityHelp } from "@/components/leads/priority-help"
 import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
@@ -32,13 +31,10 @@ export function countyName(lead: LeadDetail): string {
   return `${c.charAt(0).toUpperCase()}${c.slice(1)}${c.toLowerCase().endsWith(" county") ? "" : " County"}`
 }
 
-/** The home at a glance: where it is, what the latest signal says, and a small map. */
+/** The home at a glance: where it is and what the latest signal says. */
 export function AddressCard({ lead }: { lead: LeadDetail }) {
   return (
-    <div className="flex flex-col overflow-hidden rounded-xl border bg-card shadow-sm">
-      {lead.lat !== null && lead.lon !== null && (
-        <LeadLocationMap lat={lead.lat} lon={lead.lon} className="h-36 rounded-none border-0 border-b" />
-      )}
+    <div className="flex flex-col rounded-xl border bg-card shadow-sm">
       <div className="flex flex-col gap-2 p-3">
         <div className="flex items-start gap-2">
           <MapPinIcon className="mt-0.5 size-4 shrink-0 text-primary" aria-hidden />
@@ -55,16 +51,6 @@ export function AddressCard({ lead }: { lead: LeadDetail }) {
           {lead.load_zone && <Badge variant="outline" className="font-mono">{lead.load_zone}</Badge>}
         </div>
         {lead.reasons && <p className="text-xs text-muted-foreground">{lead.reasons}</p>}
-        {lead.lat !== null && lead.lon !== null && (
-          <a
-            href={`https://www.google.com/maps/search/?api=1&query=${lead.lat},${lead.lon}`}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex w-fit items-center gap-1 text-xs font-medium text-primary hover:underline"
-          >
-            Open in Google Maps <ExternalLinkIcon className="size-3" />
-          </a>
-        )}
       </div>
     </div>
   )
