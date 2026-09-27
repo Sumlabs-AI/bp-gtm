@@ -13,13 +13,13 @@ export function PanelCard({ title, value, defaultOpen, children }: {
   children: ReactNode
 }) {
   return (
-    <details open={defaultOpen} className="group mx-4 rounded-lg border">
-      <summary className="flex cursor-pointer list-none items-center gap-2 rounded-lg px-3 py-2.5 text-sm hover:bg-muted/50 focus-visible:outline-2 focus-visible:outline-ring [&::-webkit-details-marker]:hidden">
-        <ChevronRightIcon className="size-4 shrink-0 text-muted-foreground transition-transform group-open:rotate-90" aria-hidden />
+    <details open={defaultOpen} className="group mx-4 rounded-lg border open:border-primary/30">
+      <summary className="flex cursor-pointer list-none items-center gap-2 rounded-lg px-3 py-2.5 text-sm hover:bg-muted/50 group-open:rounded-b-none group-open:bg-accent group-open:text-accent-foreground group-open:hover:bg-accent focus-visible:outline-2 focus-visible:outline-ring [&::-webkit-details-marker]:hidden">
+        <ChevronRightIcon className="size-4 shrink-0 text-muted-foreground transition-transform group-open:rotate-90 group-open:text-primary" aria-hidden />
         <span className="min-w-0 font-medium">{title}</span>
         <span className="ml-auto shrink-0 text-xs">{value}</span>
       </summary>
-      <div className="border-t py-3 [&>[data-slot=card]]:bg-transparent [&>[data-slot=card]]:py-0 [&>[data-slot=card]]:ring-0 [&>section]:px-3 [&>section>:first-child]:hidden [&_[data-slot=card-header]]:hidden">
+      <div className="border-t py-3 group-open:border-primary/20 [&>[data-slot=card]]:bg-transparent [&>[data-slot=card]]:py-0 [&>[data-slot=card]]:ring-0 [&>section]:px-3 [&>section>:first-child]:hidden [&_[data-slot=card-header]]:hidden">
         {children}
       </div>
     </details>
