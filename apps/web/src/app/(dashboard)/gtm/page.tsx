@@ -10,7 +10,7 @@ export default async function Page(props: PageProps<"/gtm">) {
   const id = Number(Array.isArray(lead) ? lead[0] : lead)
   return (
     <>
-      <SiteHeader title="GTM: where backup power is needed, and who needs it" />
+      <SiteHeader title="GTM · Who needs Base, and why now" />
       <GtmPage initialLead={Number.isSafeInteger(id) && id > 0 ? id : null} />
     </>
   )
