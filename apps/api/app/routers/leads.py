@@ -1,13 +1,17 @@
+import csv
+import io
 from datetime import UTC, datetime, timedelta
 from typing import Annotated, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from sqlalchemy import false, func, select
 from sqlalchemy.orm import Session
 
 from app import geo
-from app.db import get_db
+from app.db import SessionLocal, get_db
+from app.leads.address import split_mail_address
 from app.leads.config import scoring
 from app.leads.pipeline import SOURCES
 from app.leads.scoring import DRIVERS
@@ -22,6 +26,7 @@ router = APIRouter(tags=["leads"])
 
 DB = Annotated[Session, Depends(get_db)]
 Status = Literal["new", "reviewed", "qualified", "excluded"]
+Sort = Literal["opportunity", "need", "priority", "value", "consumption", "triggered_at"]
 PERCENTILE_DRIVERS = {"home_size", "home_value"}
 SIGNAL_TYPES = ("solar", "ev_charger", "new_home", "new_owner", "new_meter", "pool")
 
@@ -333,9 +338,7 @@ Filters = Annotated[LeadFilters, Depends(_filters)]
 def list_leads(
     db: DB,
     filters: Filters,
-    sort: Literal[
-        "opportunity", "need", "priority", "value", "consumption", "triggered_at"
-    ] = "need",
+    sort: Sort = "need",
     limit: int = Query(50, ge=1, le=500),
     offset: int = Query(0, ge=0),
 ):
@@ -344,43 +347,118 @@ def list_leads(
     home's h3_index."""
     now = _now()
     live = for_leads.LiveCells(db, now)
-    propensity = for_leads.latest_propensity_subquery()
-    base = (
+    base, opportunity = _with_opportunity(
+        db,
+        now,
         select(Lead, Property)
         .join(Property)
-        .outerjoin(CellBaselineNeed, CellBaselineNeed.h3_index == Property.h3_index)
-        .outerjoin(propensity, propensity.c.h3_index == Property.h3_index)
+        .outerjoin(CellBaselineNeed, CellBaselineNeed.h3_index == Property.h3_index),
+        sort,
     )
-    timing = timing_sql(db, now) if sort == "opportunity" else None
-    if timing is not None:
-        base = base.outerjoin(timing, timing.c.h3_index == Property.h3_index)
     query = filters.apply(base, db, live)
     total = db.scalar(select(func.count()).select_from(query.subquery()))
-    by_home = (Lead.annual_kwh.desc().nulls_last(), Lead.expected_value.desc().nulls_last())
-    order = {
-        "opportunity": (
-            opportunity_sql(
-                propensity.c.propensity_score,
-                CellBaselineNeed.baseline_need,
-                1.0 if timing is None else func.coalesce(timing.c.multiplier, 1.0),
-            )
-            .desc()
-            .nulls_last(),
-            *by_home,
-        ),
-        "need": (CellBaselineNeed.baseline_need.desc().nulls_last(), *by_home),
-        "priority": (Lead.expected_value.desc().nulls_last(),),
-        "value": (Lead.value.desc().nulls_last(),),
-        "consumption": (Lead.annual_kwh.desc().nulls_last(),),
-        "triggered_at": (Lead.triggered_at.desc().nulls_last(),),
-    }[sort]
-    rows = db.execute(query.order_by(*order, Property.id).limit(limit).offset(offset)).all()
+    rows = db.execute(query.order_by(*_order(sort, opportunity)).limit(limit).offset(offset)).all()
     blocks = for_leads.cell_blocks(db, {p.h3_index for _, p in rows if p.h3_index}, now)
     return {
         "total": total,
         "items": [_item(lead, prop, blocks.get(prop.h3_index)) for lead, prop in rows],
         "summary": _summary(db, query, total, live),
     }
+
+
+def _with_opportunity(db: Session, now: datetime, query, sort: Sort):
+    """For sort=opportunity, join each home's latest Propensity and its Cell's Timing and
+    return the Opportunity Score expression to order by; otherwise the query unchanged."""
+    if sort != "opportunity":
+        return query, None
+    propensity = for_leads.latest_propensity_subquery()
+    query = query.outerjoin(propensity, propensity.c.h3_index == Property.h3_index)
+    timing = timing_sql(db, now)  # None when no Cell is in a storm window
+    multiplier = 1.0
+    if timing is not None:
+        query = query.outerjoin(timing, timing.c.h3_index == Property.h3_index)
+        multiplier = func.coalesce(timing.c.multiplier, 1.0)
+    return query, opportunity_sql(
+        propensity.c.propensity_score, CellBaselineNeed.baseline_need, multiplier
+    )
+
+
+def _order(sort: Sort, opportunity=None) -> tuple:
+    by_home = (Lead.annual_kwh.desc().nulls_last(), Lead.expected_value.desc().nulls_last())
+    if sort == "opportunity":
+        return (opportunity.desc().nulls_last(), *by_home, Property.id)
+    return (
+        *{
+            "need": (CellBaselineNeed.baseline_need.desc().nulls_last(), *by_home),
+            "priority": (Lead.expected_value.desc().nulls_last(),),
+            "value": (Lead.value.desc().nulls_last(),),
+            "consumption": (Lead.annual_kwh.desc().nulls_last(),),
+            "triggered_at": (Lead.triggered_at.desc().nulls_last(),),
+        }[sort],
+        Property.id,
+    )
+
+
+EXPORT_COLUMNS = (
+    "owner_name",
+    "mail_street",
+    "mail_city",
+    "mail_state",
+    "mail_zip",
+    "property_address",
+    "property_city",
+    "property_zip",
+    "county",
+)
+
+
+@router.get("/leads/export.csv")
+def export_leads(db: DB, filters: Filters, sort: Sort = "need"):
+    """Every lead the filters allow, in list order, as a mailing list: the owner and the
+    home's address, nothing we computed. Confidential owners never become leads."""
+    now = _now()
+    base, opportunity = _with_opportunity(
+        db,
+        now,
+        select(
+            Property.owner_name,
+            Property.mail_address,
+            Property.situs_address,
+            Property.situs_city,
+            Property.situs_zip,
+            Property.county,
+        )
+        .select_from(Lead)
+        .join(Property)
+        .outerjoin(CellBaselineNeed, CellBaselineNeed.h3_index == Property.h3_index),
+        sort,
+    )
+    query = filters.apply(base, db, for_leads.LiveCells(db, now)).order_by(
+        *_order(sort, opportunity)
+    )
+
+    def rows():
+        buffer = io.StringIO()
+        writer = csv.writer(buffer)
+        writer.writerow(EXPORT_COLUMNS)
+        # Its own session: the request's may close before the stream ends.
+        with SessionLocal() as stream_db:
+            for owner, mail, street, city, zip_code, county in stream_db.execute(
+                query.execution_options(yield_per=5_000)
+            ):
+                writer.writerow((owner, *split_mail_address(mail), street, city, zip_code, county))
+                if buffer.tell() > 64_000:
+                    yield buffer.getvalue()
+                    buffer.seek(0)
+                    buffer.truncate()
+        yield buffer.getvalue()
+
+    filename = f"leads-{_now():%Y-%m-%d}.csv"
+    return StreamingResponse(
+        rows(),
+        media_type="text/csv",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
 
 
 def _summary(db: Session, query, total: int, live: for_leads.LiveCells) -> dict:

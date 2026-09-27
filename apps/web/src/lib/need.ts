@@ -5,10 +5,14 @@ export const H3_MAP_MIN_ZOOM = 9
 
 export type Market = { name: string; label: string; center: [number, number] }
 
+// Centers are the middle of each county, not downtown. At MARKET_ZOOM (the lowest zoom that
+// still draws Cells) a whole county fits a ~800x600 map.
 export const MARKETS: Market[] = [
-  { name: "harris", label: "Houston", center: [-95.37, 29.76] },
-  { name: "travis", label: "Austin", center: [-97.74, 30.27] },
+  { name: "harris", label: "Houston", center: [-95.43, 29.84] },
+  { name: "travis", label: "Austin", center: [-97.77, 30.33] },
 ]
+
+export const MARKET_ZOOM = H3_MAP_MIN_ZOOM
 
 export type CellFeature = {
   type: "Feature"

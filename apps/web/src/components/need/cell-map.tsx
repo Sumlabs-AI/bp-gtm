@@ -19,7 +19,7 @@ import { PropensityBlock } from "@/components/need/propensity"
 import { WeatherBreakdown } from "@/components/need/weather-breakdown"
 import { apiFetch } from "@/lib/api"
 import { scoreColor } from "@/lib/grid"
-import { H3_MAP_MIN_ZOOM, MARKETS, type CellCollection, type CellDetail } from "@/lib/need"
+import { H3_MAP_MIN_ZOOM, MARKET_ZOOM, MARKETS, type CellCollection, type CellDetail } from "@/lib/need"
 
 const BASEMAP = "https://tiles.openfreemap.org/styles/positron"
 
@@ -155,7 +155,7 @@ export function CellMap({
       <div className="relative h-full overflow-hidden rounded-xl border">
         <Map
           ref={mapRef}
-          initialViewState={{ longitude: MARKETS[0].center[0], latitude: MARKETS[0].center[1], zoom: 10 }}
+          initialViewState={{ longitude: MARKETS[0].center[0], latitude: MARKETS[0].center[1], zoom: MARKET_ZOOM }}
           mapStyle={BASEMAP}
           interactiveLayerIds={[...(data ? ["cells-fill"] : []), ...(points ? ["lead-points"] : [])]}
           onLoad={readViewport}
@@ -277,7 +277,7 @@ export function CellMap({
                   key={m.name}
                   onClick={() => {
                     setMarket(m.name)
-                    mapRef.current?.flyTo({ center: m.center, zoom: 10 })
+                    mapRef.current?.flyTo({ center: m.center, zoom: MARKET_ZOOM })
                   }}
                 >
                   {m.label}

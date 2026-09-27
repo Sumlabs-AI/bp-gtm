@@ -22,7 +22,7 @@ The product only reads Postgres. The computed data it shows (Cells with Baseline
 git clone … && cd bp-gtm && pnpm up    # http://localhost:3000/gtm
 ```
 
-- Not in it: owner names and mailing addresses; the ERCOT meters and raw grid prices (inputs to re-scoring); live data (NWS alerts, forecasts, ERCOT condition), which the worker fetches once running.
+- Not in it: owner names and mailing addresses (so the CSV export's owner and mailing columns are empty on snapshot data: run the lead pipelines for a real mailing list); the ERCOT meters and raw grid prices (inputs to re-scoring); live data (NWS alerts, forecasts, ERCOT condition), which the worker fetches once running.
 - It records its Alembic revision; after a migration, the load is skipped until the snapshot is re-exported.
 - Replace existing data with it: `docker compose exec api python -m app.snapshot load --force`.
 - Refresh it after re-running the pipelines: `pnpm snapshot:export`, then commit `apps/api/snapshot/`. Every export adds ~100 MB to git history: refresh rarely.

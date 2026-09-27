@@ -1,6 +1,6 @@
 import pytest
 
-from app.leads.address import address_key, zip5
+from app.leads.address import address_key, split_mail_address, zip5
 
 
 @pytest.mark.parametrize(
@@ -46,3 +46,28 @@ def test_house_number_zero_is_kept():
 def test_zip5():
     assert zip5("77002-1234") == "77002" and zip5(None) is None
     assert zip5(float("nan")) is None
+
+
+@pytest.mark.parametrize(
+    ("mail", "parts"),
+    [
+        (
+            "15038 ROYAL SHADOWS DR, HOUSTON, TX 77082-4029",
+            ("15038 ROYAL SHADOWS DR", "HOUSTON", "TX", "77082-4029"),
+        ),
+        (
+            "PO BOX 12, UNIT 4, SOUTH HOUSTON, TX 77587",
+            ("PO BOX 12, UNIT 4", "SOUTH HOUSTON", "TX", "77587"),
+        ),
+        # An empty ZIP+4 in the source leaves a dangling hyphen.
+        ("12 OAK LN, SPRING, TX 77386-", ("12 OAK LN", "SPRING", "TX", "77386")),
+        # Not the US "CITY, ST ZIP" shape: the whole string stays in the street line.
+        (
+            "12 HIGH ST, LONDON, SW1A 1AA, UNITED KINGDOM",
+            ("12 HIGH ST, LONDON, SW1A 1AA, UNITED KINGDOM", None, None, None),
+        ),
+        (None, (None, None, None, None)),
+    ],
+)
+def test_split_mail_address(mail, parts):
+    assert split_mail_address(mail) == parts

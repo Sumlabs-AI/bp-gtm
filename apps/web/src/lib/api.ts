@@ -5,6 +5,11 @@ const API_URL =
     ? (process.env.API_URL ?? "http://localhost:8000")
     : (process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000");
 
+// For URLs rendered into markup (links, downloads): the browser follows them, so
+// they must be the public URL on both server and client — otherwise SSR emits the
+// docker-internal host and hydration mismatches.
+export const PUBLIC_API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
+
 export type Item = {
   id: number;
   name: string;

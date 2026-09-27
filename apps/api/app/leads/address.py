@@ -96,3 +96,24 @@ def address_key(street: str | None, zip_code: object) -> str | None:
     if not street_norm or not z:
         return None
     return f"{street_norm} {z}"
+
+
+# The tail of a US mailing address as the appraisal adapters write it: "CITY, ST ZIP".
+_US_LOCALITY = re.compile(r"^[A-Z]{2} \d{5}(?:-\d{4}|-)?$")
+
+
+def split_mail_address(
+    mail: str | None,
+) -> tuple[str | None, str | None, str | None, str | None]:
+    """(street, city, state, zip) from a one-line mailing address, for mail merge.
+
+    Anything that doesn't end in "CITY, ST ZIP" (a foreign address, say) is kept whole as
+    the street line, so no part of it is lost.
+    """
+    if not mail:
+        return None, None, None, None
+    parts = [p.strip() for p in mail.split(",")]
+    if len(parts) < 3 or not _US_LOCALITY.match(parts[-1]):
+        return mail, None, None, None
+    state, zip_code = parts[-1].split(" ")
+    return ", ".join(parts[:-2]), parts[-2], state, zip_code.rstrip("-")

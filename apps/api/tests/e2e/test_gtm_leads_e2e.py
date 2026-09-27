@@ -1,5 +1,7 @@
 """GTM page back end: leads ranked by their Cell, filtered by Cells, bands and live signals."""
 
+import csv
+import io
 from datetime import UTC, datetime, timedelta
 
 import pandas as pd
@@ -365,3 +367,49 @@ def test_recent_storm_lifts_a_cell_in_the_opportunity_ranking(client, world):
     assert a["timing"] == timing_config.peak
     assert a["opportunity_score"] == opportunity_score(70.0, 80.0, timing_config.peak)
     assert items[world["b"]]["cell"]["timing"] == 1.0
+
+
+def test_export_csv_is_a_mailing_list_of_every_filtered_lead(client, world):
+    with SessionLocal() as db:
+        db.execute(
+            update(Property)
+            .where(Property.account == "A2")
+            .values(owner_name="DOE JANE", mail_address="PO BOX 7, KATY, TX 77494-0007")
+        )
+        db.commit()
+    r = client.get("/leads/export.csv", params={"cells": [CELL["A"], CELL["C"]]})
+    assert r.status_code == 200, r.text
+    assert r.headers["content-type"].startswith("text/csv")
+    assert "attachment" in r.headers["content-disposition"]
+    rows = list(csv.DictReader(io.StringIO(r.text)))
+    # Same filter and order as the list, only owner and address columns: nothing computed.
+    assert list(rows[0]) == [
+        "owner_name",
+        "mail_street",
+        "mail_city",
+        "mail_state",
+        "mail_zip",
+        "property_address",
+        "property_city",
+        "property_zip",
+        "county",
+    ]
+    assert [row["property_address"] for row in rows] == ["A2 TEST ST", "A1 TEST ST", "C1 TEST ST"]
+    assert rows[0] == {
+        "owner_name": "DOE JANE",
+        "mail_street": "PO BOX 7",
+        "mail_city": "KATY",
+        "mail_state": "TX",
+        "mail_zip": "77494-0007",
+        "property_address": "A2 TEST ST",
+        "property_city": "HOUSTON",
+        "property_zip": "77002",
+        "county": "harris",
+    }
+    assert rows[1]["owner_name"] == "" and rows[1]["mail_street"] == ""
+
+
+def test_export_csv_is_not_capped_at_a_page(client, world):
+    rows = list(csv.DictReader(io.StringIO(client.get("/leads/export.csv").text)))
+    assert len(rows) == 5
+    assert client.get("/leads/export.csv", params={"need_band": "nope"}).status_code == 422
