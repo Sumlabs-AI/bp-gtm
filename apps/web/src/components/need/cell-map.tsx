@@ -307,7 +307,6 @@ export function CellMap({
         </div>
 
         <div className="absolute top-3 right-12 flex items-center gap-1 rounded-md border bg-background/90 px-2 py-1.5 text-xs shadow-sm">
-          <span className="pr-1 text-muted-foreground">Colour by</span>
           {COLOR_BY.map((c) => (
             <Button key={c.key} size="sm" variant={colorBy === c.key ? "secondary" : "ghost"} onClick={() => setColorBy(c.key)}>
               {c.label}
