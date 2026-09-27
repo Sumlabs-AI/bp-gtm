@@ -499,6 +499,38 @@ def _summary(db: Session, query, total: int, live: for_leads.LiveCells) -> dict:
 MAX_MAP_POINTS = 5000
 
 
+class LeadCell(BaseModel):
+    h3: str
+    leads: int
+
+
+class LeadCells(BaseModel):
+    total: int  # leads in the filter
+    cells: list[LeadCell]
+
+
+@router.get("/leads/cells", response_model=LeadCells)
+def leads_cells(db: DB, filters: Filters):
+    """The Cells holding the filtered leads, for the map's Opportunity Score view.
+    Needs the viewport (`bbox`) or clicked `cells` to stay bounded."""
+    if filters.bounds() is None and not filters.cells:
+        raise HTTPException(422, "bbox (west,south,east,north) or cells is required")
+    in_filter = filters.apply(
+        select(Property.h3_index).select_from(Lead).join(Property),
+        db,
+        for_leads.LiveCells(db, _now()),
+    ).subquery()
+    rows = db.execute(
+        select(in_filter.c.h3_index, func.count().label("n"))
+        .where(in_filter.c.h3_index.is_not(None))
+        .group_by(in_filter.c.h3_index)
+    ).all()
+    return {
+        "total": sum(r.n for r in rows),
+        "cells": [{"h3": r.h3_index, "leads": r.n} for r in rows],
+    }
+
+
 @router.get("/leads/geo")
 def leads_geo(
     db: DB,

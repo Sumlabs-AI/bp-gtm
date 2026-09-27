@@ -5,7 +5,7 @@ import { ArrowUpDownIcon, MapPinIcon, XIcon } from "lucide-react"
 
 import { ExportMenu } from "@/components/gtm/export-buttons"
 import { LeadDrawer } from "@/components/gtm/lead-drawer"
-import { CellMap, type LeadPoint } from "@/components/need/cell-map"
+import { CellMap, type LeadCells, type LeadPoint } from "@/components/need/cell-map"
 import { Button } from "@/components/ui/button"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { apiFetch } from "@/lib/api"
@@ -73,6 +73,7 @@ export function GtmPage({ initialLead = null }: { initialLead?: number | null })
   const [offset, setOffset] = React.useState(0)
   const [page, setPage] = React.useState<LeadPage | null>(null)
   const [points, setPoints] = React.useState<Points | null>(null)
+  const [leadCells, setLeadCells] = React.useState<LeadCells | null>(null)
   const [loading, setLoading] = React.useState(false)
   const [openLead, setOpenLead] = React.useState<number | null>(initialLead)
 
@@ -101,6 +102,16 @@ export function GtmPage({ initialLead = null }: { initialLead?: number | null })
     load()
     return () => controller.abort()
   }, [filters, bbox, offset])
+
+  // The Cells holding every lead in the filter (not only this page): the map's Opportunity Score view.
+  React.useEffect(() => {
+    if (!bbox && !filters.cells.length) return
+    const controller = new AbortController()
+    apiFetch<{ total: number; cells: { h3: string; leads: number }[] }>(`/leads/cells?${params(filters, bbox)}`, { signal: controller.signal })
+      .then((response) => setLeadCells({ h3: response.cells.map((c) => c.h3), total: response.total }))
+      .catch(() => {})
+    return () => controller.abort()
+  }, [filters, bbox])
 
   // Homes as points once zoomed in far enough, inside the same filter.
   const showPoints = zoom >= POINTS_MIN_ZOOM
@@ -178,6 +189,7 @@ export function GtmPage({ initialLead = null }: { initialLead?: number | null })
             points={showPoints ? points : null}
             onPointClick={setOpenLead}
             pointsMinZoom={POINTS_MIN_ZOOM}
+            leadCells={leadCells}
           />
         </div>
 
