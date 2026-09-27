@@ -1,11 +1,13 @@
 "use client"
 
 import * as React from "react"
-import { setWorkerUrl } from "maplibre-gl"
+import { ChevronDownIcon, LocateFixedIcon, ZoomInIcon } from "lucide-react"
+import { setWorkerUrl, type ExpressionSpecification } from "maplibre-gl"
 import Map, { Layer, NavigationControl, Source, type MapLayerMouseEvent, type MapRef } from "react-map-gl/maplibre"
 import "maplibre-gl/dist/maplibre-gl.css"
 
 import { Button } from "@/components/ui/button"
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet"
 import { OutageBreakdown } from "@/components/need/outage-breakdown"
 import { BaselineNeedBlock } from "@/components/need/baseline-need"
@@ -16,7 +18,7 @@ import { PropensityBlock } from "@/components/need/propensity"
 import { WeatherBreakdown } from "@/components/need/weather-breakdown"
 import { apiFetch } from "@/lib/api"
 import { scoreColor } from "@/lib/grid"
-import { COLOR_BY, H3_MAP_MIN_ZOOM, MARKETS, type CellCollection, type CellDetail, type ColorBy } from "@/lib/need"
+import { COLOR_BY, H3_MAP_MIN_ZOOM, MARKETS, NEED_BANDS, type CellCollection, type CellDetail, type ColorBy } from "@/lib/need"
 
 const BASEMAP = "https://tiles.openfreemap.org/styles/positron"
 
@@ -33,7 +35,39 @@ type Hover = {
   forecastLevel: string | null
 }
 
-export function CellMap({ className }: { className?: string }) {
+export type LeadPoint = {
+  type: "Feature"
+  geometry: { type: "Point"; coordinates: [number, number] }
+  properties: { id: number; address?: string | null }
+}
+
+/**
+ * The Need map. On its own it explains Cells in a sheet. In controlled mode (the GTM page)
+ * it is a filter: it reports the viewport, toggles Cells and bands, dims what's filtered
+ * out, and shows the leads inside the filter as points once zoomed in.
+ */
+export function CellMap({
+  className,
+  selectedCells,
+  onToggleCell,
+  bands,
+  onToggleBand,
+  onViewport,
+  points,
+  onPointClick,
+  pointsMinZoom = 13,
+}: {
+  className?: string
+  selectedCells?: string[]
+  onToggleCell?: (h3: string, additive: boolean) => void
+  bands?: string[] // active Baseline Need bands; empty = all
+  onToggleBand?: (band: string) => void
+  onViewport?: (bbox: string, zoom: number) => void
+  points?: { type: "FeatureCollection"; features: LeadPoint[] } | null
+  onPointClick?: (id: number) => void
+  pointsMinZoom?: number
+}) {
+  const controlled = Boolean(onToggleCell)
   const mapRef = React.useRef<MapRef>(null)
   const timer = React.useRef<ReturnType<typeof setTimeout> | null>(null)
   const [bbox, setBbox] = React.useState<string | null>(null)
@@ -42,24 +76,27 @@ export function CellMap({ className }: { className?: string }) {
   const [hover, setHover] = React.useState<Hover | null>(null)
   const [colorBy, setColorBy] = React.useState<ColorBy>("baselineNeed")
   const [selected, setSelected] = React.useState<string | null>(null)
+  const [overPoint, setOverPoint] = React.useState(false)
+  const [market, setMarket] = React.useState(MARKETS[0].name)
   // Keyed by Cell so a stale detail never shows under a newly selected Cell.
   const [detail, setDetail] = React.useState<CellDetail | null>(null)
   const shownDetail = detail?.h3 === selected ? detail : null
-  // ERCOT-wide official condition, given once per map response (even with no Cells in view).
-  const grid = data?.grid ?? null
 
   function readViewport() {
     const map = mapRef.current
     if (!map) return
+    const b = map.getBounds()
+    const box = [b.getWest(), b.getSouth(), b.getEast(), b.getNorth()].map((v) => v.toFixed(5)).join(",")
+    // The list follows the viewport at every zoom; only the Cells wait for the minimum.
+    onViewport?.(box, map.getZoom())
     if (map.getZoom() < H3_MAP_MIN_ZOOM) {
       setBbox(null)
       setData(null)
       setStatus("zoom-in")
       return
     }
-    const b = map.getBounds()
     setStatus("loading")
-    setBbox([b.getWest(), b.getSouth(), b.getEast(), b.getNorth()].map((v) => v.toFixed(5)).join(","))
+    setBbox(box)
   }
 
   React.useEffect(() => {
@@ -92,7 +129,9 @@ export function CellMap({ className }: { className?: string }) {
   }, [])
 
   function onMove(e: MapLayerMouseEvent) {
-    const properties = e.features?.[0]?.properties
+    const feature = e.features?.[0]
+    setOverPoint(feature?.layer?.id === "lead-points")
+    const properties = feature?.properties
     setHover(
       properties?.h3
         ? {
@@ -107,7 +146,28 @@ export function CellMap({ className }: { className?: string }) {
     )
   }
 
-  const highlighted = [selected ?? "", hover?.h3 ?? ""]
+  const highlighted = [...(controlled ? (selectedCells ?? []) : [selected ?? ""]), hover?.h3 ?? ""]
+  // MapLibre expression: is this Cell's Baseline Need inside one of the active bands?
+  const activeBands = bands && bands.length ? NEED_BANDS.filter((b) => bands.includes(b.key)) : []
+  const bandFilter: ExpressionSpecification | null =
+    colorBy === "baselineNeed" && activeBands.length
+      ? ([
+          "any",
+          ...activeBands.map((b) => [
+            "all",
+            [">=", ["get", "baselineNeed"], b.low],
+            [b.top ? "<=" : "<", ["get", "baselineNeed"], b.high],
+          ]),
+        ] as ExpressionSpecification)
+      : null
+  // Clicked Cells narrow the list to themselves, so the others dim too.
+  const focus: ExpressionSpecification[] = [
+    ...(bandFilter ? [bandFilter] : []),
+    ...(controlled && selectedCells?.length
+      ? [["in", ["get", "h3"], ["literal", selectedCells]] as ExpressionSpecification]
+      : []),
+  ]
+  const inFocus: ExpressionSpecification | null = focus.length ? (["all", ...focus] as ExpressionSpecification) : null
 
   return (
     <div className={className}>
@@ -116,7 +176,7 @@ export function CellMap({ className }: { className?: string }) {
           ref={mapRef}
           initialViewState={{ longitude: MARKETS[0].center[0], latitude: MARKETS[0].center[1], zoom: 10 }}
           mapStyle={BASEMAP}
-          interactiveLayerIds={data ? ["cells-fill"] : []}
+          interactiveLayerIds={[...(data ? ["cells-fill"] : []), ...(points ? ["lead-points"] : [])]}
           onLoad={readViewport}
           onMoveEnd={() => {
             if (timer.current) clearTimeout(timer.current)
@@ -124,8 +184,20 @@ export function CellMap({ className }: { className?: string }) {
           }}
           onMouseMove={onMove}
           onMouseLeave={() => setHover(null)}
-          onClick={(e) => setSelected(e.features?.[0]?.properties?.h3 ?? null)}
-          cursor={hover ? "pointer" : "grab"}
+          onClick={(e) => {
+            const feature = e.features?.[0]
+            if (feature?.layer?.id === "lead-points" && onPointClick) {
+              onPointClick(Number(feature.properties?.id))
+              return
+            }
+            const h3 = feature?.properties?.h3 ?? null
+            if (controlled) {
+              if (h3) onToggleCell?.(h3, e.originalEvent.shiftKey || e.originalEvent.metaKey)
+            } else {
+              setSelected(h3)
+            }
+          }}
+          cursor={hover || overPoint ? "pointer" : "grab"}
           attributionControl={{ compact: true }}
         >
           {data && (
@@ -142,10 +214,16 @@ export function CellMap({ className }: { className?: string }) {
                     "fill-color": [
                       "case",
                       ["==", ["get", colorBy], null],
-                      "#6366f1",
+                      "#1e4d2b",
                       ["interpolate", ["linear"], ["get", colorBy], 0, scoreColor(0), 50, scoreColor(50), 100, scoreColor(100)],
                     ],
-                    "fill-opacity": ["case", ["==", ["get", colorBy], null], 0.08, 0.45],
+                    // Filtered out (band not active): dimmed so the filter is visible.
+                    "fill-opacity": [
+                      "case",
+                      ["==", ["get", colorBy], null],
+                      0.08,
+                      inFocus ? ["case", inFocus, 0.45, 0.06] : 0.45,
+                    ],
                   }}
                 />,
                 <Layer
@@ -153,7 +231,7 @@ export function CellMap({ className }: { className?: string }) {
                   id="cells-line"
                   minzoom={H3_MAP_MIN_ZOOM}
                   type="line"
-                  paint={{ "line-color": "#6366f1", "line-width": 0.5, "line-opacity": 0.5 }}
+                  paint={{ "line-color": "#1e4d2b", "line-width": 0.5, "line-opacity": 0.35 }}
                 />,
                 <Layer
                   key="cells-forecast"
@@ -180,50 +258,100 @@ export function CellMap({ className }: { className?: string }) {
                   minzoom={H3_MAP_MIN_ZOOM}
                   type="line"
                   filter={["in", ["get", "h3"], ["literal", highlighted]]}
-                  paint={{ "line-color": "#312e81", "line-width": 2.5 }}
+                  paint={{ "line-color": "#102a17", "line-width": 2.5 }}
                 />,
               ]}
+            </Source>
+          )}
+          {points && (
+            <Source id="leads" type="geojson" data={points}>
+              <Layer
+                id="lead-points"
+                source="leads"
+                type="circle"
+                minzoom={pointsMinZoom}
+                paint={{
+                  "circle-color": "#0f172a",
+                  "circle-radius": 4,
+                  "circle-stroke-color": "#ffffff",
+                  "circle-stroke-width": 1,
+                }}
+              />
             </Source>
           )}
           <NavigationControl position="top-right" showCompass={false} />
         </Map>
 
         <div className="absolute top-3 left-3 flex items-center gap-2 rounded-md border bg-background/90 px-2 py-1.5 text-xs shadow-sm">
-          {MARKETS.map((m) => (
-            <Button
-              key={m.name}
-              size="sm"
-              variant="ghost"
-              onClick={() => mapRef.current?.flyTo({ center: m.center, zoom: 10 })}
-            >
-              {m.label}
-            </Button>
-          ))}
-          <span className="pr-1 text-muted-foreground">{STATUS_TEXT[status](data?.features.length ?? 0)}</span>
-          {grid?.state && (
-            <span
-              className={`rounded px-1.5 py-0.5 ${
-                grid.stale
-                  ? "border border-amber-500 text-amber-700"
-                  : grid.official
-                    ? "bg-red-600 text-white"
-                    : "bg-muted text-muted-foreground"
-              }`}
-              title="Official ERCOT grid condition"
-            >
-              ERCOT: {grid.title ?? grid.state}
-              {grid.stale && " (stale)"}
-            </span>
-          )}
+          {/* A menu, not a <select>: picking the current market again still flies back to it. */}
+          <DropdownMenu>
+            <DropdownMenuTrigger render={<Button size="sm" variant="ghost" className="font-medium" title="Go to a market" />}>
+              <LocateFixedIcon />
+              {MARKETS.find((m) => m.name === market)?.label}
+              <ChevronDownIcon className="opacity-60" />
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="start">
+              {MARKETS.map((m) => (
+                <DropdownMenuItem
+                  key={m.name}
+                  onClick={() => {
+                    setMarket(m.name)
+                    mapRef.current?.flyTo({ center: m.center, zoom: 10 })
+                  }}
+                >
+                  {m.label}
+                </DropdownMenuItem>
+              ))}
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
 
         <div className="absolute top-3 right-12 flex items-center gap-1 rounded-md border bg-background/90 px-2 py-1.5 text-xs shadow-sm">
-          <span className="pr-1 text-muted-foreground">Colour by</span>
           {COLOR_BY.map((c) => (
             <Button key={c.key} size="sm" variant={colorBy === c.key ? "secondary" : "ghost"} onClick={() => setColorBy(c.key)}>
               {c.label}
             </Button>
           ))}
+        </div>
+
+        {(status === "zoom-in" || status === "too-many") && (
+          <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
+            <div className="flex items-center gap-2 rounded-lg border bg-background/95 px-4 py-2.5 text-sm font-medium shadow-md">
+              <ZoomInIcon className="size-4 text-muted-foreground" />
+              Zoom in to see Cells
+            </div>
+          </div>
+        )}
+
+        <div className="absolute bottom-3 left-3 flex flex-col items-start gap-1">
+        {/* Secondary info: the Cell count stays out of the way; problems still read clearly. */}
+        <span
+          className={`rounded bg-background/80 px-1.5 py-0.5 text-[11px] ${
+            status === "ready" || status === "loading" ? "text-muted-foreground" : "font-medium text-foreground"
+          }`}
+        >
+          {STATUS_TEXT[status](data?.features.length ?? 0)}
+        </span>
+        {onToggleBand && colorBy === "baselineNeed" && (
+          <div className="flex items-center gap-1 rounded-md border bg-background/90 px-2 py-1.5 text-xs shadow-sm">
+            <span className="pr-1 text-muted-foreground">Baseline Need</span>
+            {NEED_BANDS.map((b) => {
+              const active = !bands?.length || bands.includes(b.key)
+              return (
+                <button
+                  key={b.key}
+                  type="button"
+                  onClick={() => onToggleBand(b.key)}
+                  title={`Show leads in Cells scored ${b.label}`}
+                  className={`flex items-center gap-1 rounded px-1.5 py-0.5 tabular-nums ${bands?.includes(b.key) ? "ring-2 ring-slate-900" : ""} ${active ? "" : "opacity-40"}`}
+                >
+                  <span className="inline-block h-3 w-3 rounded-sm" style={{ background: scoreColor((b.low + Math.min(b.high, 100)) / 2) }} />
+                  {b.label}
+                </button>
+              )
+            })}
+          </div>
+        )}
         </div>
 
         {hover && (
@@ -242,6 +370,7 @@ export function CellMap({ className }: { className?: string }) {
         )}
       </div>
 
+      {!controlled && (
       <Sheet open={selected !== null} onOpenChange={(open) => !open && setSelected(null)}>
         <SheetContent>
           <SheetHeader>
@@ -263,7 +392,7 @@ export function CellMap({ className }: { className?: string }) {
             </dl>
           )}
           {shownDetail && (
-            <div className="flex flex-col gap-6 overflow-y-auto pb-4">
+            <div className="flex min-h-0 flex-1 flex-col gap-6 overflow-y-auto pb-4">
               {shownDetail.baseline && <BaselineNeedBlock baseline={shownDetail.baseline} />}
               <PropensityBlock propensity={shownDetail.propensity} />
               <NwsAlerts feed={shownDetail.live.weather.alerts} />
@@ -275,6 +404,7 @@ export function CellMap({ className }: { className?: string }) {
           )}
         </SheetContent>
       </Sheet>
+      )}
     </div>
   )
 }

@@ -49,38 +49,49 @@
 }
 
 :root {
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.145 0 0);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.145 0 0);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.145 0 0);
-  --primary: oklch(0.205 0 0);
-  --primary-foreground: oklch(0.985 0 0);
-  --secondary: oklch(0.97 0 0);
-  --secondary-foreground: oklch(0.205 0 0);
-  --muted: oklch(0.97 0 0);
-  --muted-foreground: oklch(0.556 0 0);
-  --accent: oklch(0.97 0 0);
-  --accent-foreground: oklch(0.205 0 0);
-  --destructive: oklch(0.577 0.245 27.325);
-  --border: oklch(0.922 0 0);
-  --input: oklch(0.922 0 0);
-  --ring: oklch(0.708 0 0);
+  /* Base Power brand tokens (basepowercompany.com): two-tone green, warm greys. */
+  --base-green-100: #102a17;
+  --base-green-90: #1e4d2b;
+  --base-green-60: #77a45a;
+  --base-green-20: #b2dd79;
+  --base-green-5: #d6f0b4;
+  --base-grey-100: #292826;
+  --base-grey-60: #6b6966;
+  --base-grey-20: #d8d7d5;
+  --base-grey-5: #f0eeeb;
+
+  --background: #ffffff;
+  --foreground: var(--base-grey-100);
+  --card: #ffffff;
+  --card-foreground: var(--base-grey-100);
+  --popover: #ffffff;
+  --popover-foreground: var(--base-grey-100);
+  --primary: var(--base-green-90);
+  --primary-foreground: #ffffff;
+  --secondary: var(--base-green-20);
+  --secondary-foreground: var(--base-green-90);
+  --muted: var(--base-grey-5);
+  --muted-foreground: var(--base-grey-60);
+  --accent: var(--base-green-5);
+  --accent-foreground: var(--base-green-90);
+  --destructive: #c51808;
+  --border: var(--base-grey-20);
+  --input: var(--base-grey-20);
+  --ring: var(--base-green-60);
   --chart-1: oklch(0.87 0 0);
   --chart-2: oklch(0.556 0 0);
   --chart-3: oklch(0.439 0 0);
   --chart-4: oklch(0.371 0 0);
   --chart-5: oklch(0.269 0 0);
-  --radius: 0.625rem;
-  --sidebar: oklch(0.985 0 0);
-  --sidebar-foreground: oklch(0.145 0 0);
-  --sidebar-primary: oklch(0.205 0 0);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.97 0 0);
-  --sidebar-accent-foreground: oklch(0.205 0 0);
-  --sidebar-border: oklch(0.922 0 0);
-  --sidebar-ring: oklch(0.708 0 0);
+  --radius: 0.5rem;
+  --sidebar: var(--base-green-90);
+  --sidebar-foreground: #ffffff;
+  --sidebar-primary: var(--base-green-20);
+  --sidebar-primary-foreground: var(--base-green-90);
+  --sidebar-accent: var(--base-green-100);
+  --sidebar-accent-foreground: var(--base-green-20);
+  --sidebar-border: rgb(255 255 255 / 12%);
+  --sidebar-ring: var(--base-green-20);
 }
 
 .dark {

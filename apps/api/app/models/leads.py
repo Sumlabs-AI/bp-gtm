@@ -50,6 +50,9 @@ class Property(Base):
     # Point inside the parcel (WGS84), from the county parcel layer.
     lat: Mapped[float | None] = mapped_column(Float)
     lon: Mapped[float | None] = mapped_column(Float)
+    # The H3 res-8 Cell containing that point (app.geo): the master key joining a home to
+    # the Need Engine (Cell scores are read through it, never copied here).
+    h3_index: Mapped[str | None] = mapped_column(String(15), index=True)
     first_seen_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     last_seen_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     # Set when a later load sees a different owner: the "new owner" signal.

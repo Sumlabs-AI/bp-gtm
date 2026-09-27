@@ -48,22 +48,23 @@ export function formatKwh(value: number): string {
   return `${Math.round(value).toLocaleString("en-US")} kWh`
 }
 
-export function leadReturnHref(value: string | string[] | undefined): string {
-  const href = Array.isArray(value) ? value[0] : value
-  if (!href || (href !== "/leads" && !href.startsWith("/leads?"))) return "/leads"
-  const params = new URLSearchParams(href.split("?").slice(1).join("?"))
-  const filters = new URLSearchParams()
-  for (const key of ["status", "min_score", "signals", "new_only", "zip", "zone", "sort", "offset", "view"]) {
-    for (const item of params.getAll(key)) filters.append(key, item)
-  }
-  return `/leads${filters.size ? `?${filters}` : ""}`
+// What a lead's H3 Cell says about it, read from the Need Engine at request time.
+export type CellBlock = {
+  baseline_need: number | null
+  propensity_score: number | null
+  active_alerts: number
+  forecast_level: "elevated" | "high" | null
+  grid_stress_signals: number
 }
 
 export type LeadItem = {
   id: number
+  h3_index: string | null
+  cell: CellBlock | null // null when the home is outside every seeded Cell
   address: string | null
   city: string | null
   zip: string | null
+  county: string
   score: number
   reasons: string
   signals: LeadSignal[]
@@ -79,9 +80,19 @@ export type LeadItem = {
   annual_kwh: number | null
 }
 
+export type LeadListSummary = {
+  leads: number
+  avg_baseline_need: number | null
+  alert: number
+  forecast: number
+  grid_stress: number
+  grid_state: string | null
+}
+
 export type LeadPage = {
   total: number
   items: LeadItem[]
+  summary: LeadListSummary
 }
 
 export type LeadDriver = {
@@ -103,7 +114,6 @@ export type LeadEvidence = {
 export type LeadDetail = LeadItem & {
   drivers: LeadDriver[]
   evidence: LeadEvidence[]
-  county: string
   account: string
   market_value: number | null
   heated_sqft: number | null
@@ -168,4 +178,9 @@ export function formatLeadDriverValue(driver: Pick<LeadDriver, "key" | "value">)
   }
   if (typeof driver.value === "boolean") return driver.value ? "Yes" : "No"
   return String(driver.value)
+}
+
+/** "harris" -> "Harris County" (the appraisal district's spelling varies). */
+export function countyName(county: string): string {
+  return `${county.charAt(0).toUpperCase()}${county.slice(1)}${county.toLowerCase().endsWith(" county") ? "" : " County"}`
 }

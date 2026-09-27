@@ -11,6 +11,7 @@ from datetime import datetime
 import pandas as pd
 from sqlalchemy import Connection, text
 
+from app import geo
 from app.db import engine
 from app.leads.address import address_key, zip5
 from app.leads.frames import METER_COLUMNS, PARCEL_COLUMNS, PERMIT_COLUMNS, PROPERTY_COLUMNS
@@ -105,22 +106,56 @@ def load_permits(df: pd.DataFrame, now: datetime) -> tuple[int, int]:
         )
 
 
+def _h3(lat: pd.Series, lon: pd.Series) -> list[str | None]:
+    return [
+        geo.latlng_to_cell(a, b) if pd.notna(a) and pd.notna(b) else None
+        for a, b in zip(lat, lon, strict=True)
+    ]
+
+
 def load_locations(df: pd.DataFrame, now: datetime) -> tuple[int, int]:
-    """Set lat/lon on known properties. Parcels without an appraisal account are ignored."""
-    df = df[PARCEL_COLUMNS].drop_duplicates(subset=["county", "account"], keep="last")
+    """Set lat/lon and the H3 Cell on known properties. Parcels without an appraisal account
+    are ignored."""
+    df = df[PARCEL_COLUMNS].drop_duplicates(subset=["county", "account"], keep="last").copy()
+    df["h3_index"] = _h3(df["lat"], df["lon"])
     with engine.begin() as conn:
         _copy(conn, "tmp_parcels", "properties", df)
         updated = conn.execute(
             text(
                 """
-                UPDATE properties p SET lat = t.lat, lon = t.lon
+                UPDATE properties p SET lat = t.lat, lon = t.lon, h3_index = t.h3_index
                 FROM tmp_parcels t
                 WHERE p.county = t.county AND p.account = t.account
-                  AND (p.lat IS DISTINCT FROM t.lat OR p.lon IS DISTINCT FROM t.lon)
+                  AND (p.lat IS DISTINCT FROM t.lat OR p.lon IS DISTINCT FROM t.lon
+                       OR p.h3_index IS DISTINCT FROM t.h3_index)
                 """
             )
         ).rowcount
     return 0, updated
+
+
+def assign_cells(chunk: int = 200_000) -> int:
+    """Fill h3_index for every located property that lacks it (one-off backfill; the parcel
+    loader keeps it current afterwards). Idempotent; chunked so 1.5M rows never sit in
+    memory at once. Returns the number set."""
+    total = 0
+    with engine.begin() as conn:
+        missing = pd.read_sql(
+            text("SELECT id, lat, lon FROM properties WHERE h3_index IS NULL AND lat IS NOT NULL"),
+            conn,
+            chunksize=chunk,
+        )
+        for i, rows in enumerate(missing):
+            rows["h3_index"] = _h3(rows["lat"], rows["lon"])
+            _copy(conn, f"tmp_cells_{i}", "properties", rows[["id", "h3_index"]])
+            conn.execute(
+                text(
+                    f"UPDATE properties p SET h3_index = t.h3_index "
+                    f"FROM tmp_cells_{i} t WHERE p.id = t.id"
+                )
+            )
+            total += len(rows)
+    return total
 
 
 LOADERS = {
