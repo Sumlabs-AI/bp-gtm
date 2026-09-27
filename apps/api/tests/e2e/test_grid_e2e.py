@@ -47,9 +47,11 @@ def test_grid_zones_from_prices(client):
     assert len(detail["series"]["hourly_profile"]) == 24
     m = detail["metrics"]
     # The day-ahead planner trades the evening peak, but can't beat perfect hindsight.
-    assert 0 < m["arbitrage_usd"] <= m["arbitrage_ceiling_usd"]
+    # A value can equal its ceiling; allow float rounding between the two sums.
+    tol = 1 + 1e-9
+    assert 0 < m["arbitrage_usd"] <= m["arbitrage_ceiling_usd"] * tol
     for kwh in (25, 40, 50):
-        assert 0 < m[f"battery_value_{kwh}"] <= m[f"battery_ceiling_{kwh}"]
+        assert 0 < m[f"battery_value_{kwh}"] <= m[f"battery_ceiling_{kwh}"] * tol
     assert detail["series"]["battery_years"] == []  # 4 days of prices: no full year
     # Summaries carry the same Grid Value shape as leads; without full years it falls
     # back to the last 12 months.

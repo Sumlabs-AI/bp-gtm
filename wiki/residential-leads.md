@@ -2,7 +2,8 @@
 
 Finds single-family, owner-occupied homes Base can serve, scores them, and flags what's
 new each week. Pilot: Harris County (CenterPoint). Lead = property, not a person: we keep
-public-record owner/mailing data for later outreach but never expose it in the API.
+public-record owner/mailing data for outreach; the only place the API exposes it is the
+mailing-list export (`GET /leads/export.csv`), never the JSON endpoints.
 
 ## Pipeline
 
@@ -75,7 +76,7 @@ The `worker` compose service runs the weekly job every Sunday 03:00 Central: ERC
 
 ## API
 
-`GET /leads/geo?bbox=w,s,e,n&zoom=` (same filters as the list) returns GeoJSON: lead points, or grid cells with `count` and average `score` when more than `MAX_MAP_POINTS` (5,000) leads are in view; the county-wide view takes <1 s. `GET /leads/summary` (includes `by_zone`: leads per load zone, all statuses), `GET /leads` (filters: `min_score`, `signals` (repeatable), `new_only`, `zip`, `status`, `zone` (load zone code, e.g. `LZ_HOUSTON`), `sort`, `limit`, `offset`), `GET /leads/{id}`, `PATCH /leads/{id}` (`{"status": …}`), `GET /sources` (last run per source, for the data-health page).
+`GET /leads/geo?bbox=w,s,e,n&zoom=` (same filters as the list) returns GeoJSON: lead points, or grid cells with `count` and average `score` when more than `MAX_MAP_POINTS` (5,000) leads are in view; the county-wide view takes <1 s. `GET /leads/summary` (includes `by_zone`: leads per load zone, all statuses), `GET /leads` (filters: `min_score`, `signals` (repeatable), `new_only`, `zip`, `status`, `zone` (load zone code, e.g. `LZ_HOUSTON`), `sort`, `limit`, `offset`), `GET /leads/export.csv` (same filters and `sort` as the list, no limit: every matching lead as a mailing list of `owner_name`, `mail_street`/`mail_city`/`mail_state`/`mail_zip` split by `split_mail_address` in `app/leads/address.py` (a foreign address stays whole in `mail_street`), and the property address and county; nothing computed; streamed, the full 772k-lead set takes ~4 s), `GET /leads/{id}`, `PATCH /leads/{id}` (`{"status": …}`), `GET /sources` (last run per source, for the data-health page).
 
 ## Tests
 

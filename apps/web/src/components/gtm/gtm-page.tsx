@@ -1,8 +1,9 @@
 "use client"
 
 import * as React from "react"
-import { MapPinIcon, XIcon } from "lucide-react"
+import { ArrowUpDownIcon, MapPinIcon, XIcon } from "lucide-react"
 
+import { ExportMenu } from "@/components/gtm/export-buttons"
 import { LeadDrawer } from "@/components/gtm/lead-drawer"
 import { CellMap, type LeadPoint } from "@/components/need/cell-map"
 import { Button } from "@/components/ui/button"
@@ -129,8 +130,9 @@ export function GtmPage({ initialLead = null }: { initialLead?: number | null })
   const total = page?.total ?? 0
   const pageEnd = Math.min(offset + PAGE_SIZE, total)
 
+  // md+: the inset layout adds an 8px margin above and below the main panel (sidebar.tsx).
   return (
-    <div className="flex h-[calc(100vh-var(--header-height))] flex-col">
+    <div className="flex h-[calc(100svh-var(--header-height))] flex-col md:h-[calc(100svh-var(--header-height)-1rem)]">
       <div className="flex flex-wrap items-center gap-2 border-b px-4 py-2 text-xs">
         <Button size="sm" variant={filters.alert ? "secondary" : "outline"} onClick={() => update({ alert: !filters.alert })}>
           Active NWS alert{summary ? ` (${summary.alert.toLocaleString("en-US")})` : ""}
@@ -188,19 +190,19 @@ export function GtmPage({ initialLead = null }: { initialLead?: number | null })
 
         <div className="flex min-h-0 flex-col border-l lg:col-span-2">
           <div className="flex flex-wrap items-center gap-1 border-b px-3 py-2 text-xs">
-            <span className="font-medium">
-              {loading ? "Loading…" : `${total.toLocaleString("en-US")} leads`}
-            </span>
-            {summary?.avg_baseline_need !== null && summary?.avg_baseline_need !== undefined && (
-              <span className="text-muted-foreground">· avg Baseline Need {summary.avg_baseline_need.toFixed(0)}</span>
-            )}
-            <span className="ml-auto flex items-center gap-1">
-              <span className="text-muted-foreground">sort</span>
-              <select className="rounded-md border bg-background px-1 py-0.5" value={filters.sort} onChange={(e) => update({ sort: e.target.value as Sort })}>
+            <span className="relative flex items-center">
+              <ArrowUpDownIcon className="pointer-events-none absolute left-1.5 size-3.5 text-muted-foreground" aria-hidden />
+              <select aria-label="Sort" className="rounded-md border bg-background py-0.5 pr-1 pl-6" value={filters.sort} onChange={(e) => update({ sort: e.target.value as Sort })}>
                 {SORTS.map((s) => (
                   <option key={s.key} value={s.key}>{s.label}</option>
                 ))}
               </select>
+            </span>
+            <span className="ml-1 font-medium">
+              {loading ? "Loading…" : `${total.toLocaleString("en-US")} leads`}
+            </span>
+            <span className="ml-auto">
+              <ExportMenu query={params(filters, bbox, { sort: filters.sort })} disabled={!total} />
             </span>
           </div>
 
