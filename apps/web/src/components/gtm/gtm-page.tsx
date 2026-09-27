@@ -227,7 +227,7 @@ export function GtmPage({ initialLead = null }: { initialLead?: number | null })
                       key={lead.id}
                       role="button"
                       tabIndex={0}
-                      className="cursor-pointer text-xs focus-visible:outline-2 focus-visible:outline-ring"
+                      className="cursor-pointer text-xs focus-visible:outline-2 [&>td]:py-3.5 focus-visible:outline-ring"
                       onClick={() => setOpenLead(lead.id)}
                       onKeyDown={(e) => {
                         if (e.key === "Enter" || e.key === " ") {
@@ -239,7 +239,7 @@ export function GtmPage({ initialLead = null }: { initialLead?: number | null })
                       <TableCell>
                         <div className="flex items-start gap-1.5">
                           <MapPinIcon className="mt-0.5 size-3.5 shrink-0 text-primary" aria-hidden />
-                          <div className="min-w-0">
+                          <div className="flex min-w-0 flex-col gap-1">
                             <div className="font-semibold">{lead.address ?? `Lead ${lead.id}`}</div>
                             <div className="text-muted-foreground">
                               {[lead.city, lead.zip, countyName(lead.county)].filter(Boolean).join(" · ")}
