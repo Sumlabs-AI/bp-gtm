@@ -7,7 +7,7 @@
 
 ## Download
 
-The files are attached to the release, not committed (about 240 MB):
+The files are attached to the release, not committed (about 260 MB):
 https://github.com/mamalovesyou/bp-gtm/releases/tag/datasets-v1
 
 ```bash
@@ -35,6 +35,7 @@ zeros). Parcel files join on the Travis Central Appraisal District property id (
 | `travis_parcels_installability.parquet` | 373,524 | Parcel, Travis | County appraisal parcels with footprints, installability gates and block group |
 | `travis_bg_parcel_aggregates.csv` | 766 | Block group, Travis | Parcel counts and medians per block group, next to the ACS owner-occupied single-family count |
 | `travis_parcels_clean_part1.parquet` + `_part2.parquet` | 380,917 | Parcel, Travis | StratMap 2025 parcels, cleaned and deduplicated, with polygons (split in two files; read both and concatenate) |
+| `household_install_table.parquet` (+ `household_install_table_dictionary.csv`) | 373,524 | Parcel, Travis | One row per parcel: market value, eligibility gates, and whether the home has a permitted backup-power install (generator, battery, Base Power), with first install date and install event counts |
 
 ## Column notes
 
@@ -66,6 +67,18 @@ address (1/0, empty when unknown). Gates: `g_sfr` (A1 or E1), `g_owner_proxy`
 proxy (216,768 and 286,084 parcels). Footprint columns: `n_buildings`, `n_residential_bldg`,
 `fp_main_sqft`, `fp_total_sqft`, `fp_coverage`, `open_lot_sqft`. Areas in sq ft.
 
+**Household install table** (`household_install_table`): one row per TCAD parcel (same
+parcels and gates as `travis_parcels_installability`), keyed by `prop_id`. `has_generator`,
+`has_battery`, `has_base_power`, `has_backup_install` (any of them) and `first_*_date` come from
+City of Austin issued permits matched to the parcel; `has_base_power_2026` = Base Power permit
+issued in 2026. `n_*_events` = distinct installation events (`n_backup_events_90d` with a 90-day
+window). `match_method_best` / `match_confidence_best` describe the permit-to-parcel match.
+Variants: `*_hc` = high-confidence matches only; `*_broad` = broader backup definition (adds other
+backup equipment and replacements). `in_coa_entity02` = parcel taxed by the City of Austin (the
+permit source covers City of Austin jurisdiction only, so homes outside it show no permits).
+`acs_bg_median_home_value` = ACS median home value of the parcel's block group. Totals: 5,278
+homes with a backup install, 3,179 generator, 2,166 battery, 302 Base Power 2026.
+
 **StratMap parcels** (`travis_parcels_clean_part*`): one row per `prop_id`; `n_accounts` = appraisal
 accounts on the parcel; `lot_sqft`, `lot_acres` (and `lot_acres_3083`, equal-area) from the polygon;
 `bg_outside_travis` = 1 for the 635 border parcels whose point falls in a neighbouring county's
@@ -83,9 +96,10 @@ No file contains owner names or mailing addresses.
 | emPOWER | HHS emPOWER REST Service, "Electricity Dependent DME – ALL – ZipLevel" — https://services2.arcgis.com/ZQ4jTQn6k7VPXEwO/arcgis/rest/services/HHS_emPOWER_REST_Service_Public/FeatureServer/1 (program: https://empowerprogram.hhs.gov) | HHS ASPR with CMS | Public, aggregated |
 | Travis parcels | TCAD parcels — https://gis.traviscountytx.gov/server1/rest/services/Boundaries_and_Jurisdictions/TCAD/MapServer/0 | Travis County / Travis Central Appraisal District | Public GIS service |
 | Building footprints | Building Footprints 2024 — https://gis.traviscountytx.gov/server1/rest/services/Basemap_Reference/Building_Footprints_2024/MapServer/0 | Travis County | Public GIS service |
+| Backup-power permits | City of Austin Issued Construction Permits — https://data.austintexas.gov/resource/3syk-w9eu (dataset updated 2026-09-26) | City of Austin | Public open data |
 | StratMap parcels | StratMap 2025 Land Parcels, Travis County (48453), `stratmap25-landparcels_48453_lp.zip` — TxGIO DataHub, https://data.geographic.texas.gov/ (service: https://feature.tnris.org/arcgis/rest/services/Parcels/stratmap25_land_parcels_48/MapServer) | Texas Geographic Information Office (TxGIO), from the Travis Central Appraisal District, Aug 2025 | Public download |
 
-Retrieved 2026-09-26.
+Retrieved 2026-09-26 (permits: 2026-09-27).
 
 ## Compliance
 
@@ -95,7 +109,7 @@ Retrieved 2026-09-26.
 | License | Free use by the hackathon team members for the team's project. The hackathon sponsor, its affiliates and any third party need a written license signed by Igor Eduardo for any use ([`LICENSE.txt`](LICENSE.txt)). |
 | Provenance | Built only from the public sources listed above, through their official downloads and public services, retrieved 2026-09-26. No login-protected, paid or non-commercial source (e.g. utility outage maps) was used. |
 | Source terms | Census Bureau and HHS data are U.S. Government public data. Travis County GIS and TxGIO StratMap data stay subject to their publishers' terms. The copyright covers the datasets as produced and compiled, not the original source records. |
-| Personal data | No owner names, owner IDs or mailing addresses in any file. The owner-occupancy flag is computed without storing the mailing address. |
+| Personal data | No owner names, owner IDs or mailing addresses in any file. Install flags come from public permits and describe properties, not people; do not combine them with other data to identify residents. The owner-occupancy flag is computed without storing the mailing address. |
 | Health data | emPOWER counts are aggregated and suppressed by the source (1–10 published as 11). Use them only as an area-level signal, never to single out a household or person. |
 | Accuracy | Screening estimates, provided "as is" without warranty. ACS block-group values carry sampling error: keep the MOE / reliability or use the `_eb` columns. |
 | In-file notice | Every Parquet file carries this copyright, license and source notice in its metadata (`copyright`, `license`, `sources`, `compliance` keys). |
