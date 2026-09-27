@@ -6,6 +6,8 @@ Node 22+, pnpm 10 (`corepack enable`), Python 3.13 + [uv](https://docs.astral.sh
 
 ## Run everything in Docker
 
+The `db` image is Postgres 17 **+ PostGIS**, built from `docker/db/Dockerfile`. A volume created by the old `postgres:17-alpine` image must be moved by dump and restore before it works with it: see [need-engine.md](need-engine.md#switching-an-existing-database-to-postgis).
+
 ```bash
 pnpm up          # docker compose up --build
 pnpm down        # docker compose down
@@ -19,6 +21,19 @@ A fresh database has no prices, so `/grid` is empty. Load and score them (detail
 ```bash
 docker compose exec api python -m app.grid backfill 2025 2026   # or: cd apps/api && uv run python -m app.grid …
 docker compose exec api python -m app.grid compute
+```
+
+Seed the Need Engine Cells for `/need` (offline, a few seconds; see [need-engine.md](need-engine.md)):
+
+```bash
+docker compose exec api python -m app.need seed
+docker compose exec api python -m app.need outage download   # optional: ~6 GB, cached in apps/api/data/raw
+docker compose exec api python -m app.need outage compute    # Outage Need colours on /need
+docker compose exec api python -m app.need weather download  # optional: ~60 MB warnings + temperature
+docker compose exec api python -m app.need weather compute   # Weather Need colours on /need
+docker compose exec api python -m app.need baseline compute  # Baseline Need (default colour on /need)
+docker compose exec api python -m app.need live refresh      # live NWS alerts now (the worker repeats every 5 min)
+docker compose exec api python -m app.need live forecast     # 48 h forecast signals (the worker repeats hourly)
 ```
 
 ERCOT credentials go in the repo-root `.env` (see `.env.example`); only `update` needs them.

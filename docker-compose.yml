@@ -1,6 +1,6 @@
 services:
   db:
-    image: postgres:17-alpine
+    build: ./docker/db # Postgres 17 + PostGIS
     environment:
       POSTGRES_USER: app
       POSTGRES_PASSWORD: app

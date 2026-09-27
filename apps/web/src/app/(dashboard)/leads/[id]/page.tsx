@@ -5,6 +5,7 @@ import { connection } from "next/server"
 import { ExternalLinkIcon, HistoryIcon } from "lucide-react"
 
 import { Disclosure } from "@/components/disclosure"
+import { ConsumptionCard } from "@/components/leads/consumption-card"
 import { LeadLocationMap } from "@/components/leads/lead-location-map"
 import { PriorityHelp } from "@/components/leads/priority-help"
 import { StatusControl } from "@/components/leads/status-control"
@@ -103,6 +104,9 @@ export default async function LeadDetailPage(props: PageProps<"/leads/[id]">) {
     ["Heated area", lead.heated_sqft === null ? "—" : `${formatNumber(lead.heated_sqft)} sqft`],
     ["Market value", lead.market_value === null ? "—" : formatLeadMoney(lead.market_value)],
     ["Year built", lead.year_built?.toString() ?? "—"],
+    ["Bedrooms", lead.bedrooms?.toString() ?? "—"],
+    ["Baths", lead.full_baths === null && lead.half_baths === null ? "—" : `${lead.full_baths ?? "—"} full · ${lead.half_baths ?? "—"} half`],
+    ["Stories", lead.stories?.toString() ?? "—"],
   ]
 
   return (
@@ -220,6 +224,8 @@ export default async function LeadDetailPage(props: PageProps<"/leads/[id]">) {
                 </Link>}
               </CardContent>
             </Card>
+
+            <ConsumptionCard lead={lead} />
 
             <Card>
               <CardHeader>

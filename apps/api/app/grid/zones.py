@@ -1,7 +1,12 @@
-"""ERCOT settlement points we track, with plain-language descriptions."""
+"""ERCOT settlement points we track, with plain-language descriptions, and the one rule
+that places a point in a load zone (zone_for_points)."""
 
 from dataclasses import dataclass
+from functools import cache
 from pathlib import Path
+
+import geopandas as gpd
+import pandas as pd
 
 ZONES_GEOJSON = Path(__file__).with_name("ercot-zones.geojson")
 
@@ -41,3 +46,25 @@ ZONES = [
 
 ZONES_BY_CODE = {z.code: z for z in ZONES}
 TRACKED_POINTS = [z.code for z in ZONES] + [REFERENCE_HUB]
+
+
+@cache
+def _zone_shapes() -> gpd.GeoDataFrame:
+    zones = gpd.read_file(ZONES_GEOJSON)[["code", "geometry"]]
+    zones["area"] = zones.to_crs(3081).area  # Texas equal-area projection
+    return zones
+
+
+def zone_for_points(lat: pd.Series, lon: pd.Series) -> pd.Series:
+    """The load zone each point falls in (None outside every polygon or without coordinates).
+
+    The one rule for Leads and Cells alike: point inside the zone polygon, and where
+    polygons overlap (Austin Energy and CPS sit inside LZ_SOUTH) the smallest one wins.
+    Boundaries are approximate (scripts/build_zone_geojson.py); LZ_LCRA and LZ_RAYBN are
+    never assigned because they have no polygon.
+    """
+    zones = _zone_shapes()
+    points = gpd.GeoDataFrame(index=lat.index, geometry=gpd.points_from_xy(lon, lat), crs=4326)
+    hits = gpd.sjoin(points[points.geometry.is_valid], zones, predicate="within")
+    by_point = hits.sort_values("area").groupby(level=0)["code"].first()
+    return by_point.reindex(lat.index).astype(object).where(lambda z: z.notna(), None)
