@@ -132,7 +132,6 @@ export function GtmPage({ initialLead = null }: { initialLead?: number | null })
   return (
     <div className="flex h-[calc(100vh-var(--header-height))] flex-col">
       <div className="flex flex-wrap items-center gap-2 border-b px-4 py-2 text-xs">
-        <span className="font-medium">Why now</span>
         <Button size="sm" variant={filters.alert ? "secondary" : "outline"} onClick={() => update({ alert: !filters.alert })}>
           Active NWS alert{summary ? ` (${summary.alert.toLocaleString("en-US")})` : ""}
         </Button>
