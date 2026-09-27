@@ -12,6 +12,7 @@ Knowledge base for AI agents (and humans) working in this repo. Read this index 
 | [residential-leads.md](residential-leads.md) | Working on lead sources/adapters, scoring, the weekly refresh, or the leads API |
 | [need-engine.md](need-engine.md) | Working on H3 Cells, the Need Engine, `/need`, or the shared geo contract for ML |
 | [propensity.md](propensity.md) | Working on the Propensity Score: the home-value rule, why it replaced the ML model, how to rebuild it |
+| [research-process.md](research-process.md) | You want the story of the Propensity research: plan vs reality, the three data workstreams, discoveries, how we worked |
 | [ml-contract.md](ml-contract.md) | Handing Need features to the ML workstream, or importing Propensity predictions |
 | [frontend.md](frontend.md) | Touching `apps/web` (Next.js, shadcn/ui, calling the API) |
 | [`ml/README.md`](../ml/README.md) | Working on ML data prep (permit labels, Jev extraction, block-group features) |

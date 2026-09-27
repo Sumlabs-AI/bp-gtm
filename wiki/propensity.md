@@ -2,6 +2,7 @@
 
 Who is likely to buy backup power. Per home, then per **Cell** (H3 res 8). Terms: [`CONTEXT.md`](../CONTEXT.md).
 Decision: [ADR 0002](../docs/adr/0002-propensity-home-value-rule.md). Full research log: [`ml/RESEARCH.md`](../ml/RESEARCH.md).
+How we got here (process, data workstreams, discoveries): [research-process.md](research-process.md).
 
 ## The rule
 
