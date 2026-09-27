@@ -41,22 +41,22 @@ export function countyName(lead: LeadDetail): string {
 /** The home at a glance: where it is and what the latest signal says. */
 export function AddressCard({ lead }: { lead: LeadDetail }) {
   return (
-    <div className="flex flex-col rounded-xl border bg-card shadow-sm">
-      <div className="flex flex-col gap-2 p-3">
+    <div className="flex flex-col rounded-xl bg-primary text-primary-foreground shadow-sm">
+      <div className="flex flex-col gap-2 p-4">
         <div className="flex items-start gap-2">
-          <MapPinIcon className="mt-0.5 size-4 shrink-0 text-primary" aria-hidden />
+          <MapPinIcon className="mt-0.5 size-4 shrink-0 text-secondary" aria-hidden />
           <div className="min-w-0">
             <p className="text-base leading-tight font-semibold">{lead.address ?? "Address unavailable"}</p>
-            <p className="text-xs text-muted-foreground">
+            <p className="text-xs text-primary-foreground/75">
               {[lead.city, lead.zip, countyName(lead)].filter(Boolean).join(" · ")}
             </p>
           </div>
         </div>
         {/* pl-6 = the pin icon plus its gap, so the tags line up with the address text. */}
         <div className="flex flex-wrap items-center gap-1.5 pl-6 text-xs">
-          {lead.load_zone && <Badge variant="outline" className="font-mono">{lead.load_zone}</Badge>}
+          {lead.load_zone && <Badge variant="outline" className="border-secondary/60 font-mono text-secondary">{lead.load_zone}</Badge>}
           {lead.trigger && <Badge variant="secondary">Latest signal: {signalLabel(lead.trigger)}</Badge>}
-          {lead.trigger && lead.triggered_at && <span className="text-muted-foreground">detected {formatDate(lead.triggered_at)}</span>}
+          {lead.trigger && lead.triggered_at && <span className="text-primary-foreground/75">detected {formatDate(lead.triggered_at)}</span>}
         </div>
       </div>
     </div>
