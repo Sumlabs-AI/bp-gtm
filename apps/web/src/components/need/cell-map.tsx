@@ -75,6 +75,7 @@ export function CellMap({
   const [colorBy, setColorBy] = React.useState<ColorBy>("baselineNeed")
   const [selected, setSelected] = React.useState<string | null>(null)
   const [overPoint, setOverPoint] = React.useState(false)
+  const [market, setMarket] = React.useState(MARKETS[0].name)
   // Keyed by Cell so a stale detail never shows under a newly selected Cell.
   const [detail, setDetail] = React.useState<CellDetail | null>(null)
   const shownDetail = detail?.h3 === selected ? detail : null
@@ -282,17 +283,23 @@ export function CellMap({
         </Map>
 
         <div className="absolute top-3 left-3 flex items-center gap-2 rounded-md border bg-background/90 px-2 py-1.5 text-xs shadow-sm">
-          {MARKETS.map((m) => (
-            <Button
-              key={m.name}
-              size="sm"
-              variant="ghost"
-              onClick={() => mapRef.current?.flyTo({ center: m.center, zoom: 10 })}
+          <label className="flex items-center gap-1">
+            <span className="sr-only">Market</span>
+            <select
+              className="rounded-md border bg-background px-2 py-1 font-medium"
+              value={market}
+              onChange={(e) => {
+                const m = MARKETS.find((x) => x.name === e.target.value)
+                if (!m) return
+                setMarket(m.name)
+                mapRef.current?.flyTo({ center: m.center, zoom: 10 })
+              }}
             >
-              {m.label}
-            </Button>
-          ))}
-          <span className="pr-1 text-muted-foreground">{STATUS_TEXT[status](data?.features.length ?? 0)}</span>
+              {MARKETS.map((m) => (
+                <option key={m.name} value={m.name}>{m.label}</option>
+              ))}
+            </select>
+          </label>
           {grid?.state && (
             <span
               className={`rounded px-1.5 py-0.5 ${
@@ -319,8 +326,17 @@ export function CellMap({
           ))}
         </div>
 
+        <div className="absolute bottom-3 left-3 flex flex-col items-start gap-1">
+        {/* Secondary info: the Cell count stays out of the way; problems still read clearly. */}
+        <span
+          className={`rounded bg-background/80 px-1.5 py-0.5 text-[11px] ${
+            status === "ready" || status === "loading" ? "text-muted-foreground" : "font-medium text-foreground"
+          }`}
+        >
+          {STATUS_TEXT[status](data?.features.length ?? 0)}
+        </span>
         {onToggleBand && colorBy === "baselineNeed" && (
-          <div className="absolute bottom-3 left-3 flex items-center gap-1 rounded-md border bg-background/90 px-2 py-1.5 text-xs shadow-sm">
+          <div className="flex items-center gap-1 rounded-md border bg-background/90 px-2 py-1.5 text-xs shadow-sm">
             <span className="pr-1 text-muted-foreground">Baseline Need</span>
             {NEED_BANDS.map((b) => {
               const active = !bands?.length || bands.includes(b.key)
@@ -340,6 +356,7 @@ export function CellMap({
             <span className="pl-1 text-muted-foreground">click to filter</span>
           </div>
         )}
+        </div>
 
         {hover && (
           <div
