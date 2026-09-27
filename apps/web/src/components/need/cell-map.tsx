@@ -1,7 +1,7 @@
 "use client"
 
 import * as React from "react"
-import { ChevronDownIcon, LocateFixedIcon } from "lucide-react"
+import { ChevronDownIcon, LocateFixedIcon, ZoomInIcon } from "lucide-react"
 import { setWorkerUrl, type ExpressionSpecification } from "maplibre-gl"
 import Map, { Layer, NavigationControl, Source, type MapLayerMouseEvent, type MapRef } from "react-map-gl/maplibre"
 import "maplibre-gl/dist/maplibre-gl.css"
@@ -314,6 +314,15 @@ export function CellMap({
             </Button>
           ))}
         </div>
+
+        {(status === "zoom-in" || status === "too-many") && (
+          <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
+            <div className="flex items-center gap-2 rounded-lg border bg-background/95 px-4 py-2.5 text-sm font-medium shadow-md">
+              <ZoomInIcon className="size-4 text-muted-foreground" />
+              Zoom in to see Cells
+            </div>
+          </div>
+        )}
 
         <div className="absolute bottom-3 left-3 flex flex-col items-start gap-1">
         {/* Secondary info: the Cell count stays out of the way; problems still read clearly. */}
