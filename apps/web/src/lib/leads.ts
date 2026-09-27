@@ -48,12 +48,6 @@ export function formatKwh(value: number): string {
   return `${Math.round(value).toLocaleString("en-US")} kWh`
 }
 
-// Where "Return to results" goes: the GTM page (the ranked list), never an arbitrary URL.
-export function leadReturnHref(value: string | string[] | undefined): string {
-  const href = Array.isArray(value) ? value[0] : value
-  return href === "/gtm" || href?.startsWith("/gtm?") ? href : "/gtm"
-}
-
 // What a lead's H3 Cell says about it, read from the Need Engine at request time.
 export type CellBlock = {
   baseline_need: number | null

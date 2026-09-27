@@ -14,7 +14,6 @@ apps/web/src/
 │   └── (dashboard)/       Route group — every page inside gets the app shell
 │       ├── layout.tsx     SidebarProvider + AppSidebar + SiteHeader
 │       ├── gtm/           GTM page (home: "/" redirects here): leads ranked by Cell, the map as the filter
-│       ├── leads/[id]/    The full lead page (/leads itself redirects to /gtm)
 │       ├── grid/          Grid Zones: page.tsx (map + ranking), [zone]/page.tsx (detail)
 │       └── data/          Data sources (Operations)
 │       (each has loading.tsx / error.tsx; leads/[id] also not-found.tsx)
@@ -24,7 +23,7 @@ apps/web/src/
 │   ├── ui/                shadcn/ui primitives — generated; edit sparingly
 │   ├── gtm/               gtm-page (filters, list, drawer), lead-drawer
 │   ├── need/              cell-map (MapLibre H3 Cells) and the Need blocks
-│   ├── leads/             priority-help, lead-return-link, consumption-card
+│   ├── leads/             lead-sections (address card, value, profile, talking points, evidence), lead-location-map, priority-help, consumption-card
 │   ├── app-sidebar.tsx    Navigation: GTM, Grid Zones; Operations → Data sources
 │   ├── site-header.tsx    Route title / breadcrumb
 │   └── route-error.tsx    Shared error state
@@ -45,7 +44,7 @@ UX conventions for leads (agreed in a design review, 2026-09-26):
 - Battery values are "Historical grid value to Base", always shown in 25 / 40 / 50 kWh order with the **suggested size** highlighted.
 - Grid value detail uses progressive disclosure (design review with Codex, 2026-09-26): the list, map preview and lead tiles show only the realistic average-year value, always labelled with its basis ("Average year 2019–2025", or "Last 12 months" when history isn't loaded). The lead page's collapsed "Past years and how this is estimated" holds the last 12 months, the lowest/highest full year, the perfect-hindsight ceiling, a year-by-year table (from `GET /grid/zones/{zone}`, optional) and the method. The zone page shows the 25/40/50 estimate vs ceiling and the value-by-year chart by default; panels built on the 39.2 kWh zone battery are labelled "reference battery". Don't present "% of ceiling" as operating performance.
 - Signals: list shows only recorded ones as badges; detail shows Yes/No with "No = not found in available records". Talking points cite the evidence (permit month, appraisal record) and only say "confirm…" for undated appraisal-only flags.
-- "Return to results" on the lead page goes to `/gtm` (the page keeps its own filter state; a `back` param is only honoured when it points at `/gtm`).
+- There is no separate lead page: the drawer on `/gtm` has everything, and `/leads/<id>` redirects to `/gtm?lead=<id>`, which opens that drawer.
 
 ## Grid Zones (`/grid`)
 
@@ -54,13 +53,13 @@ Dollar-led comparison (design review with Codex, 2026-09-26). `/grid` ("Compare 
 - Map: `react-map-gl/maplibre` + OpenFreeMap `positron` basemap (no API key). Zone shapes come from the API (`GET /grid/zones.geojson`, file `apps/api/app/grid/ercot-zones.geojson`), colored client-side with a MapLibre `match` expression from `scoreColor()`.
 - **MapLibre worker gotcha:** MapLibre resolves its worker file relative to its own bundle, which Turbopack doesn't emit (→ 404, blank map). `zone-map.tsx` calls `setWorkerUrl("/maplibre/maplibre-gl-worker.mjs")`, served by `app/maplibre/[file]/route.ts` straight from `node_modules`.
 
-## Lead page (`/leads/[id]`) and data sources (`/data`)
+## Data sources (`/data`)
 
-`/leads` redirects to `/gtm` (the old filterable list and its `?view=map` are gone; `GET /leads/geo` now serves the GTM map). `/leads/[id]` shows the home on a small map, Expected Value and battery sizing, evidence, and property facts; the Lead Score ("Fit") and its breakdown are no longer shown (leads rank by their Cell, see below). `/data` shows the last refresh of each source from `GET /sources`. Gotcha: `<Layer>`s must be direct children of `<Source>` (or set `source=` explicitly): a Fragment breaks react-map-gl's source injection. Code: `src/app/(dashboard)/{leads,data}`, `src/components/leads/`, `src/lib/leads.ts`. Backend and scoring: [residential-leads.md](residential-leads.md).
+`/leads` redirects to `/gtm` and `/leads/<id>` to `/gtm?lead=<id>` (the lead drawer replaced the full lead page). `/data` shows the last refresh of each source from `GET /sources`. Gotcha: `<Layer>`s must be direct children of `<Source>` (or set `source=` explicitly): a Fragment breaks react-map-gl's source injection. Code: `src/app/(dashboard)/{leads,data}`, `src/components/leads/`, `src/lib/leads.ts`. Backend and scoring: [residential-leads.md](residential-leads.md).
 
 ## GTM page (`/gtm`, the home page)
 
-The list of leads is the product, the map is the lens. `components/gtm/gtm-page.tsx` (client) holds the filters: the map viewport (`bbox`), clicked Cells (`cells`, shift-click adds), Baseline Need legend bands (`need_band`), the live chips (`alert`, `forecast`, `grid_stress`) and "new this week"; every change refetches `GET /leads` (50 rows, `sort=need` by default) and, at zoom ≥ 13, `GET /leads/geo` for the homes as points inside the same filter. Active filters are removable chips in a highlighted bar above both the map and the list ("Clear all" on the right); the summary line comes from the response's `summary`. Clicking a row or a point opens `components/gtm/lead-drawer.tsx`, a stack of collapsed cards (`gtm/panel-card.tsx`: title and headline score on one line, the full block on open): the home (facts, the consumption card, evidence, a link to `/leads/[id]`) plus its Cell's Need breakdown (the same blocks as the Need sheet, from `GET /need/cells/{h3}`).
+The list of leads is the product, the map is the lens. `components/gtm/gtm-page.tsx` (client) holds the filters: the map viewport (`bbox`), clicked Cells (`cells`, shift-click adds), Baseline Need legend bands (`need_band`), the live chips (`alert`, `forecast`, `grid_stress`) and "new this week"; every change refetches `GET /leads` (50 rows, `sort=need` by default) and, at zoom ≥ 13, `GET /leads/geo` for the homes as points inside the same filter. Active filters are removable chips in a highlighted bar above both the map and the list ("Clear all" on the right); the summary line comes from the response's `summary`. Clicking a row or a point opens `components/gtm/lead-drawer.tsx`: an address card (mini map, address, latest signal, Load Zone, Google Maps link), then two sections of collapsed cards (`gtm/panel-card.tsx`: title and headline value on one line, the full block on open). **Home**: priority value with the 25/40/50 kWh options and their history (`GET /grid/zones/{zone}`), estimated use, home profile, talking points, evidence. **Area** (the home's Cell, from `GET /need/cells/{h3}`): Baseline Need, Outage and Weather Need, Propensity, NWS alerts, forecast, ERCOT grid.
 
 `components/need/cell-map.tsx` is the same map in *controlled* mode: `selectedCells`/`onToggleCell`, `bands`/`onToggleBand` (dims Cells outside the active bands), `onViewport`, and `points`. Without those props it behaves as before (a Cell click opens the explanatory sheet). When Cells are clicked, the viewport (`bbox`) is dropped from the list query: the clicked Cells define the area. Below `H3_MAP_MIN_ZOOM` the map draws no Cells but still reports the viewport, so the list follows the map at every zoom. `/need`, `/leads` and `/` all redirect to `/gtm` (`next.config.ts`, so the redirect is a real 307 and not a streamed meta refresh).
 

@@ -1,7 +1,6 @@
 "use client"
 
 import * as React from "react"
-import Link from "next/link"
 
 import { BaselineNeedBlock } from "@/components/need/baseline-need"
 import { ForecastSignals } from "@/components/need/forecast-signals"
@@ -12,87 +11,71 @@ import { PropensityBlock } from "@/components/need/propensity"
 import { Score } from "@/components/need/score-parts"
 import { WeatherBreakdown } from "@/components/need/weather-breakdown"
 import { ConsumptionCard } from "@/components/leads/consumption-card"
+import { AddressCard, EvidenceList, HomeProfile, TalkingPoints, ValueSection, talkingPoints } from "@/components/leads/lead-sections"
 import { PanelCard, Tag } from "@/components/gtm/panel-card"
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet"
 import { apiFetch } from "@/lib/api"
+import type { ZoneDetail } from "@/lib/grid"
 import { formatLeadMoney, type LeadDetail } from "@/lib/leads"
 import type { AlertFeed, CellDetail, ForecastFeed, LiveGrid } from "@/lib/need"
 
-/** A lead and its Cell's "why", without leaving the map. */
+/** Everything about a lead, without leaving the map: the home, then its area (the Cell). */
 export function LeadDrawer({ id, onClose }: { id: number | null; onClose: () => void }) {
   const [lead, setLead] = React.useState<LeadDetail | null>(null)
   const [cell, setCell] = React.useState<CellDetail | null>(null)
+  const [zone, setZone] = React.useState<ZoneDetail | null>(null)
   const [error, setError] = React.useState<{ id: number; message: string } | null>(null)
 
   React.useEffect(() => {
     if (id === null) return
     const controller = new AbortController()
-    apiFetch<LeadDetail>(`/leads/${id}`, { signal: controller.signal })
+    const signal = controller.signal
+    apiFetch<LeadDetail>(`/leads/${id}`, { signal })
       .then((detail) => {
         setLead(detail)
+        // Optional extras: the Cell's Need and the Load Zone's year-by-year battery value.
+        if (detail.load_zone) {
+          apiFetch<ZoneDetail>(`/grid/zones/${encodeURIComponent(detail.load_zone)}`, { signal }).then(setZone).catch(() => {})
+        }
         if (detail.h3_index) {
-          return apiFetch<CellDetail>(`/need/cells/${detail.h3_index}`, { signal: controller.signal }).then(setCell)
+          return apiFetch<CellDetail>(`/need/cells/${detail.h3_index}`, { signal }).then(setCell)
         }
         setCell(null)
       })
       .catch((e: Error) => {
-        if (!controller.signal.aborted) setError({ id, message: e.message })
+        if (!signal.aborted) setError({ id, message: e.message })
       })
     return () => controller.abort()
   }, [id])
 
   const shown = lead?.id === id ? lead : null
   const shownCell = shown && cell?.h3 === shown.h3_index ? cell : null
+  const shownZone = shown && zone?.code === shown.load_zone ? zone : null
   const failed = error?.id === id ? error.message : null
+  const points = shown ? talkingPoints(shown) : []
 
   return (
     <Sheet open={id !== null} onOpenChange={(open) => !open && onClose()}>
       <SheetContent className="sm:max-w-md">
-        <SheetHeader>
-          <SheetTitle>{shown?.address ?? "Lead"}</SheetTitle>
-          <SheetDescription>
-            {shown ? `${shown.city ?? ""} ${shown.zip ?? ""} · ${shown.load_zone ?? "no load zone"}` : failed ? "Couldn't load this lead" : "Loading…"}
-            {shown && (
-              <>
-                {" · "}
-                <Link href={`/leads/${shown.id}`} className="underline">
-                  open full page
-                </Link>
-              </>
-            )}
+        <SheetHeader className="pb-2">
+          <SheetTitle className="sr-only">{shown?.address ?? "Lead"}</SheetTitle>
+          <SheetDescription className={shown ? "sr-only" : undefined}>
+            {shown ? `${shown.city ?? ""} ${shown.zip ?? ""}` : failed ? "Couldn't load this lead" : "Loading…"}
           </SheetDescription>
         </SheetHeader>
         {failed && <p className="px-4 text-xs text-destructive">{failed}</p>}
         {shown && (
           <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto pb-6">
+            <div className="px-4 pb-2">
+              <AddressCard lead={shown} />
+            </div>
+
+            <SectionTitle title="Home" hint="This property: value, use and records" />
             <PanelCard
-              title="This home"
+              title="Priority value"
               value={shown.expected_value !== null ? <span className="font-semibold tabular-nums">{formatLeadMoney(shown.expected_value)}/yr</span> : "—"}
             >
-              <div className="flex flex-col gap-2 px-3 text-sm">
-                <dl className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
-                  <dt className="text-muted-foreground">Expected Value</dt>
-                  <dd className="text-right tabular-nums">{shown.expected_value !== null ? formatLeadMoney(shown.expected_value) : "—"}</dd>
-                  <dt className="text-muted-foreground">Suggested battery</dt>
-                  <dd className="text-right tabular-nums">{shown.recommended_kwh ? `${shown.recommended_kwh} kWh` : "—"}</dd>
-                  <dt className="text-muted-foreground">Home</dt>
-                  <dd className="text-right tabular-nums">
-                    {shown.heated_sqft ? `${Math.round(shown.heated_sqft).toLocaleString("en-US")} sqft` : "—"}
-                    {shown.year_built ? ` · ${shown.year_built}` : ""}
-                  </dd>
-                  <dt className="text-muted-foreground">Signals</dt>
-                  <dd className="text-right">{shown.signals.length ? shown.signals.join(", ") : "—"}</dd>
-                </dl>
-                {shown.evidence.length > 0 && (
-                  <ul className="flex flex-col gap-1 text-xs text-muted-foreground">
-                    {shown.evidence.map((e, i) => (
-                      <li key={i}>
-                        {e.date ? `${e.date} · ` : ""}{e.detail} <span className="opacity-70">({e.source})</span>
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </div>
+              <ValueSection lead={shown} zone={shownZone} />
             </PanelCard>
             <PanelCard
               title="Estimated electricity use"
@@ -100,6 +83,20 @@ export function LeadDrawer({ id, onClose }: { id: number | null; onClose: () => 
             >
               <ConsumptionCard lead={shown} />
             </PanelCard>
+            <PanelCard
+              title="Home profile"
+              value={<span className="tabular-nums text-muted-foreground">{[shown.heated_sqft ? `${Math.round(shown.heated_sqft).toLocaleString("en-US")} sqft` : null, shown.year_built].filter(Boolean).join(" · ") || "—"}</span>}
+            >
+              <HomeProfile lead={shown} />
+            </PanelCard>
+            <PanelCard title="Talking points" value={<span className="text-muted-foreground">{points.length || "—"}</span>}>
+              <TalkingPoints points={points} />
+            </PanelCard>
+            <PanelCard title="Evidence & sources" value={<span className="text-muted-foreground">{shown.evidence.length || "—"}</span>}>
+              <EvidenceList lead={shown} />
+            </PanelCard>
+
+            <SectionTitle title="Area" hint="The home's H3 Cell: why backup power matters here, and now" />
             {shownCell ? (
               <>
                 {shownCell.baseline && (
@@ -129,6 +126,7 @@ export function LeadDrawer({ id, onClose }: { id: number | null; onClose: () => 
                 <PanelCard title="ERCOT grid" value={<GridTag grid={shownCell.live.grid} />}>
                   <LiveGridSection grid={shownCell.live.grid} />
                 </PanelCard>
+                <p className="px-4 font-mono text-[11px] text-muted-foreground">Cell {shownCell.h3}</p>
               </>
             ) : (
               <p className="px-4 text-xs text-muted-foreground">
@@ -139,6 +137,15 @@ export function LeadDrawer({ id, onClose }: { id: number | null; onClose: () => 
         )}
       </SheetContent>
     </Sheet>
+  )
+}
+
+function SectionTitle({ title, hint }: { title: string; hint: string }) {
+  return (
+    <div className="flex items-baseline gap-2 px-4 pt-3">
+      <h3 className="text-xs font-semibold tracking-wider text-muted-foreground uppercase">{title}</h3>
+      <span className="truncate text-[11px] text-muted-foreground">{hint}</span>
+    </div>
   )
 }
 

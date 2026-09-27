@@ -69,7 +69,7 @@ function LiveFlags({ lead }: { lead: LeadItem }) {
   )
 }
 
-export function GtmPage() {
+export function GtmPage({ initialLead = null }: { initialLead?: number | null }) {
   const [filters, setFilters] = React.useState<Filters>(EMPTY)
   const [bbox, setBbox] = React.useState<string | null>(null)
   const [zoom, setZoom] = React.useState(10)
@@ -77,7 +77,7 @@ export function GtmPage() {
   const [page, setPage] = React.useState<LeadPage | null>(null)
   const [points, setPoints] = React.useState<Points | null>(null)
   const [loading, setLoading] = React.useState(false)
-  const [openLead, setOpenLead] = React.useState<number | null>(null)
+  const [openLead, setOpenLead] = React.useState<number | null>(initialLead)
 
   const update = (patch: Partial<Filters>) => {
     setFilters((f) => ({ ...f, ...patch }))

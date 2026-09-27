@@ -6,6 +6,8 @@ const nextConfig: NextConfig = {
     return [
       { source: "/", destination: "/gtm", permanent: false },
       { source: "/leads", destination: "/gtm", permanent: false },
+      // The lead drawer on the GTM page has everything the old full page had.
+      { source: "/leads/:id", destination: "/gtm?lead=:id", permanent: false },
       { source: "/need", destination: "/gtm", permanent: false },
     ];
   },
