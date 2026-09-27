@@ -7,6 +7,7 @@ import { ForecastSignals } from "@/components/need/forecast-signals"
 import { LiveGridSection } from "@/components/need/live-grid"
 import { NwsAlerts } from "@/components/need/nws-alerts"
 import { OutageBreakdown } from "@/components/need/outage-breakdown"
+import { OpportunityBlock } from "@/components/need/opportunity"
 import { PropensityBlock } from "@/components/need/propensity"
 import { Score } from "@/components/need/score-parts"
 import { WeatherBreakdown } from "@/components/need/weather-breakdown"
@@ -94,6 +95,9 @@ export function LeadDrawer({ id, onClose }: { id: number | null; onClose: () => 
             <SectionTitle title="Area" hint="The home's H3 Cell: why backup power matters here, and now" />
             {shownCell ? (
               <>
+                <PanelCard title="Opportunity" value={<Score value={shownCell.opportunity.score} />}>
+                  <OpportunityBlock opportunity={shownCell.opportunity} timing={shownCell.timing} />
+                </PanelCard>
                 {shownCell.baseline && (
                   <PanelCard title="Baseline Need" value={<Score value={shownCell.baseline.baselineNeed} />}>
                     <BaselineNeedBlock baseline={shownCell.baseline} />

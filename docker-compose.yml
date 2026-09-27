@@ -30,7 +30,8 @@ services:
         condition: service_healthy
     volumes:
       - ./apps/api:/app
-    command: sh -c "alembic upgrade head && fastapi dev app/main.py --host 0.0.0.0 --port 8000"
+    # First start: load the committed data snapshot (apps/api/snapshot/) into an empty database.
+    command: sh -c "alembic upgrade head && python -m app.snapshot load && fastapi dev app/main.py --host 0.0.0.0 --port 8000"
 
   # Weekly refresh of ERCOT prices and lead sources (Sunday 03:00 Central).
   worker:

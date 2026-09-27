@@ -8,6 +8,7 @@ Quick reference:
 
 - Run everything: `pnpm up` (docker compose). Web :3000, API :8000 (`/docs`), Postgres :5432.
 - Schema changes go through Alembic only — see [`wiki/database.md`](wiki/database.md).
+- ML data prep lives in `ml/` (separate uv project, not in docker-compose) — see [`ml/README.md`](ml/README.md).
 - `apps/web/AGENTS.md` has Next.js-specific rules (this Next.js version has breaking changes).
 
 ## Agent skills

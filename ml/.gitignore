@@ -1,0 +1,4 @@
+.venv/
+__pycache__/
+# Raw and derived datasets are rebuilt by the pipeline; don't commit them.
+data/

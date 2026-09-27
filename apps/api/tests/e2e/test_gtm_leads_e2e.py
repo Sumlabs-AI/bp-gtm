@@ -11,9 +11,18 @@ from sqlalchemy import select, update
 from app import geo
 from app.db import SessionLocal
 from app.leads.store import assign_cells, load_locations
-from app.models import CellBaselineNeed, Lead, Property
+from app.models import (
+    CellBaselineNeed,
+    CellPropensity,
+    Lead,
+    NwsAlert,
+    PropensityImport,
+    Property,
+)
+from app.need.config import timing as timing_config
 from app.need.enrich import enrich_counties, enrich_load_zones
 from app.need.live.alerts import take_snapshot
+from app.need.opportunity import opportunity_score
 from app.need.store import seed_polygon
 
 NOW = datetime.now(UTC).replace(microsecond=0)
@@ -252,6 +261,112 @@ def test_loader_sets_h3_and_backfill_is_idempotent(world):
         assert db.scalar(
             select(Property.h3_index).where(Property.account == "O1")
         ) == geo.latlng_to_cell(*OUT)
+
+
+def test_opportunity_ranking_and_score(client, world):
+    """sort=opportunity ranks Cells by Propensity^0.6 x Baseline Need^0.4 (latest prediction),
+    then homes by consumption; homes without an Opportunity come last."""
+    with SessionLocal() as db:
+        batch = PropensityImport(
+            imported_at=NOW,
+            file_name="test.parquet",
+            rows=3,
+            product_cells=3,
+            other_cells=0,
+            model_versions=["v1"],
+            feature_versions=["1.0.0"],
+            warnings=[],
+        )
+        db.add(batch)
+        db.flush()
+        for h3, score, at in (
+            (CELL["A"], 90.0, NOW - timedelta(days=1)),  # superseded below
+            (CELL["A"], 10.0, NOW),  # latest: A = 10^.6 x 80^.4
+            (CELL["B"], 90.0, NOW),  # B = 90^.6 x 60^.4, the best
+        ):
+            db.add(
+                CellPropensity(
+                    h3_index=h3,
+                    propensity_score=score,
+                    model_version="v1",
+                    feature_version="1.0.0",
+                    scored_at=at,
+                    imported_at=NOW,
+                    import_id=batch.id,
+                )
+            )
+        db.commit()
+    assert ids(client, sort="opportunity") == [
+        world["b"],
+        world["a_big"],
+        world["a_small"],
+        # No Opportunity (C has no Propensity, O1 no Cell): by consumption, 40k before 30k.
+        world["out"],
+        world["c"],
+    ]
+    items = {i["id"]: i for i in client.get("/leads").json()["items"]}
+    assert items[world["b"]]["cell"]["opportunity_score"] == opportunity_score(90.0, 60.0)
+    assert items[world["a_big"]]["cell"]["opportunity_score"] == opportunity_score(10.0, 80.0)
+
+
+def test_recent_storm_lifts_a_cell_in_the_opportunity_ranking(client, world):
+    """A Cell whose storm warning ended days ago is in its post-event window: Timing lifts its
+    Opportunity above a Cell that would otherwise rank first."""
+    with SessionLocal() as db:
+        batch = PropensityImport(
+            imported_at=NOW,
+            file_name="test.parquet",
+            rows=2,
+            product_cells=2,
+            other_cells=0,
+            model_versions=["v1"],
+            feature_versions=["1.0.0"],
+            warnings=[],
+        )
+        db.add(batch)
+        db.flush()
+        for h3, score in ((CELL["A"], 70.0), (CELL["B"], 90.0)):  # A 73.9 < B 77.9
+            db.add(
+                CellPropensity(
+                    h3_index=h3,
+                    propensity_score=score,
+                    model_version="v1",
+                    feature_version="1.0.0",
+                    scored_at=NOW,
+                    imported_at=NOW,
+                    import_id=batch.id,
+                )
+            )
+        db.commit()
+    assert ids(client, sort="opportunity")[:3] == [world["b"], world["a_big"], world["a_small"]]
+
+    ends = datetime.now(UTC) - timedelta(days=4)
+    ring = ", ".join(f"{x} {y}" for x, y in square(*A, 0.02)["coordinates"][0])
+    with SessionLocal() as db:
+        db.add(
+            NwsAlert(
+                id="svr-a",
+                event="Severe Thunderstorm Warning",
+                category="severe_storm",
+                zones=[],
+                effective_at=ends - timedelta(hours=2),
+                expires_at=ends,
+                ends_at=ends,
+                geometry=f"SRID=4326;MULTIPOLYGON((({ring})))",
+                geometry_source="alert",
+                first_seen_at=ends - timedelta(hours=2),
+                last_seen_at=ends,
+            )
+        )
+        db.commit()
+    assert ids(client, sort="opportunity")[:3] == [world["a_big"], world["a_small"], world["b"]]
+    items = {
+        i["id"]: i for i in client.get("/leads", params={"sort": "opportunity"}).json()["items"]
+    }
+    a = items[world["a_big"]]["cell"]
+    assert a["timing"] == timing_config.peak
+    assert a["opportunity_score"] == opportunity_score(70.0, 80.0, timing_config.peak)
+    assert items[world["b"]]["cell"]["timing"] == 1.0
 
 
 def test_export_csv_is_a_mailing_list_of_every_filtered_lead(client, world):

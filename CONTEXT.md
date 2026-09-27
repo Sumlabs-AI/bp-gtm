@@ -31,12 +31,16 @@ It is kept apart from two other concepts:
 - **Live Need** says whether something is happening now.
 - **Propensity Score** says how likely the area is to buy.
 
-Opportunity combines these three later. Baseline Need is not a probability and not the GTM score.
+The Opportunity Score combines it with Propensity and Timing. Baseline Need is not a probability and not the GTM score.
 _Avoid_: need score (reserved until Live Need exists), opportunity, risk score
 
 **Dominant Driver**:
 Which input mostly explains a Baseline Need: outage history, weather, or both (when the two inputs are within 10 points).
 _Avoid_: main factor, cause
+
+**Timing**:
+A multiplier (1.0–1.5) saying when to knock in a Cell. It's highest in the weeks after a storm warning ended there, because that's when backup buying peaks. It is the third factor of the Opportunity Score.
+_Avoid_: urgency, timing score
 
 **Live Need**:
 Current/near-term urgency for a Cell, driven by active alerts, forecasts, current outages and current ERCOT conditions. Changes rapidly. Answers "why now?".
@@ -129,8 +133,12 @@ The version of the Need feature definitions (which columns, thresholds, windows 
 _Avoid_: schema version, data version
 
 **Opportunity**:
-The GTM interpretation of a Cell's Need Score together with its Propensity Score. Both dimensions stay visible; the combining formula is undefined until decided by the team.
-_Avoid_: opportunity score (until a formula exists), priority, expected value
+The GTM interpretation of a Cell's Baseline Need together with its Propensity Score: who Base should target. Both inputs stay visible next to the Opportunity Score.
+_Avoid_: priority, expected value
+
+**Opportunity Score**:
+Per-Cell weighted geometric mean of Propensity (weight 0.6) and Baseline Need (weight 0.4), times Timing. A Cell needs the right homes, a real reason for backup, and ideally a recent storm. It's 0–100 before Timing and up to 150 in a post-storm window. A rank, not a probability. Null when Propensity or Baseline Need is missing. No Eligibility, Installable, Forecast or grid factor yet.
+_Avoid_: priority score, opportunity (unqualified, when meaning the number), expected value
 
 ### Leads
 

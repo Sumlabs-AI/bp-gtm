@@ -189,6 +189,57 @@ class BaselineConfig(BaseModel):
 baseline = BaselineConfig()
 
 
+class OpportunityConfig(BaseModel):
+    """Opportunity Score weights (app/need/opportunity.py). Computed on read: no re-run."""
+
+    # From the project plan (ml/base_gtm_ml_plan.txt §9): who buys counts more than how
+    # needed it is. Must sum to 1 so the score stays on 0-100.
+    propensity_weight: float = 0.6
+    need_weight: float = 0.4
+
+
+opportunity = OpportunityConfig()
+
+
+class TimingConfig(BaseModel):
+    """Timing multiplier (app/need/timing.py): when to knock, from NWS Alert history.
+
+    Shape from backup-permit research in Austin/San Antonio (Uri 2021, Feb 2023 ice storm):
+    permits rise within 2 weeks of a storm and peak 4-8 weeks after it; buying decisions come
+    2-4 weeks before the permit. A major event (Uri) lifted demand for months. Two events and
+    two cities: a shape to follow, not a fitted curve.
+    """
+
+    # An alert covering the Cell that is in effect now or takes effect within this many hours.
+    pre_event_hours: int = 72
+    pre_event: float = 1.1  # a "get ready" talk track; not when people buy
+    peak: float = 1.5  # the post-event buying window
+    # Days after the event ends: full `peak` until peak_days, then linear down to 1.0 at
+    # fade_days.
+    peak_days: int = 28
+    fade_days: int = 56
+    major_peak_days: int = 56
+    major_fade_days: int = 180
+    # NWS events that open a post-event window. Watches and advisories don't (nothing may
+    # have happened); plain Freeze Warnings and heat alerts rarely cut power.
+    major_events: list[str] = [
+        "Ice Storm Warning",
+        "Winter Storm Warning",
+        "Extreme Cold Warning",
+        "Hurricane Warning",
+    ]
+    events: list[str] = [
+        "Tornado Warning",
+        "Severe Thunderstorm Warning",
+        "Extreme Wind Warning",
+        "Tropical Storm Warning",
+        "Hard Freeze Warning",
+    ]
+
+
+timing = TimingConfig()
+
+
 # Version of the Need feature definitions (columns, thresholds, windows, sources) that the
 # ML exports carry and a Propensity file records. Bump it when a definition changes; the
 # changelog lives in wiki/ml-contract.md.

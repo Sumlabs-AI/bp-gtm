@@ -45,7 +45,7 @@ The one page the ML workstream needs. Both sides join on **H3 resolution-8 `h3_i
            NEED
              └───────────┼────────────┘
                          ▼
-                   GTM OPPORTUNITY (later; not defined yet)
+                   OPPORTUNITY SCORE (Propensity^0.6 × Baseline Need^0.4)
 ```
 
 **The rule that matters most:** the Propensity model receives **static/historical features only**. Live weather and ERCOT signals are activation signals that change hour to hour; they are **not** training features (a permit issued in 2023 must not be explained by today's heat forecast). They're combined downstream with Baseline Need and Propensity to make GTM Opportunity.
@@ -56,7 +56,7 @@ The one page the ML workstream needs. Both sides join on **H3 resolution-8 `h3_i
 BASELINE NEED   "Would a battery be structurally useful here?"      (this repo)
 PROPENSITY      "Who is likely to buy?"                             (ML workstream)
 LIVE NEED       "Why now?"                                          (this repo, later)
-                          └──────────► GTM OPPORTUNITY "Who should Base target now?" (later)
+                          └──────────► OPPORTUNITY SCORE "Who should Base target?" (Propensity + Baseline Need)
 ```
 
 ## Input to ML: `need_features.parquet`
@@ -108,7 +108,35 @@ Details of every feature: [need-engine.md](need-engine.md).
   - `propensity_imports` logs each file: rows, product Cells, other Cells, the model and feature versions seen, warnings.
   - The API serves the **latest `scored_at`** per Cell (ties: latest import) and names its `model_version`.
 
-Meaning: Propensity = likelihood/affinity for battery adoption. It is **not** Need and **not** GTM Opportunity. The API shows it beside Baseline Need (`GET /need/cells/{h3}` → `propensity`, map features → `propensityScore`) and never combines the two here.
+- Batched insert (5,000 rows per statement): Postgres caps one statement at 65,535 parameters.
+
+Meaning: Propensity = likelihood/affinity for battery adoption. It is **not** Need. The API shows it beside Baseline Need (`GET /need/cells/{h3}` → `propensity`, map features → `propensityScore`); the two are combined only in the Opportunity Score below.
+
+### Current model: `home-value-solar-v1`
+
+**Committed:** `ml/output/propensity.parquet` (6,609 Cells, ~70 KB), so a fresh clone imports it without rebuilding `ml/data`:
+
+```bash
+cd apps/api && uv run python -m app.need import-propensity ../../ml/output/propensity.parquet
+```
+
+Written by `ml/score/export_propensity.py` from `ml/data/processed/home_scores.parquet` (`ml/score/homes.py`, see `ml/README.md`), Harris and Travis only. Per home: log(appraised value), + log(2) if the home has a solar permit; homes with a backup permit already are not ranked. Per Cell: the mean percentile of its eligible (owner-occupied single-family) homes within their metro × 100. Cells with no eligible homes have no prediction (and so no Opportunity Score).
+
+## Opportunity Score
+
+`app/need/opportunity.py`, weights in `app/need/config.py` (`OpportunityConfig`):
+
+```text
+Opportunity = 100 × (Propensity/100)^0.6 × (Baseline Need/100)^0.4 × Timing
+```
+
+Timing (1.0–1.5) is the post-storm buying window from NWS Alert history: see [need-engine.md](need-engine.md#timing-post-storm-sales-window). Before Timing (`baseScore`) the score is 0–100; with it the score can reach 150.
+
+- Weighted geometric mean: both matter, a zero in either gives zero; Propensity counts more (weights from the project plan, `ml/base_gtm_ml_plan.txt` §9).
+- Computed on read (no table, no re-run after changing the weights). Null when Propensity or Baseline Need is missing. It moves week to week with Timing.
+- API: `GET /need/cells/{h3}` → `opportunity` {score, propensity, baselineNeed, method, limitations}; map features → `opportunityScore`; each lead's `cell.opportunity_score`, and `GET /leads?sort=opportunity` (Opportunity, then the home's consumption). The GTM page colours the map and sorts leads by it by default.
+- A rank, not a probability: Propensity is a percentile within its metro, Baseline Need a Texas percentile. Inside one metro Baseline Need varies little (county outage history), so the order there is mostly Propensity; across metros Need separates them.
+- Not yet in it: **Eligibility** (Base service area / utility partner), **Installable** (share of homes meeting install requirements) and the rest of **Live Need** (Forecast Signals, ERCOT grid stress). Each would be a multiplier.
 
 ## Feature Version changelog
 

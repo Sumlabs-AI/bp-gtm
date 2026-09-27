@@ -18,13 +18,15 @@ from app.leads.scoring import DRIVERS
 from app.models import CellBaselineNeed, Lead, Property, SourceRun
 from app.need import for_leads
 from app.need.config import NEED_BANDS
+from app.need.opportunity import opportunity_sql
+from app.need.timing import timing_sql
 from app.routers.grid import BatteryValue
 
 router = APIRouter(tags=["leads"])
 
 DB = Annotated[Session, Depends(get_db)]
 Status = Literal["new", "reviewed", "qualified", "excluded"]
-Sort = Literal["need", "priority", "value", "consumption", "triggered_at"]
+Sort = Literal["opportunity", "need", "priority", "value", "consumption", "triggered_at"]
 PERCENTILE_DRIVERS = {"home_size", "home_value"}
 SIGNAL_TYPES = ("solar", "ev_charger", "new_home", "new_owner", "new_meter", "pool")
 
@@ -34,6 +36,9 @@ class CellBlock(BaseModel):
 
     baseline_need: float | None
     propensity_score: float | None
+    # Propensity x Baseline Need x Timing (app/need/opportunity.py)
+    opportunity_score: float | None
+    timing: float  # the Timing multiplier in it (app/need/timing.py)
     active_alerts: int
     forecast_level: str | None  # "elevated" | "high" | None
     grid_stress_signals: int
@@ -188,24 +193,26 @@ def _item(lead: Lead, prop: Property, cell: dict | None = None) -> dict:
 
 
 @router.get("/leads/summary", response_model=LeadSummary)
-def lead_summary(db: DB):
+def lead_summary(db: DB, county: str | None = None):
+    """Counts for all leads, or one appraisal county (harris, travis)."""
+
+    def count(model, *where):
+        query = select(func.count()).select_from(model)
+        if county:
+            query = query.where(Property.county == county)
+            if model is Lead:
+                query = query.join(Property)
+        return db.scalar(query.where(*where))
+
+    zones = select(Lead.load_zone, func.count()).where(Lead.load_zone.is_not(None))
+    if county:
+        zones = zones.join(Property).where(Property.county == county)
     return {
-        "properties": db.scalar(select(func.count()).select_from(Property)),
-        "leads": db.scalar(select(func.count()).select_from(Lead)),
-        "new_this_week": db.scalar(
-            select(func.count()).select_from(Lead).where(Lead.triggered_at >= _window())
-        ),
-        "by_signal": {
-            k: db.scalar(select(func.count()).select_from(Lead).where(_has_signal(k)))
-            for k in SIGNAL_TYPES
-        },
-        "by_zone": dict(
-            db.execute(
-                select(Lead.load_zone, func.count())
-                .where(Lead.load_zone.is_not(None))
-                .group_by(Lead.load_zone)
-            ).all()
-        ),
+        "properties": count(Property),
+        "leads": count(Lead),
+        "new_this_week": count(Lead, Lead.triggered_at >= _window()),
+        "by_signal": {k: count(Lead, _has_signal(k)) for k in SIGNAL_TYPES},
+        "by_zone": dict(db.execute(zones.group_by(Lead.load_zone)).all()),
         "last_scored_at": db.scalar(select(func.max(Lead.scored_at))),
     }
 
@@ -227,6 +234,7 @@ class LeadFilters(BaseModel):
     forecast: bool = False  # only Cells with a Forecast Signal in the next 48 h
     grid_stress: bool = False  # only Cells with a Grid Stress Signal
     bbox: str | None = None  # west,south,east,north: the map viewport
+    county: str | None = None  # appraisal county, e.g. harris, travis
 
     def cell_set(self, db: Session, live: for_leads.LiveCells) -> set[str] | None:
         """The Cells the Cell filters allow, or None when no Cell filter is active."""
@@ -286,6 +294,8 @@ class LeadFilters(BaseModel):
             query = query.where(Lead.status == self.status)
         if self.zone:
             query = query.where(Lead.load_zone == self.zone)
+        if self.county:
+            query = query.where(Property.county == self.county)
         return query
 
 
@@ -302,6 +312,7 @@ def _filters(
     forecast: bool = False,
     grid_stress: bool = False,
     bbox: str | None = None,
+    county: str | None = None,
 ) -> LeadFilters:
     return LeadFilters(
         min_score=min_score,
@@ -316,6 +327,7 @@ def _filters(
         forecast=forecast,
         grid_stress=grid_stress,
         bbox=bbox,
+        county=county,
     )
 
 
@@ -330,19 +342,22 @@ def list_leads(
     limit: int = Query(50, ge=1, le=500),
     offset: int = Query(0, ge=0),
 ):
-    """Leads ranked by their Cell (Baseline Need), then the home (consumption, then Expected
-    Value). Cell scores are joined at request time through the home's h3_index."""
+    """Leads ranked by their Cell (Baseline Need by default, or the Opportunity Score), then the
+    home (consumption, then Expected Value). Cell scores are joined at request time through the
+    home's h3_index."""
     now = _now()
     live = for_leads.LiveCells(db, now)
-    query = filters.apply(
+    base, opportunity = _with_opportunity(
+        db,
+        now,
         select(Lead, Property)
         .join(Property)
         .outerjoin(CellBaselineNeed, CellBaselineNeed.h3_index == Property.h3_index),
-        db,
-        live,
+        sort,
     )
+    query = filters.apply(base, db, live)
     total = db.scalar(select(func.count()).select_from(query.subquery()))
-    rows = db.execute(query.order_by(*_order(sort)).limit(limit).offset(offset)).all()
+    rows = db.execute(query.order_by(*_order(sort, opportunity)).limit(limit).offset(offset)).all()
     blocks = for_leads.cell_blocks(db, {p.h3_index for _, p in rows if p.h3_index}, now)
     return {
         "total": total,
@@ -351,8 +366,27 @@ def list_leads(
     }
 
 
-def _order(sort: Sort) -> tuple:
+def _with_opportunity(db: Session, now: datetime, query, sort: Sort):
+    """For sort=opportunity, join each home's latest Propensity and its Cell's Timing and
+    return the Opportunity Score expression to order by; otherwise the query unchanged."""
+    if sort != "opportunity":
+        return query, None
+    propensity = for_leads.latest_propensity_subquery()
+    query = query.outerjoin(propensity, propensity.c.h3_index == Property.h3_index)
+    timing = timing_sql(db, now)  # None when no Cell is in a storm window
+    multiplier = 1.0
+    if timing is not None:
+        query = query.outerjoin(timing, timing.c.h3_index == Property.h3_index)
+        multiplier = func.coalesce(timing.c.multiplier, 1.0)
+    return query, opportunity_sql(
+        propensity.c.propensity_score, CellBaselineNeed.baseline_need, multiplier
+    )
+
+
+def _order(sort: Sort, opportunity=None) -> tuple:
     by_home = (Lead.annual_kwh.desc().nulls_last(), Lead.expected_value.desc().nulls_last())
+    if sort == "opportunity":
+        return (opportunity.desc().nulls_last(), *by_home, Property.id)
     return (
         *{
             "need": (CellBaselineNeed.baseline_need.desc().nulls_last(), *by_home),
@@ -382,7 +416,10 @@ EXPORT_COLUMNS = (
 def export_leads(db: DB, filters: Filters, sort: Sort = "need"):
     """Every lead the filters allow, in list order, as a mailing list: the owner and the
     home's address, nothing we computed. Confidential owners never become leads."""
-    query = filters.apply(
+    now = _now()
+    base, opportunity = _with_opportunity(
+        db,
+        now,
         select(
             Property.owner_name,
             Property.mail_address,
@@ -394,9 +431,11 @@ def export_leads(db: DB, filters: Filters, sort: Sort = "need"):
         .select_from(Lead)
         .join(Property)
         .outerjoin(CellBaselineNeed, CellBaselineNeed.h3_index == Property.h3_index),
-        db,
-        for_leads.LiveCells(db, _now()),
-    ).order_by(*_order(sort))
+        sort,
+    )
+    query = filters.apply(base, db, for_leads.LiveCells(db, now)).order_by(
+        *_order(sort, opportunity)
+    )
 
     def rows():
         buffer = io.StringIO()
@@ -535,7 +574,8 @@ def _detail(db: Session, lead_id: int) -> dict:
     if not found:
         raise HTTPException(404, f"Unknown lead {lead_id}")
     lead, prop = found
-    total = sum(scoring.weights.values())
+    # Drivers unknown for this home (e.g. no living area in Travis) are left out of its score.
+    total = sum(w for k, w in scoring.weights.items() if k in lead.drivers)
     cell = (
         for_leads.cell_blocks(db, {prop.h3_index}, _now()).get(prop.h3_index)
         if prop.h3_index
