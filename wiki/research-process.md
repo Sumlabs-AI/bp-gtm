@@ -20,7 +20,7 @@ neighborhoods"** and **#6 "data engineering eats the weekend"**.
 
 ## 2. Three data workstreams, run in parallel
 
-Each ran in its own Claude Code session and wrote into `ml/`.
+Each ran as its own work session and wrote into `ml/`.
 
 ### 2.1 Permit labels (`ml/permits/`)
 
