@@ -41,6 +41,7 @@ class LeadItem(BaseModel):
     address: str | None
     city: str | None
     zip: str | None
+    county: str
     score: float
     reasons: str
     signals: list[str]
@@ -104,7 +105,6 @@ class Evidence(BaseModel):
 class LeadDetail(LeadItem):
     drivers: list[DriverOut]
     evidence: list[Evidence]
-    county: str
     account: str
     market_value: float | None
     heated_sqft: float | None
@@ -165,6 +165,7 @@ def _item(lead: Lead, prop: Property, cell: dict | None = None) -> dict:
         "address": prop.situs_address,
         "city": prop.situs_city,
         "zip": prop.situs_zip,
+        "county": prop.county,
         "score": lead.score,
         "reasons": lead.reasons,
         "signals": sorted({s["type"] for s in lead.signals}),
@@ -475,7 +476,6 @@ def _detail(db: Session, lead_id: int) -> dict:
     return {
         **_item(lead, prop, cell),
         # Owner name and mailing address are deliberately not exposed here.
-        "county": prop.county,
         "account": prop.account,
         "market_value": prop.market_value,
         "heated_sqft": prop.heated_sqft,

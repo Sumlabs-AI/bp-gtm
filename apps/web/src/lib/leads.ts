@@ -64,6 +64,7 @@ export type LeadItem = {
   address: string | null
   city: string | null
   zip: string | null
+  county: string
   score: number
   reasons: string
   signals: LeadSignal[]
@@ -113,7 +114,6 @@ export type LeadEvidence = {
 export type LeadDetail = LeadItem & {
   drivers: LeadDriver[]
   evidence: LeadEvidence[]
-  county: string
   account: string
   market_value: number | null
   heated_sqft: number | null
@@ -178,4 +178,9 @@ export function formatLeadDriverValue(driver: Pick<LeadDriver, "key" | "value">)
   }
   if (typeof driver.value === "boolean") return driver.value ? "Yes" : "No"
   return String(driver.value)
+}
+
+/** "harris" -> "Harris County" (the appraisal district's spelling varies). */
+export function countyName(county: string): string {
+  return `${county.charAt(0).toUpperCase()}${county.slice(1)}${county.toLowerCase().endsWith(" county") ? "" : " County"}`
 }

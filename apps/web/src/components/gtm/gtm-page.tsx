@@ -1,7 +1,7 @@
 "use client"
 
 import * as React from "react"
-import { XIcon } from "lucide-react"
+import { MapPinIcon, XIcon } from "lucide-react"
 
 import { LeadDrawer } from "@/components/gtm/lead-drawer"
 import { CellMap, type LeadPoint } from "@/components/need/cell-map"
@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { apiFetch } from "@/lib/api"
 import { scoreColor } from "@/lib/grid"
-import { formatLeadMoney, type LeadItem, type LeadPage } from "@/lib/leads"
+import { countyName, formatLeadMoney, type LeadItem, type LeadPage } from "@/lib/leads"
 import { NEED_BANDS } from "@/lib/need"
 
 const PAGE_SIZE = 50
@@ -238,8 +238,15 @@ export function GtmPage({ initialLead = null }: { initialLead?: number | null })
                       }}
                     >
                       <TableCell>
-                        <div className="font-medium">{lead.address ?? `Lead ${lead.id}`}</div>
-                        <div className="text-muted-foreground">{lead.zip}</div>
+                        <div className="flex items-start gap-1.5">
+                          <MapPinIcon className="mt-0.5 size-3.5 shrink-0 text-primary" aria-hidden />
+                          <div className="min-w-0">
+                            <div className="font-semibold">{lead.address ?? `Lead ${lead.id}`}</div>
+                            <div className="text-muted-foreground">
+                              {[lead.city, lead.zip, countyName(lead.county)].filter(Boolean).join(" · ")}
+                            </div>
+                          </div>
+                        </div>
                       </TableCell>
                       <TableCell className="text-right"><Score value={lead.cell?.baseline_need} /></TableCell>
                       <TableCell className="text-right"><Score value={lead.cell?.propensity_score} /></TableCell>

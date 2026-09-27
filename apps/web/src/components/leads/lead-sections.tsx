@@ -9,7 +9,7 @@ import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import type { ZoneDetail } from "@/lib/grid"
-import { BATTERY_SIZES, formatLeadMoney, signalLabel, valueBasis, type LeadDetail } from "@/lib/leads"
+import { BATTERY_SIZES, countyName, formatLeadMoney, signalLabel, valueBasis, type LeadDetail } from "@/lib/leads"
 import { cn } from "@/lib/utils"
 
 // Everything the lead drawer shows about the home itself (the former full lead page).
@@ -33,11 +33,6 @@ function latestEvidence(lead: LeadDetail, type: string): { label: string; source
   return { label: month, source: `${item.source.replaceAll("_", " ")}: ${item.detail}` }
 }
 
-export function countyName(lead: LeadDetail): string {
-  const c = lead.county
-  return `${c.charAt(0).toUpperCase()}${c.slice(1)}${c.toLowerCase().endsWith(" county") ? "" : " County"}`
-}
-
 /** The home at a glance: where it is and what the latest signal says. */
 export function AddressCard({ lead }: { lead: LeadDetail }) {
   return (
@@ -48,7 +43,7 @@ export function AddressCard({ lead }: { lead: LeadDetail }) {
           <div className="min-w-0">
             <p className="text-base leading-tight font-semibold">{lead.address ?? "Address unavailable"}</p>
             <p className="text-xs text-primary-foreground/75">
-              {[lead.city, lead.zip, countyName(lead)].filter(Boolean).join(" · ")}
+              {[lead.city, lead.zip, countyName(lead.county)].filter(Boolean).join(" · ")}
             </p>
           </div>
         </div>
@@ -153,7 +148,7 @@ export function ValueSection({ lead, zone }: { lead: LeadDetail; zone: ZoneDetai
 
 /** Appraisal facts, percentile drivers and recorded features. */
 export function HomeProfile({ lead }: { lead: LeadDetail }) {
-  const county = countyName(lead)
+  const county = countyName(lead.county)
   const flagDrivers = lead.drivers.filter((d) => d.kind === "flag")
   const percentileDrivers = lead.drivers.filter((d) => d.kind === "percentile")
   const facts = [
