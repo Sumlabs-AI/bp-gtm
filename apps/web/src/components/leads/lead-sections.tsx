@@ -48,9 +48,7 @@ export function AddressCard({ lead }: { lead: LeadDetail }) {
         <div className="flex flex-wrap items-center gap-1.5 text-xs">
           {lead.trigger && <Badge variant="secondary">Latest signal: {signalLabel(lead.trigger)}</Badge>}
           {lead.trigger && lead.triggered_at && <span className="text-muted-foreground">detected {formatDate(lead.triggered_at)}</span>}
-          {lead.load_zone && <Badge variant="outline" className="font-mono">{lead.load_zone}</Badge>}
         </div>
-        {lead.reasons && <p className="text-xs text-muted-foreground">{lead.reasons}</p>}
       </div>
     </div>
   )
