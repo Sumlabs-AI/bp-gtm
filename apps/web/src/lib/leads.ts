@@ -26,6 +26,7 @@ export type Consumption = {
 }
 
 export const BATTERY_SIZES = [25, 40, 50] as const
+
 export const STATUS_LABELS: Record<LeadStatus, string> = {
   new: "Unreviewed",
   reviewed: "Reviewed",
@@ -52,6 +53,8 @@ export function formatKwh(value: number): string {
 export type CellBlock = {
   baseline_need: number | null
   propensity_score: number | null
+  opportunity_score: number | null // Propensity x Baseline Need x Timing (0-100, up to 150 after a storm)
+  timing: number // the Timing multiplier in it
   active_alerts: number
   forecast_level: "elevated" | "high" | null
   grid_stress_signals: number
@@ -128,6 +131,7 @@ export type LeadDetail = LeadItem & {
   lat: number | null
   lon: number | null
 }
+
 
 export type LeadSummary = {
   properties: number

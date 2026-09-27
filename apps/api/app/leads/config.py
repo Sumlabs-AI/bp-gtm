@@ -8,6 +8,11 @@ from pydantic import BaseModel
 # ERCOT ESI ID extract, so they need another eligibility source later.
 BASE_TDSPS = {"centerpoint", "oncor", "aep_central", "aep_north", "tnmp"}
 
+# Utilities Base serves through a partnership whose meters aren't in the ERCOT ESI ID extract
+# (municipal utilities don't file it): a home whose parcel point falls in the load zone is
+# eligible without a meter match. Austin Energy's territory is its own zone, LZ_AEN.
+PARTNER_UTILITY_ZONES = {"LZ_AEN": "austin_energy"}
+
 
 # Rough ERCOT load zone per TDSP, used only when a lead has no map point.
 TDSP_ZONES = {
@@ -34,6 +39,9 @@ class LeadScoringConfig(BaseModel):
         "new_home": 0.10,
         "pool": 0.10,  # pools/spas: large, steady electric load
     }
+    # Drivers a county's appraisal data can't tell: left out of those leads' score (the other
+    # weights are rescaled), not counted as 0. Travis' public layer has no living area or pools.
+    unknown_drivers: dict[str, set[str]] = {"travis": {"home_size", "pool"}}
     # Battery we'd pitch, by heated area (sqft upper bounds); a pool bumps it one size up.
     battery_sizing: list[tuple[float, int]] = [(2_500, 25), (4_000, 40), (float("inf"), 50)]
 

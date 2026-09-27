@@ -1,0 +1,507 @@
+======================================================================
+BASE POWER x AITX HACKATHON - GTM ENGINE & PROPENSITY MODEL
+Project plan: data, scoring, ML, validation, risks
+======================================================================
+
+Tracks targeted: Most Commercializable (primary) + Open Grid Data (secondary)
+Event: Base Power HQ, Austin - Sept 25-27, 2026
+Judges: Base engineering team (expect deep technical questions)
+
+Items marked [VERIFY] must be checked early in the weekend.
+
+
+----------------------------------------------------------------------
+1. PRODUCT SUMMARY
+----------------------------------------------------------------------
+
+One-liner:
+  A GTM tool that tells Base's sales team WHERE to knock, WHEN to knock,
+  and WHAT to say, by scoring every neighborhood in Texas.
+
+Users:
+  - Sales reps (door-to-door): map + weekly priority feed + talk tracks
+  - Sales managers: region comparison, estimated buyers, revenue potential
+  - (Future) Utility partners like CoServ: where to promote their Base program
+
+Product surfaces:
+  1. Map: neighborhoods (Census block groups) colored by Priority score,
+     with toggleable layers (propensity, need, solar homes, untapped, etc.)
+  2. Neighborhood card: score breakdown, key stats, top reasons (SHAP),
+     generated talk track
+  3. "This week" feed: neighborhoods boosted by timing signals
+     (storm/freeze alerts, recent outages, ERCOT grid stress)
+  4. Segment filters: solar homes without battery, new homeowners
+  5. Manager view: estimated backup buyers and revenue potential by region
+
+Pitch angle:
+  Most sales maps answer WHO. This answers WHO (propensity model),
+  WHEN (timing signals) and WHAT TO SAY (talk tracks built from real
+  outage history).
+
+
+----------------------------------------------------------------------
+2. SCOPE
+----------------------------------------------------------------------
+
+- Platform: Texas only (Base's core market; ERCOT data is Texas-only).
+- Demo metro: DFW (deregulated, large suburbs, CoServ partner territory).
+  Alternative: Houston.
+- Training cities: cities with usable permit open data. Candidates:
+  Austin, Dallas, San Antonio, Fort Worth, Houston. [VERIFY each]
+- Prediction area: all Texas block groups (features cover the whole state).
+
+Why prediction still matters with permit cities:
+  - Permit data covers city limits only. Suburbs (Plano, Frisco, McKinney,
+    Arlington, Denton, Round Rock, unincorporated Harris County, CoServ
+    territory...) are NOT covered. Roughly three-quarters of the people in
+    the 4 big metros live outside those city limits.
+  - Suburbs = owner-occupied single-family = likely Base's best market.
+  - Inside permit cities, the model gives "untapped" gaps
+    (predicted demand vs actual installs).
+
+Austin nuance: Austin Energy territory is not deregulated; Base sells there
+via utility partnership. Austin permits are still fine for TRAINING
+(they show who buys backup).
+
+
+----------------------------------------------------------------------
+3. UNIT OF ANALYSIS
+----------------------------------------------------------------------
+
+- Census block group (2020 boundaries), ~600-3,000 people each.
+- Every dataset is brought to block group level:
+    address-level data (permits, parcels) -> geocode -> count/aggregate
+    block group data (ACS) -> direct
+    tract-only ACS tables -> copied to each block group in the tract
+    county-level data (outages, weather) -> copied to each block group
+- Product stays at block group level: no household-level profiles shown
+  to reps (privacy; judges will notice).
+- IMPORTANT: use 2020 block group boundaries everywhere (TIGER/Line 2020+).
+  Do not mix 2010 and 2020 geographies.
+
+
+----------------------------------------------------------------------
+4. DATA SOURCES & ROLES
+----------------------------------------------------------------------
+
+Format: Data point | Source | Used for | Level | Coverage
+
+ELIGIBILITY
+- Utility territory / deregulated area | HIFLD Electric Retail Service
+  Territories shapefile | Eligibility | polygons | all US
+- Base service areas & utility partners | Base website / ask Base |
+  Eligibility, display (direct vs utility program pitch) | city/utility |
+  Texas (+ Illinois)
+
+FIT FEATURES (Census ACS 5-year, via Census API)
+- % owner-occupied | ML feature, display | block group | all US
+- % single-family detached | ML feature | block group | all US
+- Median home value | ML feature, display | block group | all US
+- Median household income | ML feature | block group | all US
+- Median year built | ML feature, display | block group | all US
+- % households with someone 65+ | ML feature, display | block group
+- Median years in current home / year moved in | ML feature
+- Home heating fuel (electric vs gas) | ML feature (winter outage pain)
+- Working from home share | ML feature (outage = lost income)
+- Mortgage status | ML feature
+- Rooms / bedrooms | ML feature (home size proxy)
+- Household size, presence of children | ML feature
+- Housing cost as % of income | ML feature (affordability)
+- Vacancy rate | ML feature
+- Note: some tables are tract-only; block group estimates have large
+  margins of error (MOE). Pull broadly, keep 20-40 features.
+
+COMPUTED GEOGRAPHIC FEATURES
+- Housing density, distance to city center | TIGER shapefiles |
+  ML feature | block group
+
+ADDRESS-LEVEL HOME DATA (aggregated to block group)
+- Home size, year built, lot size, property type | County appraisal
+  districts (DCAD, TAD, Collin CAD, Denton CAD, TCAD, HCAD...) |
+  ML feature | parcel -> block group | per county, formats differ
+- Homestead exemption flag | Appraisal district | ML feature
+  (true owner-occupancy per home, better than survey estimate)
+- Deed date (recent purchase) | Appraisal district | Segment filter
+  [VERIFY which counties include it]
+- Building footprints | Microsoft Building Footprints (free, nationwide) |
+  installability estimate (outdoor space near house)
+
+PERMITS (city open data)
+- Generator + battery permits | ML LABEL | address -> block group |
+  permit cities only
+- Solar permits | ML feature, segment layer, talk track
+- Electrical panel upgrade permits | installability proxy
+- Contractor name | Base installs (validation), competitor layer
+
+NEED (outage pain)
+- Historical outages (count, customer-hours) | DOE EAGLE-I |
+  Need score, display, talk track | county | all US
+- Severe weather events (freeze, storms) | NOAA Storm Events |
+  Need score | county/zone | all US
+- Days above 100F | NOAA climate data | Need score | station -> county
+
+TIMING SIGNALS
+- Storm / freeze alerts | National Weather Service API | Timing boost,
+  feed | forecast zone -> county | all US
+- Recent outage | Utility outage maps (Oncor, CenterPoint) live, or
+  EAGLE-I replay for demo | Timing | per utility (scraping fragile)
+- ERCOT grid stress (tight reserves, conservation appeals) | gridstatus |
+  Timing | statewide
+
+GRID VALUE (manager view only)
+- Trading value per battery by load zone | ERCOT prices via gridstatus |
+  Manager display, revenue potential | load zone | ERCOT area
+  (most of Texas, not El Paso)
+
+
+----------------------------------------------------------------------
+5. BASE INSTALL REQUIREMENTS -> INSTALLABILITY PROXY
+----------------------------------------------------------------------
+
+Published Base requirements (from Base help center):
+  - Battery outside, within 20 ft of the electric meter
+  - No trenching or attic conduit runs
+  - 3 ft clearance from gas meters, AC units, fences, obstructions
+  - Not indoors or in garages
+  - Main breaker 100-200A (Austin: 150-200A; dual battery: 200A)
+  - Home draw must be <= 11 kW for the battery to turn on
+  - HOAs cannot block it in Texas (Property Code 202.010)
+
+Public proxies:
+  - Panel capacity -> year built (old homes often 100A), panel upgrade permits
+  - Outdoor space -> gap between building footprint and parcel lines;
+    townhomes / attached homes harder
+  - Power draw -> home size, electric heating
+  - Single-family owner-occupied -> property type + homestead exemption
+
+Output: "installable share" per block group = % homes likely to meet
+requirements.
+  - Used as ML feature (explains low permit counts: demand exists but
+    homes can't host a battery)
+  - Used as multiplier in the Priority score
+
+
+----------------------------------------------------------------------
+6. LABEL CONSTRUCTION (PERMITS)
+----------------------------------------------------------------------
+
+Typical permit fields (varies by city):
+  permit type/subtype, free-text work description, address (sometimes
+  coordinates), declared job value, dates (applied/issued/final),
+  contractor name, status.
+
+Step 1 - Classify permits (often NOT a structured field):
+  a) Keyword rules first: generator, Generac, Kohler, ATS, transfer switch,
+     Powerwall, battery, ESS, energy storage, solar, PV
+  b) LLM for ambiguous descriptions: classify generator / battery /
+     solar / panel upgrade / other + extract brand & capacity if present
+  c) Hand-check ~100 samples; report classification accuracy
+
+Step 2 - Geocode and assign to 2020 block groups.
+
+Step 3 - Choose time window:
+  - Plot permits per year first. Winter Storm Uri (Feb 2021) likely caused
+    a spike; the label could be dominated by one event.
+  - Consider post-Uri years, or include year effects.
+  - Market shift: federal 25D residential battery tax credit expired
+    end of 2025 -> adoption patterns may change.
+
+Step 4 - Generator vs battery test:
+  - Compute generator rate and battery rate per block group.
+  - Strong correlation -> combine into one label (backup intent).
+  - Weak correlation -> battery = label, generator = feature.
+
+Step 5 - Final label:
+  LABEL = (generator + battery installs) per 1,000 eligible homes
+          per block group, over the chosen window.
+  Solar = feature + segment (not label, to avoid learning "solar
+  buyers", driven by roof/sun/eco motivation).
+
+Status field: check for withdrawn / expired applications. Possible extra
+signal (intent without follow-through). Denied permits rarely published.
+
+Base's own installs:
+  Search contractor field for "Base Power". [VERIFY in first hour]
+  Use for VALIDATION + map layer, NOT as training label, because Base
+  installs reflect where Base has sold (sales coverage bias), there is
+  less data, and Base's cheap offer attracts a broader profile.
+  Future: fine-tune on Base customers once volume is large.
+
+
+----------------------------------------------------------------------
+7. ML MODEL: PROPENSITY
+----------------------------------------------------------------------
+
+Question: which neighborhoods tend to buy backup power?
+Target: backup installs per 1,000 eligible homes (block group)
+Features: Fit features (ACS, parcel aggregates, installability, solar
+  rate, density). NOT outage data (kept in Need score to avoid
+  double-counting and to keep "who" separate from "pain").
+Model: LightGBM regression
+  - Poisson objective with exposure = number of eligible homes
+    (or predict log rate)
+  - Monotonic constraints where logic is clear (e.g. % owner-occupied
+    should never lower propensity)
+  - Keep 20-40 features; watch for overfitting (modest sample)
+Explainability: SHAP values -> top reasons per neighborhood -> talk tracks
+
+Leakage rules:
+  - Never use features built from the same permits as the label
+    (e.g. "generator permits last year" for a generator label)
+  - Neighbor adoption features only from periods BEFORE the label window
+
+Output uses:
+  - Propensity percentile rank -> Priority score
+  - Predicted rate x eligible homes -> estimated backup buyers
+  - Predicted vs actual (permit cities) -> untapped areas
+
+
+----------------------------------------------------------------------
+8. VALIDATION
+----------------------------------------------------------------------
+
+Baselines (the model MUST beat these):
+  1. Income-only ranking (sort by median household income)
+  2. Hand-built Fit formula (owner-occupancy, single-family, value)
+  3. (If temporal) previous-period permit rate
+
+Validation schemes:
+  a) Spatial CV: hold out whole tracts / zip codes (neighbors look alike;
+     random splits inflate accuracy)
+  b) Leave-one-city-out: train Austin + San Antonio, test Dallas, etc.
+     Tests transfer to new areas.
+  c) Temporal (strongest): train on permits through 2023, predict
+     2024-2025 installs. "The model predicted next year's adoption."
+  d) Base installs: "Our top 20% of neighborhoods contain X% of Base's
+     installs." Only evaluate inside areas Base actually serves.
+
+Metrics:
+  - Lift / capture curve: top 10% of neighborhoods capture X% of installs
+    (main demo metric, easy for sales and judges)
+  - Rank metrics WITHIN each city (permit enforcement differs by city)
+  - Poisson deviance for model tuning
+
+Error analysis: show where the model is wrong and why.
+
+
+----------------------------------------------------------------------
+9. SCORING FORMULA
+----------------------------------------------------------------------
+
+  Priority = Eligibility x Installable x (Propensity^0.6 x Need^0.4)
+  Feed score = Priority x Timing
+
+Components:
+  Eligibility  (0 or 1): in Base service area (direct or utility partner)
+  Installable  (0-1): share of homes likely meeting install requirements
+  Propensity   (0-1): ML prediction, percentile rank within metro
+  Need         (0-1): percentile rank of historical outage hours +
+                      severe weather events
+  Timing       (1.0-1.5): rules
+                 x1.5 storm/freeze alert within 72h
+                 x1.2 outage in last 14 days (or ERCOT grid stress)
+                 x1.0 otherwise
+
+Design choices:
+  - Percentile ranks put components on the same scale
+  - Multiplication: an area needs BOTH right households and real pain
+  - Weights 0.6/0.4 adjustable; ask Base what matters more
+  - Timing only in the weekly feed; main map stays stable
+
+Example: Propensity 0.9, Need 0.7, fully eligible/installable
+  -> Priority ~0.81; with ice storm alert -> feed score ~1.2
+
+Untapped flag (permit cities):
+  - Do NOT use raw predicted - actual (noisy in small areas)
+  - Use shrinkage: blend observed rate toward prediction, more blending
+    where sample is small; or flag areas where actual installs are
+    statistically well below expected (Poisson test)
+
+
+----------------------------------------------------------------------
+10. MANAGER VIEW: MARKET SIZING & REVENUE POTENTIAL
+----------------------------------------------------------------------
+
+  Estimated backup buyers = predicted rate x eligible installable homes
+  Revenue potential = estimated buyers x value per customer
+
+Rules:
+  - Value per customer = adjustable input. Default = ERCOT trading
+    estimate; note Base should plug in real lifetime value (install fee,
+    monthly fee, energy margin, ancillary services, utility payments,
+    minus costs)
+  - Show a range (low / mid / high), not one number
+  - Aggregate by metro/region (where grid value actually differs)
+  - Do NOT multiply the Priority score by dollars: it is a rank, not a
+    probability; within a metro grid value is constant (no ranking change)
+
+Grid value calculation (per load zone):
+  1. Download 1+ years real-time load zone prices (gridstatus)
+  2. Battery: 39.2 kWh, ~20% homeowner reserve (~31 kWh tradable),
+     11 kW max rate, ~90% round-trip efficiency [VERIFY with Base]
+  3. One cycle/day: charge in cheapest 15-min intervals, discharge in
+     most expensive ones
+  4. Profit = discharge revenue - charge cost / efficiency; sum per year
+  Caveat: perfect foresight -> UPPER BOUND ("maximum trading value").
+  Ancillary services excluded (same price statewide).
+  Load zones: Houston, North, South, West, Austin Energy, CPS, LCRA,
+  Rayburn. Most of DFW = North.
+
+
+----------------------------------------------------------------------
+11. RISKS & MITIGATIONS
+----------------------------------------------------------------------
+
+1. Label measures permit behavior, not only demand
+   (enforcement differs by city/time)
+   -> Evaluate ranking within each city; city effects
+
+2. Model just learns "rich neighborhoods"
+   -> Always compare to income-only baseline; report honestly
+
+3. Timing: Uri spike, 25D credit expiry, ACS windows vs permit years
+   -> Plot permits by year; choose window deliberately
+
+4. Base installs biased by sales coverage
+   -> Validate only inside Base-served areas
+
+5. Noisy untapped gaps in small block groups
+   -> Shrinkage / statistical test; show confidence
+
+6. Data engineering eats the weekend (geocoding, parsing, boundaries,
+   appraisal formats) - MOST LIKELY risk
+   -> Freeze data by Saturday noon; formula-first fallback
+
+7. Proxy mismatch: generator/Powerwall buyers vs Base buyers
+   -> Generator vs battery correlation test; Base install validation
+
+8. Census margins of error at block group level
+   -> Fewer, robust features; show low-confidence areas
+
+9. County-level outage data: same Need score within a county
+   -> Acknowledge; propensity provides neighborhood-level detail
+
+10. Fairness: score may steer reps away from lower-income areas
+    (redlining concern; utility partners have equity goals)
+    -> Show feature drivers; affordability-program filter; be ready
+       to answer
+
+11. Feedback loop once deployed: new installs cluster where the tool
+    sent reps; retraining reinforces bias
+    -> Mention in pitch; hold-out exploration areas in future
+
+12. Training on actual history but using live signals in production
+    -> Timing is rule-based, not ML, so limited impact
+
+
+----------------------------------------------------------------------
+12. IMPROVEMENTS / ROADMAP
+----------------------------------------------------------------------
+
+In-hackathon (if time):
+  - Temporal validation (train <=2023, test 2024-2025)
+  - Neighbor adoption feature (peer effects; prior periods only)
+  - Monotonic constraints
+  - Shrinkage-based untapped flag
+  - Uncertainty display on map
+  - Competitor layer from contractor names (Tesla, Generac installers)
+  - LLM talk tracks: numbers from data, LLM only for wording
+
+Roadmap (pitch):
+  - Train on Base's own customers once volume allows (true lookalike)
+  - Real target: knock-level conversion using Base door-knock logs
+    ("which neighborhoods convert when a rep shows up")
+  - Utility partner version: local grid constraint data (not public)
+  - Statewide + Illinois (PJM) expansion
+
+
+----------------------------------------------------------------------
+13. GO / NO-GO CHECKS (FIRST 2-3 HOURS)
+----------------------------------------------------------------------
+
+[ ] Permit data per city: generator / battery / solar findable?
+    Pass: generator + battery >= ~1,000 over window (combined cities)
+    Fallback: two-model blend (backup + solar) or Sunroof tract-level
+    solar installs as label (check data recency)
+[ ] Permits have coordinates or addresses that geocode in bulk
+    Fallback: aggregate by zip code (HUD zip-tract crosswalk)
+[ ] "Base Power" appears in contractor field
+[ ] ACS block group download works (near certain)
+[ ] EAGLE-I county outages for Texas downloaded
+[ ] Appraisal data for demo metro counties usable
+    Fallback: skip; rely on ACS + footprints
+
+
+----------------------------------------------------------------------
+14. WEEKEND TIMELINE
+----------------------------------------------------------------------
+
+Friday night
+  - Talk to Base (questions below)
+  - Go/no-go checks; download and CACHE everything locally
+  - Build block group base table skeleton (2020 boundaries)
+
+Saturday morning
+  - Permit parsing + geocoding -> label
+  - Feature table (ACS, parcels, installability, solar)
+  - Formula-based Priority score working (guaranteed product)
+
+Saturday afternoon
+  - Train LightGBM; spatial + leave-one-city-out CV; baselines
+  - SHAP explanations
+  - DATA FREEZE at noon/early afternoon
+
+Saturday night
+  - Map + neighborhood card + weekly feed (storm replay)
+  - Talk tracks; manager view
+  - Temporal validation if time
+
+Sunday
+  - Error analysis, lift chart, polish, rehearse demo
+
+
+----------------------------------------------------------------------
+15. QUESTIONS FOR BASE (FRIDAY)
+----------------------------------------------------------------------
+
+- How do reps choose neighborhoods today? Door-to-door vs inbound vs
+  utility channel share?
+- Do Base installs appear in city permits (contractor name)?
+- What metric would you trust to judge a targeting tool?
+- Is the ADER fleet settled at load zone prices?
+- Real battery specs / reserve policy for the trading simulation?
+- Rough value per customer (range) for the manager view?
+- Weighting: right households vs outage pain?
+
+
+----------------------------------------------------------------------
+16. DEMO SCRIPT (3 MINUTES)
+----------------------------------------------------------------------
+
+1. Problem: Base's reps need to know where and when to knock.
+2. Map of DFW colored by Priority; toggle layers.
+3. Replay a real past storm / ERCOT grid stress event: feed lights up,
+   neighborhoods jump in priority.
+4. Click top neighborhood: score breakdown, SHAP reasons, outage history,
+   generated talk track (solar vs non-solar version).
+5. ML proof: lift chart; beats income-only and formula; leave-one-city-out
+   and (if done) temporal validation; Base installs capture rate.
+6. Manager view: estimated buyers and revenue potential by region.
+7. Honest limits + roadmap (Base customer lookalike, knock conversion).
+
+
+----------------------------------------------------------------------
+17. TRACK POSITIONING
+----------------------------------------------------------------------
+
+Most Commercializable (lead): named buyer = Base sales team; clear problem
+  = where/when to sell; manager view sizes the market.
+Open Grid Data (secondary): make grid data visible in demo:
+  outage history -> Need; ERCOT grid stress -> Timing; load zone trading
+  value -> manager view.
+Not Orchestration.
+Check Notion rules on multi-track entry. [VERIFY]
+
+======================================================================
+END
+======================================================================

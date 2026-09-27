@@ -1,7 +1,8 @@
 # Residential leads
 
 Finds single-family, owner-occupied homes Base can serve, scores them, and flags what's
-new each week. Pilot: Harris County (CenterPoint). Lead = property, not a person: we keep
+new each week. Markets: Harris County (Houston, CenterPoint) and Travis County (Austin, Austin
+Energy). Lead = property, not a person: we keep
 public-record owner/mailing data for outreach; the only place the API exposes it is the
 mailing-list export (`GET /leads/export.csv`), never the JSON endpoints.
 
@@ -24,17 +25,22 @@ fingerprint → fetch → parse  →   upsert + change tracking → eligibility 
 | --- | --- | --- |
 | `hcad` | Harris Central Appraisal District CAMA ZIPs (incl. `extra_features.txt`: solar PV, pools) | `properties` |
 | `hcad_parcels` | HCAD parcel geodatabase (`Parcels.zip`), point inside each parcel, joined by account | `properties.lat/lon` |
-| `ercot_esiid` | ERCOT TDSP ESI ID extract (report 203), CenterPoint | `meters` |
+| `ercot_esiid` | ERCOT TDSP ESI ID extract (report 203), CenterPoint and Oncor | `meters` |
 | `harris_permits` | Harris County issued permits (ArcGIS) | `permits` |
 | `houston_permits` | City of Houston weekly sold-permit XLSX | `permits` |
+| `tcad` | Travis County's public copy of TCAD parcels (ArcGIS), single-family (A1) rows only | `properties` |
+| `tcad_parcels` | Same layer, parcel polygons → one point per account | `properties.lat/lon` |
+| `austin_permits` | City of Austin issued construction permits (Socrata `3syk-w9eu`), keyword-filtered | `permits` |
 
 ## Eligibility and score
 
-> **Ranking changed (M8):** the GTM page ranks leads by their Cell's Baseline Need, then the home's estimated consumption; the Lead Score below is still computed and served (`score`, `drivers`, `reasons`) but no longer shown or used for ranking. See [need-engine.md](need-engine.md#leads-and-cells-m8-issue-27).
+> **Ranking changed (M8):** the GTM page ranks leads by their Cell's Opportunity Score, then the home's estimated consumption (the API still offers `sort=need`); the Lead Score below is still computed and served (`score`, `drivers`, `reasons`) but no longer shown or used for ranking. See [need-engine.md](need-engine.md#leads-and-cells-m8-issue-27).
 
 A property becomes a lead only if it is single-family (state class A1), has a homestead exemption (owner-occupied), is not a confidential record (Tax Code 25.025), and its address matches an **active residential meter on a TDSP Base serves** (`BASE_TDSPS` in `app/leads/config.py`).
 
-Drivers (0–100, weights in `app/leads/config.py`): home size and home value are percentiles among eligible homes; solar (appraisal record **or** permit), EV charger, pool/spa (a large, steady electric load), new owner (owner changed on the appraisal roll within the lookback) and new home (recent year built, new-home permit or new meter) are yes/no. Score = weighted average. `reasons` names the two strongest drivers.
+**Austin (Travis).** Austin Energy is a municipal utility: its meters aren't in the ERCOT ESI ID extract, and Base serves its customers through a partnership. A home whose parcel point falls in Austin Energy's territory (load zone `LZ_AEN`, `PARTNER_UTILITY_ZONES`) is eligible without a meter match (`tdsp = austin_energy`, no ESI ID, so no "new meter" signal). Outside it, Travis homes need an active residential **Oncor** meter (Oncor zero-pads house numbers, so `address_key` drops leading zeros). Homes served by the co-ops (Pedernales, Bluebonnet) aren't in the ERCOT extract, so they are **not leads**. The "new meter" baseline is per TDSP, so a utility's first load isn't flagged as new. TCAD's public layer has no exemption codes: owner-occupied = the owner's mailing address contains the property's house number and street (as in `ml/parcels/normalize.py`). It also has no living area or pools, so those drivers are **left out** of Travis leads' fit (the other weights are rescaled; `unknown_drivers`), not scored 0. Solar and EV come from Austin permits only.
+
+Drivers (0–100, weights in `app/leads/config.py`): home size and home value are percentiles among eligible homes of the same county; solar (appraisal record **or** permit), EV charger, pool/spa (a large, steady electric load), new owner (owner changed on the appraisal roll within the lookback) and new home (recent year built, new-home permit or new meter) are yes/no. Score = weighted average. `reasons` names the two strongest drivers.
 
 ## Value to Base and priority
 
@@ -43,7 +49,7 @@ Each lead also gets an **estimated annual grid value** (`app/leads/value.py`):
 1. **Load zone:** the lead's parcel point inside the zone polygons (`app.grid.zones.zone_for_points`, smallest polygon wins; the same rule Need Engine Cells use), else its TDSP (`TDSP_ZONES`).
 2. **Battery values:** per size (25 / 40 / 50 kWh) the zone's realistic `value` (day-ahead planner) in an **average full calendar year** (`first_year`–`last_year`, e.g. 2019–2025), its perfect-hindsight `ceiling` for that average year, the last 12 months (`recent`) and the worst/best full year (`low`/`high` with the year). The average year is used because Base sells multi-year (~3-year) contracts and single years swing 5×. Without full-year history (`backfill` of past years) `value`/`ceiling` fall back to the last 12 months and the year fields are null. From `python -m app.grid compute`; see [grid-economics.md](grid-economics.md#battery-backtest). Run grid `compute` before lead `score`.
 3. **Recommended size:** by heated sqft (`battery_sizing` in `app/leads/config.py`: <2,500 → 25, <4,000 → 40, else 50); a pool bumps it one size up. `sizing_reason` says why.
-4. **Priority value** (`expected_value` in the API) = fit score / 100 × realistic value of the recommended size. `GET /leads` sorts by the home's Cell by default (`sort=need`: Baseline Need, then consumption, then this value; see [need-engine.md](need-engine.md)); also `priority`, `value`, `consumption`, `triggered_at`. The fit score isn't a calibrated conversion probability, so this is a ranking index in dollars, not a revenue forecast.
+4. **Priority value** (`expected_value` in the API) = fit score / 100 × realistic value of the recommended size. `GET /leads` sorts by the home's Cell by default (`sort=need`: Baseline Need, then consumption, then this value; see [need-engine.md](need-engine.md)); also `opportunity` (the Cell's Opportunity Score, then consumption; the GTM page's default), `priority`, `value`, `consumption`, `triggered_at`. The fit score isn't a calibrated conversion probability, so this is a ranking index in dollars, not a revenue forecast.
 
 It's a screening estimate of energy-trading value (after losses, $0.02/kWh wear and a 20% backup reserve): no retail margin, fees or ancillary services yet. In the Harris pilot every lead is in LZ_HOUSTON, so the zone doesn't change the ranking yet; it will once other TDSPs' counties are added (40 kWh, average year 2019–2025: Houston $891, North $845, West $1,058, i.e. West ≈ +19%, North ≈ −5% vs Houston; over only the last 12 months to 2026-09-20 North looked +28% and West +59%, another reason not to rank on one year). Years swing a lot: a 40 kWh battery in Houston would have made $310 in 2025 and $1,741 in 2023, and the last 12 months ($233) are among the quietest, which is why leads are valued on the average year and show the range.
 
@@ -76,7 +82,7 @@ The `worker` compose service runs the weekly job every Sunday 03:00 Central: ERC
 
 ## API
 
-`GET /leads/geo?bbox=w,s,e,n&zoom=` (same filters as the list) returns GeoJSON: lead points, or grid cells with `count` and average `score` when more than `MAX_MAP_POINTS` (5,000) leads are in view; the county-wide view takes <1 s. `GET /leads/summary` (includes `by_zone`: leads per load zone, all statuses), `GET /leads` (filters: `min_score`, `signals` (repeatable), `new_only`, `zip`, `status`, `zone` (load zone code, e.g. `LZ_HOUSTON`), `sort`, `limit`, `offset`), `GET /leads/export.csv` (same filters and `sort` as the list, no limit: every matching lead as a mailing list of `owner_name`, `mail_street`/`mail_city`/`mail_state`/`mail_zip` split by `split_mail_address` in `app/leads/address.py` (a foreign address stays whole in `mail_street`), and the property address and county; nothing computed; streamed, the full 772k-lead set takes ~4 s), `GET /leads/{id}`, `PATCH /leads/{id}` (`{"status": …}`), `GET /sources` (last run per source, for the data-health page).
+`GET /leads/geo?bbox=w,s,e,n&zoom=` (same filters as the list) returns GeoJSON: lead points, or grid cells with `count` and average `score` when more than `MAX_MAP_POINTS` (5,000) leads are in view; the county-wide view takes <1 s. `GET /leads/summary` (includes `by_zone`: leads per load zone, all statuses), `GET /leads` (filters: `county` (`harris` or `travis`), `min_score`, `signals` (repeatable), `new_only`, `zip`, `status`, `zone` (load zone code, e.g. `LZ_HOUSTON`), `sort`, `limit`, `offset`; `/leads/summary` also takes `county`), `GET /leads/export.csv` (same filters and `sort` as the list, no limit: every matching lead as a mailing list of `owner_name`, `mail_street`/`mail_city`/`mail_state`/`mail_zip` split by `split_mail_address` in `app/leads/address.py` (a foreign address stays whole in `mail_street`), and the property address and county; nothing computed; streamed, the full 772k-lead set takes ~4 s), `GET /leads/{id}`, `PATCH /leads/{id}` (`{"status": …}`), `GET /sources` (last run per source, for the data-health page).
 
 ## Tests
 

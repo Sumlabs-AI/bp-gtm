@@ -20,6 +20,7 @@ from app.need.ml import (
     export_features,
     import_propensity,
 )
+from app.need.opportunity import opportunity_score
 from app.need.outage.store import save_county_features, save_utility_reliability
 from app.need.store import seed_polygon
 from app.need.weather.store import save_county_temperature, save_storm_features
@@ -295,7 +296,7 @@ def test_other_feature_version_is_accepted_with_a_warning(world, tmp_path):
     assert any("0.9.0" in w and FEATURE_VERSION in w for w in report.warnings)
 
 
-def test_api_shows_propensity_beside_baseline_without_combining(client, world, tmp_path):
+def test_api_shows_propensity_beside_baseline_and_opportunity(client, world, tmp_path):
     with SessionLocal() as db:
         import_propensity(db, propensity_file(tmp_path, [prediction(H8, 92.0, "v3")]))
         db.commit()
@@ -305,11 +306,18 @@ def test_api_shows_propensity_beside_baseline_without_combining(client, world, t
     assert cell["propensity"]["featureVersion"] == FEATURE_VERSION
     assert cell["baseline"]["baselineNeed"] is not None
     assert cell["needScore"] is None
-    assert "opportunity" not in {k.lower() for k in cell}
-    assert client.get(f"/need/cells/{A8}").json()["propensity"] is None
+    # Opportunity combines the two; Propensity itself stays as imported.
+    need = cell["baseline"]["baselineNeed"]
+    assert cell["opportunity"]["score"] == opportunity_score(92.0, need)
+    assert (cell["opportunity"]["propensity"], cell["opportunity"]["baselineNeed"]) == (92.0, need)
+    austin = client.get(f"/need/cells/{A8}").json()
+    assert austin["propensity"] is None
+    assert austin["opportunity"]["score"] is None  # no Propensity, no Opportunity
     body = client.get("/need/cells", params={"bbox": "-98.1,29.6,-95.2,30.5"}).json()
     props = {f["id"]: f["properties"] for f in body["features"]}
     assert (props[H8]["propensityScore"], props[A8]["propensityScore"]) == (92.0, None)
+    assert props[H8]["opportunityScore"] == opportunity_score(92.0, need)
+    assert props[A8]["opportunityScore"] is None
 
 
 @pytest.mark.parametrize(

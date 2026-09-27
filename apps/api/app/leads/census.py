@@ -19,7 +19,7 @@ ACS_URL = (
 )
 TIGER_URL = "https://www2.census.gov/geo/tiger/TIGER2024/BG/tl_{state}_bg.zip"
 CACHE_DIR = RAW_DIR / "census"
-COUNTY_FIPS = {"harris": "48201"}
+COUNTY_FIPS = {"harris": "48201", "travis": "48453"}
 
 
 def _download(url: str) -> Path:
@@ -36,8 +36,11 @@ def _download(url: str) -> Path:
     return path
 
 
-def block_group_heating(county: str = "harris") -> gpd.GeoDataFrame:
-    """One row per block group: geoid, households, electric_share, geometry (EPSG:4326)."""
+def block_group_heating(county: str | None = None) -> gpd.GeoDataFrame:
+    """One row per block group: geoid, households, electric_share, geometry (EPSG:4326), for
+    one county or (default) every county in COUNTY_FIPS."""
+    if county is None:
+        return pd.concat([block_group_heating(c) for c in COUNTY_FIPS], ignore_index=True)
     fips = COUNTY_FIPS[county]
     acs = pd.read_csv(
         _download(ACS_URL),

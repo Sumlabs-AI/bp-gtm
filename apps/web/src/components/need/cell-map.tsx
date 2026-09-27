@@ -14,11 +14,12 @@ import { BaselineNeedBlock } from "@/components/need/baseline-need"
 import { ForecastSignals } from "@/components/need/forecast-signals"
 import { LiveGridSection } from "@/components/need/live-grid"
 import { NwsAlerts } from "@/components/need/nws-alerts"
+import { OpportunityBlock } from "@/components/need/opportunity"
 import { PropensityBlock } from "@/components/need/propensity"
 import { WeatherBreakdown } from "@/components/need/weather-breakdown"
 import { apiFetch } from "@/lib/api"
 import { scoreColor } from "@/lib/grid"
-import { COLOR_BY, H3_MAP_MIN_ZOOM, MARKET_ZOOM, MARKETS, NEED_BANDS, type CellCollection, type CellDetail, type ColorBy } from "@/lib/need"
+import { H3_MAP_MIN_ZOOM, MARKET_ZOOM, MARKETS, type CellCollection, type CellDetail } from "@/lib/need"
 
 const BASEMAP = "https://tiles.openfreemap.org/styles/positron"
 
@@ -43,15 +44,13 @@ export type LeadPoint = {
 
 /**
  * The Need map. On its own it explains Cells in a sheet. In controlled mode (the GTM page)
- * it is a filter: it reports the viewport, toggles Cells and bands, dims what's filtered
+ * it is a filter: it reports the viewport, toggles Cells, dims what's filtered
  * out, and shows the leads inside the filter as points once zoomed in.
  */
 export function CellMap({
   className,
   selectedCells,
   onToggleCell,
-  bands,
-  onToggleBand,
   onViewport,
   points,
   onPointClick,
@@ -60,8 +59,6 @@ export function CellMap({
   className?: string
   selectedCells?: string[]
   onToggleCell?: (h3: string, additive: boolean) => void
-  bands?: string[] // active Baseline Need bands; empty = all
-  onToggleBand?: (band: string) => void
   onViewport?: (bbox: string, zoom: number) => void
   points?: { type: "FeatureCollection"; features: LeadPoint[] } | null
   onPointClick?: (id: number) => void
@@ -74,7 +71,6 @@ export function CellMap({
   const [data, setData] = React.useState<CellCollection | null>(null)
   const [status, setStatus] = React.useState<Status>("loading")
   const [hover, setHover] = React.useState<Hover | null>(null)
-  const [colorBy, setColorBy] = React.useState<ColorBy>("baselineNeed")
   const [selected, setSelected] = React.useState<string | null>(null)
   const [overPoint, setOverPoint] = React.useState(false)
   const [market, setMarket] = React.useState(MARKETS[0].name)
@@ -147,26 +143,11 @@ export function CellMap({
   }
 
   const highlighted = [...(controlled ? (selectedCells ?? []) : [selected ?? ""]), hover?.h3 ?? ""]
-  // MapLibre expression: is this Cell's Baseline Need inside one of the active bands?
-  const activeBands = bands && bands.length ? NEED_BANDS.filter((b) => bands.includes(b.key)) : []
-  const bandFilter: ExpressionSpecification | null =
-    colorBy === "baselineNeed" && activeBands.length
-      ? ([
-          "any",
-          ...activeBands.map((b) => [
-            "all",
-            [">=", ["get", "baselineNeed"], b.low],
-            [b.top ? "<=" : "<", ["get", "baselineNeed"], b.high],
-          ]),
-        ] as ExpressionSpecification)
-      : null
   // Clicked Cells narrow the list to themselves, so the others dim too.
-  const focus: ExpressionSpecification[] = [
-    ...(bandFilter ? [bandFilter] : []),
-    ...(controlled && selectedCells?.length
+  const focus: ExpressionSpecification[] =
+    controlled && selectedCells?.length
       ? [["in", ["get", "h3"], ["literal", selectedCells]] as ExpressionSpecification]
-      : []),
-  ]
+      : []
   const inFocus: ExpressionSpecification | null = focus.length ? (["all", ...focus] as ExpressionSpecification) : null
 
   return (
@@ -210,17 +191,17 @@ export function CellMap({
                   minzoom={H3_MAP_MIN_ZOOM}
                   type="fill"
                   paint={{
-                    // The selected Need Component when known, else the neutral substrate tint.
+                    // Opportunity when known, else the neutral substrate tint.
                     "fill-color": [
                       "case",
-                      ["==", ["get", colorBy], null],
+                      ["==", ["get", "opportunityScore"], null],
                       "#1e4d2b",
-                      ["interpolate", ["linear"], ["get", colorBy], 0, scoreColor(0), 50, scoreColor(50), 100, scoreColor(100)],
+                      ["interpolate", ["linear"], ["get", "opportunityScore"], 0, scoreColor(0), 50, scoreColor(50), 100, scoreColor(100)],
                     ],
-                    // Filtered out (band not active): dimmed so the filter is visible.
+                    // Filtered out (Cell not selected): dimmed so the filter is visible.
                     "fill-opacity": [
                       "case",
-                      ["==", ["get", colorBy], null],
+                      ["==", ["get", "opportunityScore"], null],
                       0.08,
                       inFocus ? ["case", inFocus, 0.45, 0.06] : 0.45,
                     ],
@@ -306,14 +287,6 @@ export function CellMap({
           </DropdownMenu>
         </div>
 
-        <div className="absolute top-3 right-12 flex items-center gap-1 rounded-md border bg-background/90 px-2 py-1.5 text-xs shadow-sm">
-          {COLOR_BY.map((c) => (
-            <Button key={c.key} size="sm" variant={colorBy === c.key ? "secondary" : "ghost"} onClick={() => setColorBy(c.key)}>
-              {c.label}
-            </Button>
-          ))}
-        </div>
-
         {(status === "zoom-in" || status === "too-many") && (
           <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
             <div className="flex items-center gap-2 rounded-lg border bg-background/95 px-4 py-2.5 text-sm font-medium shadow-md">
@@ -332,26 +305,6 @@ export function CellMap({
         >
           {STATUS_TEXT[status](data?.features.length ?? 0)}
         </span>
-        {onToggleBand && colorBy === "baselineNeed" && (
-          <div className="flex items-center gap-1 rounded-md border bg-background/90 px-2 py-1.5 text-xs shadow-sm">
-            <span className="pr-1 text-muted-foreground">Baseline Need</span>
-            {NEED_BANDS.map((b) => {
-              const active = !bands?.length || bands.includes(b.key)
-              return (
-                <button
-                  key={b.key}
-                  type="button"
-                  onClick={() => onToggleBand(b.key)}
-                  title={`Show leads in Cells scored ${b.label}`}
-                  className={`flex items-center gap-1 rounded px-1.5 py-0.5 tabular-nums ${bands?.includes(b.key) ? "ring-2 ring-slate-900" : ""} ${active ? "" : "opacity-40"}`}
-                >
-                  <span className="inline-block h-3 w-3 rounded-sm" style={{ background: scoreColor((b.low + Math.min(b.high, 100)) / 2) }} />
-                  {b.label}
-                </button>
-              )
-            })}
-          </div>
-        )}
         </div>
 
         {hover && (
@@ -375,7 +328,7 @@ export function CellMap({
         <SheetContent>
           <SheetHeader>
             <SheetTitle className="font-mono">{selected}</SheetTitle>
-            <SheetDescription>H3 Cell. Baseline Need first, then live signals and the component details.</SheetDescription>
+            <SheetDescription>H3 Cell. Opportunity first, then Baseline Need, Propensity, live signals and the component details.</SheetDescription>
           </SheetHeader>
           {shownDetail && (
             <dl className="grid grid-cols-2 gap-x-4 gap-y-2 px-4 text-sm">
@@ -393,6 +346,7 @@ export function CellMap({
           )}
           {shownDetail && (
             <div className="flex min-h-0 flex-1 flex-col gap-6 overflow-y-auto pb-4">
+              <OpportunityBlock opportunity={shownDetail.opportunity} timing={shownDetail.timing} />
               {shownDetail.baseline && <BaselineNeedBlock baseline={shownDetail.baseline} />}
               <PropensityBlock propensity={shownDetail.propensity} />
               <NwsAlerts feed={shownDetail.live.weather.alerts} />

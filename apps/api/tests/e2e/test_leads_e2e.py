@@ -414,3 +414,41 @@ def test_estimated_consumption_per_lead(client):
     assert client.get("/leads", params={"zone": "LZ_NORTH"}).json()["total"] == 0
     houston = {"bbox": "-96,29,-95,30.5", "zone": "LZ_NORTH"}
     assert client.get("/leads/geo", params=houston).json()["total"] == 0
+
+
+def test_austin_energy_homes_are_eligible_by_location(client):
+    """Travis: no ERCOT meter for Austin Energy homes, so the parcel's load zone decides; the
+    layer has no living area or pools, so those drivers are left out, not scored 0."""
+    travis = {"county": "travis", "situs_city": "AUSTIN", "heated_sqft": None}
+    homes = [
+        *WEEK1_HOMES,
+        home("T1", "100 Congress Ave", "78701", **travis, market_value=800_000.0),
+        home("T2", "200 Lamar Blvd", "78703", **travis, market_value=400_000.0),
+        home("T3", "300 Far Rd", "78738", **travis),  # outside Austin Energy (LZ_SOUTH)
+    ]
+    refresh(homes, WEEK1_METERS, [], "v1", WEEK1)
+    parcels = [
+        {"county": "travis", "account": "T1", "lat": 30.2672, "lon": -97.7431},
+        {"county": "travis", "account": "T2", "lat": 30.2800, "lon": -97.7600},
+        {"county": "travis", "account": "T3", "lat": 30.3300, "lon": -98.0500},
+    ]
+    pipeline.run_source("tcad_parcels", now=WEEK1, module=fake(parcels, PARCEL_COLUMNS, "v1"))
+    summary = score_leads(WEEK1, scoring, baseline=True)
+    assert summary["eligible"] == 4  # A, B (Harris meters) + T1, T2 (Austin Energy)
+
+    austin = client.get("/leads", params={"county": "travis", "status": "new"}).json()
+    assert [i["address"] for i in austin["items"]] == ["100 Congress Ave", "200 Lamar Blvd"]
+    assert {i["load_zone"] for i in austin["items"]} == {"LZ_AEN"}
+    assert client.get("/leads", params={"county": "harris"}).json()["total"] == 2
+    assert client.get("/leads/summary", params={"county": "travis"}).json()["leads"] == 2
+
+    detail = by_account(client, "T1").json()
+    drivers = {d["key"]: d for d in detail["drivers"]}
+    assert "home_size" not in drivers and "pool" not in drivers
+    # Home value is ranked within Travis only: T1 is the top of two homes.
+    assert drivers["home_value"]["score"] == 100
+    assert sum(d["weight"] for d in drivers.values()) == pytest.approx(1.0)
+    assert detail["score"] == pytest.approx(
+        sum(d["score"] * d["weight"] for d in drivers.values()), abs=0.1
+    )
+    assert detail["h3_index"] and detail["cell"] is None  # no Cells seeded in this test

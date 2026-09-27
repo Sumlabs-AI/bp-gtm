@@ -240,6 +240,7 @@ def export_features(out_dir: Path) -> ExportReport:
 
 REQUIRED = ["h3_index", "propensity_score", "model_version", "feature_version", "scored_at"]
 KEY = ["h3_index", "model_version", "scored_at"]
+IMPORT_BATCH_ROWS = 5_000
 
 
 class PropensityFileRejected(ValueError):
@@ -349,18 +350,20 @@ def import_propensity(db: Session, path: Path) -> ImportReport:
             strict=True,
         )
     ]
-    stmt = insert(CellPropensity).values(rows)
-    db.execute(
-        stmt.on_conflict_do_update(
-            index_elements=KEY,
-            set_={
-                "propensity_score": stmt.excluded.propensity_score,
-                "feature_version": stmt.excluded.feature_version,
-                "imported_at": stmt.excluded.imported_at,
-                "import_id": stmt.excluded.import_id,
-            },
+    # Batched: one statement may carry at most 65,535 parameters (7 per row).
+    for start in range(0, len(rows), IMPORT_BATCH_ROWS):
+        stmt = insert(CellPropensity).values(rows[start : start + IMPORT_BATCH_ROWS])
+        db.execute(
+            stmt.on_conflict_do_update(
+                index_elements=KEY,
+                set_={
+                    "propensity_score": stmt.excluded.propensity_score,
+                    "feature_version": stmt.excluded.feature_version,
+                    "imported_at": stmt.excluded.imported_at,
+                    "import_id": stmt.excluded.import_id,
+                },
+            )
         )
-    )
     return ImportReport(
         rows=len(frame),
         product_cells=record.product_cells,

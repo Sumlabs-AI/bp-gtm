@@ -3,11 +3,12 @@ from typing import Annotated, Any, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app import geo
 from app.db import get_db
-from app.models import ForecastSignal, NwsAlert
+from app.models import Cell, ForecastSignal, NwsAlert
 from app.need.baseline import LIMITATIONS as BASELINE_LIMITATIONS
 from app.need.baseline import METHOD as BASELINE_METHOD
 from app.need.baseline import baseline_components
@@ -18,8 +19,14 @@ from app.need.live.forecast_store import active_forecast, forecast_status, most_
 from app.need.live.grid import condition_summary, grid_live, latest_condition
 from app.need.live.store import active_alerts, alert_status, most_severe_category
 from app.need.ml import latest_propensity
+from app.need.opportunity import LIMITATIONS as OPPORTUNITY_LIMITATIONS
+from app.need.opportunity import METHOD as OPPORTUNITY_METHOD
+from app.need.opportunity import opportunity_score
 from app.need.outage.component import outage_components
 from app.need.store import cells_in_viewport, get_cell
+from app.need.timing import LIMITATIONS as TIMING_LIMITATIONS
+from app.need.timing import METHOD as TIMING_METHOD
+from app.need.timing import Timing, timing_by_cell
 from app.need.weather.component import weather_components
 
 router = APIRouter(prefix="/need", tags=["need"])
@@ -178,6 +185,45 @@ class PropensityOut(BaseModel):
     importedAt: datetime  # noqa: N815
 
 
+class OpportunityOut(BaseModel):
+    """Opportunity Score: Propensity, Baseline Need and Timing combined (app/need/opportunity.py).
+    Null score when Propensity or Baseline Need is missing."""
+
+    score: float | None
+    baseScore: float | None  # noqa: N815  before Timing (0-100)
+    propensity: float | None
+    baselineNeed: float | None  # noqa: N815
+    timing: float  # the multiplier; details in CellDetail.timing
+    method: str
+    limitations: list[str]
+
+
+class TimingOut(BaseModel):
+    """When to knock (app/need/timing.py): the multiplier in the Opportunity Score."""
+
+    multiplier: float
+    phase: Literal["none", "pre_event", "peak", "fading"]
+    event: str | None
+    endsAt: datetime | None  # noqa: N815
+    daysSince: float | None  # noqa: N815
+    major: bool
+    method: str
+    limitations: list[str]
+
+
+def _timing_out(t: Timing) -> TimingOut:
+    return TimingOut(
+        multiplier=t.multiplier,
+        phase=t.phase,
+        event=t.event,
+        endsAt=t.ends,
+        daysSince=t.days_since,
+        major=t.major,
+        method=TIMING_METHOD,
+        limitations=TIMING_LIMITATIONS,
+    )
+
+
 class CellDetail(BaseModel):
     h3: str
     resolution: int
@@ -186,6 +232,8 @@ class CellDetail(BaseModel):
     needScore: float | None  # noqa: N815  (camelCase is the API contract)
     baseline: BaselineOut | None
     propensity: PropensityOut | None
+    opportunity: OpportunityOut
+    timing: TimingOut
     components: dict[str, Any]
     live: Live
 
@@ -250,6 +298,7 @@ def list_cells(db: DB, bbox: Annotated[str, Query(description="west,south,east,n
     grid = grid_live(db, cells, now)
     baseline = baseline_components(db, cells)
     propensity = latest_propensity(db, [c.h3_index for c in cells])
+    timing = timing_by_cell(db, now, cells)
     return {
         "type": "FeatureCollection",
         # ERCOT-wide, so given once (also when no Cell is in view) for the map's status chip.
@@ -262,10 +311,17 @@ def list_cells(db: DB, bbox: Annotated[str, Query(description="west,south,east,n
                 "properties": {
                     "h3": c.h3_index,
                     "needScore": None,
-                    "baselineNeed": b.baseline_need if (b := baseline[c.h3_index]) else None,
-                    "propensityScore": p.propensity_score
-                    if (p := propensity[c.h3_index])
-                    else None,
+                    "baselineNeed": (
+                        need_ := b.baseline_need if (b := baseline[c.h3_index]) else None
+                    ),
+                    "propensityScore": (
+                        prop := p.propensity_score if (p := propensity[c.h3_index]) else None
+                    ),
+                    "opportunityScore": opportunity_score(
+                        prop, need_, timing[c.h3_index].multiplier
+                    ),
+                    "timingMultiplier": timing[c.h3_index].multiplier,
+                    "timingPhase": timing[c.h3_index].phase,
                     "outageNeed": (outage[c.h3_index] or {}).get("score"),
                     "weatherNeed": (weather[c.h3_index] or {}).get("score"),
                     "activeAlerts": len(alerts[c.h3_index]),
@@ -279,6 +335,47 @@ def list_cells(db: DB, bbox: Annotated[str, Query(description="west,south,east,n
             for c in cells
         ],
     }
+
+
+class FeedItem(BaseModel):
+    h3: str
+    center: LatLng
+    opportunityScore: float  # noqa: N815  with Timing
+    baseScore: float  # noqa: N815  before Timing
+    timing: TimingOut
+
+
+@router.get("/feed", response_model=list[FeedItem])
+def feed(db: DB, limit: Annotated[int, Query(ge=1, le=500)] = 50):
+    """This week's feed: Cells a storm makes timely now (Timing > 1), by Opportunity Score.
+    Cells with no Opportunity Score (no Propensity or Baseline Need) are left out."""
+    now = datetime.now(UTC)
+    timing = {h3: t for h3, t in timing_by_cell(db, now).items() if t.multiplier > 1}
+    if not timing:
+        return []
+    cells = list(db.scalars(select(Cell).where(Cell.h3_index.in_(list(timing)))))
+    baseline = baseline_components(db, cells)
+    propensity = latest_propensity(db, list(timing))
+    items = []
+    for c in cells:
+        b, p = baseline[c.h3_index], propensity[c.h3_index]
+        base = opportunity_score(p.propensity_score if p else None, b.baseline_need if b else None)
+        if base is None:
+            continue
+        t = timing[c.h3_index]
+        items.append(
+            FeedItem(
+                h3=c.h3_index,
+                center=LatLng(lat=c.center_lat, lng=c.center_lng),
+                opportunityScore=opportunity_score(
+                    p.propensity_score, b.baseline_need, t.multiplier
+                ),
+                baseScore=base,
+                timing=_timing_out(t),
+            )
+        )
+    items.sort(key=lambda i: i.opportunityScore, reverse=True)
+    return items[:limit]
 
 
 @router.get("/cells/{h3_index}", response_model=CellDetail)
@@ -297,6 +394,8 @@ def cell_detail(db: DB, h3_index: str):
     point = geo.cell_to_parent(cell.h3_index, forecast_config.resolution)
     status = forecast_status(db, [point], now)
     grid = status["grid"].get(point, {"fetched_at": None, "source_updated_at": None, "stale": True})
+    timing = timing_by_cell(db, now, [cell])[cell.h3_index]
+    prop, need_ = (p.propensity_score if p else None), (b.baseline_need if b else None)
     return CellDetail(
         h3=cell.h3_index,
         resolution=cell.resolution,
@@ -326,6 +425,16 @@ def cell_detail(db: DB, h3_index: str):
         )
         if p
         else None,
+        opportunity=OpportunityOut(
+            score=opportunity_score(prop, need_, timing.multiplier),
+            baseScore=opportunity_score(prop, need_),
+            propensity=prop,
+            baselineNeed=need_,
+            timing=timing.multiplier,
+            method=OPPORTUNITY_METHOD,
+            limitations=OPPORTUNITY_LIMITATIONS,
+        ),
+        timing=_timing_out(timing),
         components=components,
         live=Live(
             weather=LiveWeather(

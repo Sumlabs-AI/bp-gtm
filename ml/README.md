@@ -1,0 +1,279 @@
+# ml
+
+Data preparation for the ML model: labels and block-group features from public data.
+Separate uv project from `apps/api`; nothing here runs in docker-compose.
+
+## Setup
+
+```bash
+cd ml
+uv sync
+cp .env.example .env   # then set TYPESAFE_API_KEY
+```
+
+## Layout
+
+| Path | What |
+| --- | --- |
+| `permits/fetch.py` | Step 1: pull Austin (Socrata), San Antonio (CSV), Fort Worth (ArcGIS, battery label only) permits → `data/interim/permits_all.parquet` |
+| `permits/keywords.py` | Keyword prefilter and flags (generator / battery / solar / panel …) |
+| `permits/questions.py` | The Jev questions (one per gold field) and the per-permit state |
+| `permits/jev.py` | Runs Jev over permits with an answer cache; loads `ml/.env` |
+| `permits/label.py` | Keyword baseline fields, Jev fields, and the `backup_install` label rule |
+| `permits/gold.py` | Gold sample (300 permits, tune/test halves) and the labeling page |
+| `permits/llm_label.py` | LLM pre-labels for the 300 gold permits only (hand review overrides) |
+| `permits/build_label.py` | Label v1: install events, 180-day address dedup, 2020 block groups, city share |
+| `permits/evaluate.py` | Keyword vs Jev accuracy against the gold labels |
+| `parcels/fetch.py` | Appraisal-district parcels (polygons + home attributes) from county ArcGIS services → `data/interim/parcels_raw_{county}.parquet` |
+| `parcels/normalize.py` | One schema per parcel (state code, home type, sq ft, year built, lot, value, owner-occupied, deed year) |
+| `parcels/aggregate.py` | Parcels → 2020 block groups: eligible homes (label exposure), home features, installable share |
+| `acs/variables.py` | ACS 5-year tables pulled and the Census summary-file URLs |
+| `acs/fetch.py` | ACS step 1: download tables (no API key), keep Texas block groups + tracts → `data/interim/acs_<vintage>_{bg,tract}.parquet` |
+| `acs/features.py` | ACS step 2: shares, medians, tract fill, MOE / low-confidence flags → `data/processed/bg_acs_<vintage>.parquet` |
+| `acs/ANALYSIS.md` | ACS data analysis: validation, missingness, MOE, vintage differences, first look at the label |
+| `acs/FEATURES.md` | Generated data dictionary for `bg_acs_<vintage>.parquet` |
+| `train/build_table.py` | Joins label + ACS + parcels → `data/processed/train_bg.parquet` (one row per training block group) |
+| `train/model.py` | Propensity v1: LightGBM Poisson, per-city offset, spatial / temporal / leave-one-city-out evaluation |
+| `train/homes.py` | Home-level test: per-home appraised value vs block-group home value vs LightGBM on parcel features |
+| `score/homes.py` | Home propensity score for every owner-occupied single-family parcel (22 counties) + H3 res-8 cell layer |
+| `score/export_propensity.py` | Harris + Travis H3 cells → `output/propensity.parquet` (committed) for the Need Engine import (`wiki/ml-contract.md`), where it feeds the Opportunity Score |
+| `train/baselines.py` | Income / home value / past-installs baselines, scored within city on 2024-2025 installs |
+| `docs/typesafe/` | Jev docs snapshot (SDK, primitives, confidence, jev-1.13 limits) |
+| `data/` | Git-ignored. `raw/` downloads, `interim/` normalized tables, `gold/` labels, `processed/` outputs |
+
+## Run
+
+```bash
+uv run python -m permits.fetch                   # 1. permits -> data/interim/permits_all.parquet
+uv run python -m permits.gold sample              # 2. draw the gold sample
+uv run python -m permits.llm_label --effort high  # 3. LLM pre-labels (OPENAI_* in .env)
+uv run python -m permits.jev --input data/gold/gold.csv --output data/gold/gold_jev.parquet
+uv run python -m permits.gold serve               # 4. review disagreements at http://localhost:8765/?review=1
+uv run python -m permits.evaluate --split tune    # 5. tune on "tune", quote "test"
+uv run python -m permits.jev --input data/interim/permits_all.parquet --output data/interim/permits_jev.parquet
+uv run python -m permits.build_label              # 6. label v1 -> data/processed/
+uv run python -m parcels.fetch                    # 7. Travis + Bexar parcels (~20 min, resumable)
+                                                  #    DFW: StratMap zips by hand, see Parcel checks
+uv run python -m parcels.normalize
+uv run python -m parcels.aggregate                # 8. -> data/processed/bg_parcels.parquet
+```
+
+ACS block-group features (join to `bg_permits.parquet` on `GEOID`):
+
+```bash
+uv run python -m acs.fetch --vintage 2024      # ~30 s, cached in data/raw/acs/2024/
+uv run python -m acs.features --vintage 2024   # -> data/processed/bg_acs_2024.parquet + checks
+```
+
+Training table and baselines (after the three pipelines above):
+
+```bash
+uv run python -m train.build_table   # -> data/processed/train_bg.parquet + checks
+uv run python -m train.baselines
+uv run python -m train.model         # ~35 s -> data/processed/model_v1*.txt, train_bg_oof.parquet
+uv run python -m train.homes         # ~40 s -> data/processed/train_home.parquet
+uv run python -m score.homes         # ~20 s -> data/processed/home_scores.parquet, h3_scores.parquet
+uv run python -m score.export_propensity   # -> output/propensity.parquet (committed; then app.need import-propensity)
+```
+
+LightGBM on macOS needs OpenMP: `brew install libomp`.
+
+ACS comes from the Census table-based summary files, not api.census.gov (which now requires a key).
+`--vintage 2024` = ACS 2020-2024 on 2020 block groups. `--vintage 2021` (2017-2021, same block groups)
+is for temporal validation; `features.py` stops if a table's line labels changed between vintages. See `acs/FEATURES.md` for every column.
+
+Jev answers are cached in `data/interim/jev_cache.jsonl`, keyed by question version, model,
+and permit text. Bump `QUESTIONS_VERSION` in `permits/questions.py` when wording changes.
+
+Jev answers bounded yes/no and pick-one questions about permit text. Numbers (kW, amps,
+kWh), dates, dedup, and label rules stay in code. No per-permit LLM calls.
+
+## Label accuracy (gold test half, n=154)
+
+Gold = gpt-6-astra labels, 6 luna/astra disagreements adjudicated (`data/gold/labels.csv`).
+gpt-6-luna and gpt-6-astra agree on 98% of backup-install labels.
+
+| backup_install | accuracy | precision | recall |
+| --- | --- | --- | --- |
+| keywords (v0) | 92.2% | 85.4% | 85.4% |
+| Jev (v1) | 92.9% | 89.5% | 82.9% |
+
+Label rule (`permits/label.py`): standby generator or battery, action is a new install / add to
+existing / can't tell, property is single-family or can't tell, and not a plumbing/gas permit.
+
+## Parcel checks (6 counties, 3.3M parcels, 5,890 block groups, vs ACS 2020-2024)
+
+| county | source | eligible homes vs ACS: corr / median ratio | year built vs ACS: corr |
+| --- | --- | --- | --- |
+| Bexar | county GIS service | 0.93 / 0.95 | 0.87 |
+| Travis | county GIS service | 0.80 / 0.83 | 0.70 |
+| Collin | TxGIO StratMap 2025 | 0.92 / 1.00 | 0.88 |
+| Dallas | TxGIO StratMap 2025 | 0.89 / 0.96 | no year built in file |
+| Denton | TxGIO StratMap 2025 | 0.84 / 0.95 | 0.84 |
+| Tarrant | TxGIO StratMap 2025 | 0.90 / 1.04 | 0.84 |
+
+Eligible homes = single-family detached + owner-occupied. Owner-occupied = Bexar HS exemption code;
+elsewhere mailing address = property address. Backup-install permits land on single-family parcels
+90% (Austin) / 93% (San Antonio) of the time, and those homes are 90-93% owner-occupied vs 68-77%
+for all single-family homes. Living sq ft only in Bexar; deed year only in Travis.
+`installable_share` has no footprint/open-space rule yet, so outside Austin it is close to the
+single-family share.
+
+StratMap zips (`data/raw/parcels/stratmap25-landparcels_{fips}_lp.zip`) must be downloaded in a
+browser from the TxGIO DataHub: its CDN answers 403 to scripted requests.
+
+## Training table (`train_bg.parquet`)
+
+- **Rows:** 1,313 block groups ≥ 90% inside Austin (462) or San Antonio (851), with eligible homes > 0
+  (133 dropped). Permits only cover city limits, so block groups straddling the boundary would undercount.
+- **Label:** `y` = backup installs 2021-2025 (3,029). Per-year `y_2021`…`y_2025`, `y_2021_2023` / `y_2024_2025`
+  for the temporal split, `y_no_uri` without 2021. 2026 is partial; San Antonio data starts Dec 2020.
+- **Exposure:** ACS `eligible_homes`. Parcel `parcel_n_eligible_homes` agrees (corr 0.90, median ratio 0.92).
+- **Features:** 24 ACS columns (`train.build_table.acs_features`): meta, censoring / tract-fill flags and the three
+  unstable ACS features are left out. `parcel_*` columns are carried for the installable multiplier and sensitivity
+  checks only: sq ft (Bexar) and deed year (Travis) exist in one county each, so with two training cities they
+  would stand in for the city. `aux_*` are other permit counts (solar, panel, Base Power…), never features.
+- **City gap:** 17.7 installs per 1,000 eligible homes in Austin vs 2.5 in San Antonio. Part is likely permit
+  practice, not demand, so the model needs a city offset and propensity is ranked within metro.
+
+Baselines, within city, 2024-2025 installs (capture@k = share of installs in the top k% of block groups by
+score; Spearman on install rate, block groups with ≥ 50 eligible homes):
+
+| | Austin capture@20 | Austin Spearman | San Antonio capture@20 | San Antonio Spearman |
+| --- | --- | --- | --- | --- |
+| income only | 46% | 0.37 | 58% | 0.33 |
+| home value only | 45% | 0.53 | 67% | 0.37 |
+| past installs 2021-23 (rate) | 44% | 0.56 | 59% | 0.34 |
+| random | 18% | 0.04 | 22% | 0.02 |
+
+## Propensity model v1 (`train/model.py`)
+
+LightGBM Poisson on the 24 ACS features, and a Poisson GLM on 7 (log home value, log income, log density,
+single-family share, 65+ share, owner household size, WFH share) as the "are trees worth it" check. Offset =
+log(exposure) + log(city install rate): both rank block groups *within* a city. Exposure = parcel eligible homes
+(ACS × 0.92 where no parcels). Spatial CV folds are 5 km grid cells.
+
+Metrics (`train/baselines.py`): **capture AUC** is the count version of ROC AUC (x = share of eligible homes,
+best score first; y = share of installs; 0.5 random, 1 perfect). **homes@20** = share of installs in the top 20%
+of eligible homes. A plain ROC AUC on "block group had ≥ 1 install" is misleading here: it rewards big block groups.
+
+Spatial CV × time (train 2021-2023 on 4/5 of the blocks, rank the held-out fifth, 2024-2025 installs):
+
+| | Austin capture AUC / homes@20 | San Antonio capture AUC / homes@20 |
+| --- | --- | --- |
+| LightGBM | 0.68 / 45% | 0.77 / 60% |
+| GLM (7 features) | 0.68 / 44% | 0.77 / 58% |
+| home value only | 0.69 / 44% | 0.77 / 59% |
+| past installs 2021-23 | 0.69 / 46% | 0.71 / 55% |
+| income only | 0.62 / 33% | 0.70 / 47% |
+| random | 0.50 / 20% | 0.50 / 20% |
+
+Leave one city out (2021-2025), capture AUC: LightGBM 0.62 (Austin) / 0.71 (San Antonio), **GLM 0.69 / 0.76**,
+home value 0.68 / 0.75.
+
+- **The signal is real and useful**: the top 20% of homes by score hold 44-60% of installs, 2.2-3× random.
+  Ranking areas from Census data alone does as well as knowing where installs already happened.
+- **No model beats home value on its own yet.** Both models tie it inside a city.
+- **LightGBM does not transfer between cities; the GLM does.** For scoring metros with no permits (DFW) the GLM
+  is the safer choice today. Coefficients (per sd, log-rate): home value +0.61, 65+ +0.26, income +0.21,
+  density −0.14, single-family share −0.30.
+- **Parcel exposure fixed most of the spurious owner-occupied-SFD effect** (ACS undercounts eligible homes in mixed
+  block groups). A negative single-family *share* remains; unexplained, possibly installs on homes the label
+  counts as "can't tell" property type.
+- **Fort Worth (validation city, never trained on).** Fetched from the city's ArcGIS points layer
+  (`permits.fetch --cities fort_worth`). Only building permits carry descriptions, so generators are invisible:
+  9 in 2021-2025 vs 686 batteries in the table rows. 97% of its battery permits are bundled with solar. Nothing
+  ranks them, not the models and not home value (capture AUC 0.50-0.54). Their drivers are a solar-buyer profile
+  (newer, mortgaged, middle-income homes: year built ρ 0.27, mortgage 0.25, home value 0.14), whereas generators
+  follow wealth (Austin home value ρ 0.55). **Solar + storage is a different buyer from backup power**, so Fort
+  Worth cannot validate the backup model; it would need its trade permits.
+- **Base Power 2026 check is weak evidence.** 229 Base Power permits (Austin, 2026) land where the model and home
+  value point (capture AUC 0.69 / 0.68). Where installs happen also reflects where the installer chose to sell,
+  so this cannot separate buyer demand from sales targeting.
+- **Nothing beyond home value yet.** Model vs home-value rank correlation 0.75, two-thirds of the top-20% block
+  groups shared. Within home-value quintiles the model still ranks above random (capture AUC 0.57 Austin, 0.62
+  San Antonio), but a 50/50 rank blend with home value gains only +0.005-0.012 AUC. Block-group ACS features
+  cannot beat a home-value rule; the next test is home-level (parcel) features against per-home value.
+- **Label fix:** permits at the same address and date were deduplicated in unstable sort order, so adding rows
+  could swap a built permit for a withdrawn one. Ties now keep the built permit (Austin 2021-2025: +25 installs).
+
+## Home-level test (`train/homes.py`)
+
+Owner-occupied single-family parcels (homestead flag) in the training block groups: 105k homes in Austin (Travis),
+231k in San Antonio (Bexar). Install permits are placed on parcels by their coordinates: 85% (Austin) / 88%
+(San Antonio) land on one of these homes, the rest on single-family homes without homestead (7-9%) or other home
+types. Same spatial folds as the block-group model: train on 2021-2023 installs in 4/5 of the blocks, rank the
+held-out homes without a 2021-2023 install, check who installed in 2024-2025 (601 Austin, 156 San Antonio homes).
+
+| | Austin ROC AUC / top 10% / top 20% | San Antonio ROC AUC / top 10% / top 20% |
+| --- | --- | --- |
+| area home value (ACS block-group median) | 0.70 / 25% / 43% | 0.78 / 36% / 59% |
+| **home's own appraised value** | **0.76 / 37% / 58%** | **0.82 / 49% / 69%** |
+| LightGBM, home features | 0.75 / 35% / 54% | 0.82 / 50% / 69% |
+| LightGBM, home + area features | 0.75 / 36% / 54% | 0.82 / 49% / 67% |
+
+- **Ranking homes by their own appraised value beats ranking by area**: the top 20% of homes hold 58% of Austin's
+  2024-2025 installers instead of 43%, 69% instead of 59% in San Antonio.
+- **LightGBM again only ties the single column**, even with year built, lot, sq ft, stories, deed year and the
+  block-group ACS features.
+- **Value = the appraisal district's market value** (Travis `market_value`, Bexar `TotVal`), set for property tax
+  on every parcel. The area baseline is the ACS median owner-estimated home value (B25077) of the block group,
+  one number shared by all its homes. Scores are pure rankings, no fitted relation, so log vs dollars changes nothing.
+- **Monotone and accelerating, no ceiling.** Installs 2021-2025 per 1,000 homes by value decile: Austin 3.3 (under
+  $341k) → 7 → 11 → 16 → 22 → 33 → 67 (over $1.19M), top 1% (over $2.66M) 125. San Antonio 0.2 (under $142k) →
+  1.3 → 2.5 → 4.2 → 10.6 (over $475k), top 1% 27. Very large homes may fail Base's panel limits; that belongs in
+  installability, not propensity.
+- **Where the gain comes from** (top 20% share): Austin 43% (ACS area median) → 48% (median of appraisals in the
+  block group: better source) → 58% (the home's own appraisal: finer resolution). San Antonio 59% → 62% → 69%.
+  About two-thirds of the gain is resolution.
+- Caveat: appraisals are a 2025 snapshot, so a 2024-2025 install could nudge its own home's value (a generator is
+  a few % of a typical home's value). Small next to the gap above.
+- Per-home value needs parcel data for every county scored: see "Home scores" below (22 counties).
+
+### Permit history and ranking inside an area
+
+Home permits dated 2023 or earlier (solar, EV charger, panel upgrade; a permit that is itself a backup install
+is not counted) are joined to parcels the same way. Solar: 4.1% of Austin homes, 3.2% of San Antonio homes.
+
+- **Solar owners add backup ~3× more often at the same home value.** Austin 2024-2025 installs per 1,000 homes,
+  no solar → solar, by value quintile: 1.1 → 2.7, 1.9 → 7.3, 2.9 → 12.7, 5.3 → 17.4, 15.7 → 41.4. San Antonio
+  top quintile 2.2 → 6.1 (lower quintiles have too few installs to read).
+- EV-charger and panel-upgrade permits are too rare in the keyword-filtered permits to conclude anything.
+- **Fort Worth per home (Tarrant appraisal district data)**: its battery installs (mostly sold with solar) are not
+  ranked by anything at home level either: appraised value ROC AUC 0.50, LightGBM 0.54. Pools show no consistent
+  effect there (more installs with a pool in the low-value quintiles, fewer in the top one). Pools remain untested
+  against real backup buyers: Travis / Bexar layers have no pool field (Harris has one in HCAD extra features).
+- **Rule: log(value) + log(2) if solar** (value doubled for solar homes): Austin ROC AUC 0.766 / top 20% 59% vs
+  0.755 / 58% for value alone, above every LightGBM variant (best 0.762). San Antonio unchanged (11 of 156 test
+  installers had solar). Solar homes are few, so the overall gain is small, but it's the best-supported segment.
+- **Ranking inside an area works.** ROC AUC among homes of the same block group (install-weighted mean):
+  home value 0.66 Austin / 0.63 San Antonio, value + solar 0.68 / 0.63; inside H3 resolution-8 cells the same
+  (0.65-0.68 / 0.64). An area-level score is 0.50 there by construction.
+
+## Home scores (`score/homes.py`)
+
+**Counties (22, TxGIO StratMap 2025 unless noted):** Austin: Travis (county service), Williamson, Hays, Bastrop.
+San Antonio: Bexar (county service), Comal, Guadalupe, Kendall. DFW: Dallas, Tarrant, Collin, Denton, Rockwall,
+Kaufman, Ellis, Johnson, Parker. Houston: Harris, Fort Bend, Montgomery, Brazoria, Galveston.
+
+**Single-family without a land-use code.** Comal, Ellis, Fort Bend, Galveston, Hays, Montgomery, Parker and
+Rockwall publish no code (others only partly). There a parcel is single-family when improvement value ≥ $30k,
+market value ≥ $50k, lot 3,000 sq ft-2 acres and no condo/unit wording in the legal description
+(`parcels.normalize.VALUE_RULE`); against real codes on 60k parcels: Collin precision / recall 96% / 96%,
+Denton 90% / 93%. Williamson has no improvement values but codes `RES`. Each parcel records `type_source`.
+Eligible homes (single-family + owner-occupied) vs ACS per county: ratio 0.78 (Parker) to 1.13 (Brazoria),
+0.95-1.05 for Dallas, Bexar, Harris, Collin, Denton, Williamson, Montgomery, Fort Bend.
+
+**Tarrant comes from Tarrant Appraisal District**, not StratMap (whose Tarrant file has land, improvement and
+market value all 0; the earlier "market value in all six" was wrong for Tarrant). `ParcelView.zip` from
+tad.org/resources/data-downloads (scriptable, 163 MB, updated 2026-07-30) holds polygons with the 2026 appraisal,
+living area, year built, deed date and a **pool flag** (15.8% of eligible homes), in `data/raw/parcels/tarrant_tad/`.
+No exemption codes are public, so owner-occupied is the mailing-address proxy. The `pool` column is NaN in other
+counties. Homes still without an appraisal fall back to the block group's ACS median (`value_source`).
+
+**Score** = log(value) + log(2) if solar-only permit, `pct_metro` = percentile within the metro. Homes with a
+backup permit already (generator / battery / Base Power, any year; Austin, San Antonio, Fort Worth) have
+`has_backup` and are not ranked. Output: 3.89M homes in `home_scores.parquet` (county, prop_id, lat/lon, h3_8,
+GEOID, value, value_source, has_solar, has_backup, score, pct_metro, top20_metro), 37k H3 res-8 cells in
+`h3_scores.parquet` (homes, median value, appraised share, solar / backup homes, mean percentile, top-20% share;
+median 24 homes per cell).

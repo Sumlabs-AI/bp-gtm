@@ -10,7 +10,11 @@ from app.grid.zones import zone_for_points
 from app.models import Cell
 from app.need.config import need
 from app.need.enrich import enrich_load_zones
+from app.need.opportunity import LIMITATIONS as OPPORTUNITY_LIMITATIONS
+from app.need.opportunity import METHOD as OPPORTUNITY_METHOD
 from app.need.store import seed_polygon
+from app.need.timing import LIMITATIONS as TIMING_LIMITATIONS
+from app.need.timing import METHOD as TIMING_METHOD
 
 LAT, LNG = 29.7604, -95.3698  # Houston City Hall
 
@@ -137,6 +141,25 @@ def test_cell_detail(client):
         "needScore": None,
         "baseline": None,  # not computed for this bare Cell
         "propensity": None,
+        "opportunity": {
+            "score": None,
+            "baseScore": None,
+            "propensity": None,
+            "baselineNeed": None,
+            "timing": 1.0,
+            "method": OPPORTUNITY_METHOD,
+            "limitations": OPPORTUNITY_LIMITATIONS,
+        },
+        "timing": {
+            "multiplier": 1.0,
+            "phase": "none",
+            "event": None,
+            "endsAt": None,
+            "daysSince": None,
+            "major": False,
+            "method": TIMING_METHOD,
+            "limitations": TIMING_LIMITATIONS,
+        },
         "components": {},
         "live": {
             "weather": {
