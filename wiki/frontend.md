@@ -16,7 +16,7 @@ apps/web/src/
 │       ├── gtm/           GTM page (home: "/" redirects here): leads ranked by Cell, the map as the filter
 │       ├── grid/          Grid Zones: page.tsx (map + ranking), [zone]/page.tsx (detail)
 │       └── data/          Data sources (Operations)
-│       (each has loading.tsx / error.tsx; leads/[id] also not-found.tsx)
+│       (grid and data have loading.tsx / error.tsx)
 │   └── maplibre/[file]/   Serves MapLibre's web worker from node_modules (see below)
 ├── components/
 │   ├── grid/              zone-map (MapLibre), zone-charts (recharts), driver-bars
@@ -55,7 +55,7 @@ Dollar-led comparison (design review with Codex, 2026-09-26). `/grid` ("Compare 
 
 ## Data sources (`/data`)
 
-`/leads` redirects to `/gtm` and `/leads/<id>` to `/gtm?lead=<id>` (the lead drawer replaced the full lead page). `/data` shows the last refresh of each source from `GET /sources`. Gotcha: `<Layer>`s must be direct children of `<Source>` (or set `source=` explicitly): a Fragment breaks react-map-gl's source injection. Code: `src/app/(dashboard)/{leads,data}`, `src/components/leads/`, `src/lib/leads.ts`. Backend and scoring: [residential-leads.md](residential-leads.md).
+`/leads` redirects to `/gtm` and `/leads/<id>` to `/gtm?lead=<id>` (the lead drawer replaced the full lead page). `/data` shows the last refresh of each source from `GET /sources`. Gotcha: `<Layer>`s must be direct children of `<Source>` (or set `source=` explicitly): a Fragment breaks react-map-gl's source injection. Code: `src/app/(dashboard)/data`, `src/components/leads/`, `src/lib/leads.ts`. Backend and scoring: [residential-leads.md](residential-leads.md).
 
 ## GTM page (`/gtm`, the home page)
 
