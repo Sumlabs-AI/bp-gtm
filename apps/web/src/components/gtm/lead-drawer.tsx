@@ -12,6 +12,7 @@ import { Score } from "@/components/need/score-parts"
 import { WeatherBreakdown } from "@/components/need/weather-breakdown"
 import { ConsumptionCard } from "@/components/leads/consumption-card"
 import { AddressCard, HomeProfile, ValueSection } from "@/components/leads/lead-sections"
+import { EligibilitySection } from "@/components/gtm/eligibility-section"
 import { PanelCard, Tag } from "@/components/gtm/panel-card"
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet"
 import { apiFetch } from "@/lib/api"
@@ -68,6 +69,9 @@ export function LeadDrawer({ id, onClose }: { id: number | null; onClose: () => 
             <div className="px-4 pb-2">
               <AddressCard lead={shown} />
             </div>
+
+            <SectionTitle title="Eligibility" hint="Proof of concept · the same sample plan set for every home" />
+            <EligibilitySection leadId={shown.id} />
 
             <SectionTitle title="Home" hint="This property: value, use and records" />
             <PanelCard
