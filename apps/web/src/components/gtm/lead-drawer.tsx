@@ -7,7 +7,9 @@ import { BaselineNeedBlock } from "@/components/need/baseline-need"
 import { ForecastSignals } from "@/components/need/forecast-signals"
 import { LiveGridSection } from "@/components/need/live-grid"
 import { NwsAlerts } from "@/components/need/nws-alerts"
+import { OutageBreakdown } from "@/components/need/outage-breakdown"
 import { PropensityBlock } from "@/components/need/propensity"
+import { WeatherBreakdown } from "@/components/need/weather-breakdown"
 import { ConsumptionCard } from "@/components/leads/consumption-card"
 import { StatusControl } from "@/components/leads/status-control"
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet"
@@ -61,7 +63,7 @@ export function LeadDrawer({ id, onClose }: { id: number | null; onClose: () => 
         </SheetHeader>
         {failed && <p className="px-4 text-xs text-destructive">{failed}</p>}
         {shown && (
-          <div className="flex flex-col gap-6 overflow-y-auto pb-6">
+          <div className="flex min-h-0 flex-1 flex-col gap-6 overflow-y-auto pb-6">
             <section className="flex flex-col gap-2 px-4 text-sm">
               <h3 className="font-medium">This home</h3>
               <dl className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
@@ -98,6 +100,8 @@ export function LeadDrawer({ id, onClose }: { id: number | null; onClose: () => 
                 <NwsAlerts feed={shownCell.live.weather.alerts} />
                 <ForecastSignals feed={shownCell.live.weather.forecast} />
                 <LiveGridSection grid={shownCell.live.grid} />
+                {shownCell.components.outage && <OutageBreakdown outage={shownCell.components.outage} />}
+                {shownCell.components.weather && <WeatherBreakdown weather={shownCell.components.weather} />}
               </>
             ) : (
               <p className="px-4 text-xs text-muted-foreground">

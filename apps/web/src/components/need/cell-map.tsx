@@ -393,7 +393,7 @@ export function CellMap({
             </dl>
           )}
           {shownDetail && (
-            <div className="flex flex-col gap-6 overflow-y-auto pb-4">
+            <div className="flex min-h-0 flex-1 flex-col gap-6 overflow-y-auto pb-4">
               {shownDetail.baseline && <BaselineNeedBlock baseline={shownDetail.baseline} />}
               <PropensityBlock propensity={shownDetail.propensity} />
               <NwsAlerts feed={shownDetail.live.weather.alerts} />
