@@ -21,8 +21,9 @@ export function SiteHeader({
   return (
     <header className="flex min-h-(--header-height) shrink-0 items-center border-b">
       <div className="flex min-w-0 w-full items-center gap-1 px-4 py-2 lg:gap-2 lg:px-6">
-        <SidebarTrigger className="-ml-1 shrink-0" />
-        <Separator orientation="vertical" className="mx-2 h-4 data-vertical:self-auto" />
+        {/* Desktop keeps the sidebar open; on phones it is off-canvas, so the toggle stays there. */}
+        <SidebarTrigger className="-ml-1 shrink-0 md:hidden" />
+        <Separator orientation="vertical" className="mx-2 h-4 data-vertical:self-auto md:hidden" />
         {parent ? (
           <Breadcrumb className="min-w-0">
             <BreadcrumbList className="flex-nowrap">
