@@ -299,7 +299,6 @@ export function CellMap({
                     mapRef.current?.flyTo({ center: m.center, zoom: 10 })
                   }}
                 >
-                  <LocateFixedIcon />
                   {m.label}
                 </DropdownMenuItem>
               ))}
