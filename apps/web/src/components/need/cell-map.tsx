@@ -1,11 +1,13 @@
 "use client"
 
 import * as React from "react"
+import { ChevronDownIcon, LocateFixedIcon } from "lucide-react"
 import { setWorkerUrl, type ExpressionSpecification } from "maplibre-gl"
 import Map, { Layer, NavigationControl, Source, type MapLayerMouseEvent, type MapRef } from "react-map-gl/maplibre"
 import "maplibre-gl/dist/maplibre-gl.css"
 
 import { Button } from "@/components/ui/button"
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet"
 import { OutageBreakdown } from "@/components/need/outage-breakdown"
 import { BaselineNeedBlock } from "@/components/need/baseline-need"
@@ -281,23 +283,28 @@ export function CellMap({
         </Map>
 
         <div className="absolute top-3 left-3 flex items-center gap-2 rounded-md border bg-background/90 px-2 py-1.5 text-xs shadow-sm">
-          <label className="flex items-center gap-1">
-            <span className="sr-only">Market</span>
-            <select
-              className="rounded-md border bg-background px-2 py-1 font-medium"
-              value={market}
-              onChange={(e) => {
-                const m = MARKETS.find((x) => x.name === e.target.value)
-                if (!m) return
-                setMarket(m.name)
-                mapRef.current?.flyTo({ center: m.center, zoom: 10 })
-              }}
-            >
+          {/* A menu, not a <select>: picking the current market again still flies back to it. */}
+          <DropdownMenu>
+            <DropdownMenuTrigger render={<Button size="sm" variant="ghost" className="font-medium" title="Go to a market" />}>
+              <LocateFixedIcon />
+              {MARKETS.find((m) => m.name === market)?.label}
+              <ChevronDownIcon className="opacity-60" />
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="start">
               {MARKETS.map((m) => (
-                <option key={m.name} value={m.name}>{m.label}</option>
+                <DropdownMenuItem
+                  key={m.name}
+                  onClick={() => {
+                    setMarket(m.name)
+                    mapRef.current?.flyTo({ center: m.center, zoom: 10 })
+                  }}
+                >
+                  <LocateFixedIcon />
+                  {m.label}
+                </DropdownMenuItem>
               ))}
-            </select>
-          </label>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
 
         <div className="absolute top-3 right-12 flex items-center gap-1 rounded-md border bg-background/90 px-2 py-1.5 text-xs shadow-sm">
