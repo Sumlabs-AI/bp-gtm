@@ -38,13 +38,13 @@ size, area-level backup need and the factors driving its ranking.
 
 ## Team
 
-| Name | Role | GitHub |
-| --- | --- | --- |
-| Marc-Antoine Cayer | Full-stack engineering (backend & frontend): Need Engine, live grid and weather signals, GTM map, ML contract | [@macayer](https://github.com/macayer) |
-| Romain Chaudron | Backend & machine learning: permit labels, propensity model, Opportunity Score, data snapshot | [@chaudronmagic](https://github.com/chaudronmagic) |
-| Matthieu Berger | Frontend & product engineering: sales-first UI, leads experience, battery value and electricity use per lead | [@mamalovesyou](https://github.com/mamalovesyou) |
-| Henry Heckmann | Project lead: organization, coordination and submission | — |
-| Igor Eduardo | Data lead: GTM datasets (Census, parcels, permits, health) and market research | [@nomad-link-id](https://github.com/nomad-link-id) |
+| Name | Role | Contact | GitHub |
+| --- | --- | --- | --- |
+| Henry Heckmann | Team Lead | henry@corgi.insure · [LinkedIn](https://www.linkedin.com/in/henry-heckmann) | — |
+| Igor Eduardo | Data Scientist & AI Research | igor.openvc@gmail.com · [LinkedIn](https://www.linkedin.com/in/igor-eduardo-00z) | [@nomad-link-id](https://github.com/nomad-link-id) |
+| Marc-Antoine Cayer | Full-Stack Engineer | [LinkedIn](https://www.linkedin.com/in/macayer) | [@macayer](https://github.com/macayer) |
+| Romain Chaudron | Backend & ML Engineer | romain.chau@gmail.com · [LinkedIn](https://www.linkedin.com/in/romain-chaudron) | [@chaudronmagic](https://github.com/chaudronmagic) |
+| Matthieu Berger | Frontend Engineer | matt@sumlabs.ai · [LinkedIn](https://www.linkedin.com/in/matthieu-berger) | [@mamalovesyou](https://github.com/mamalovesyou) |
 
 ## Quick start
 
