@@ -214,7 +214,7 @@ export function CellMap({
                     "fill-color": [
                       "case",
                       ["==", ["get", colorBy], null],
-                      "#6366f1",
+                      "#1e4d2b",
                       ["interpolate", ["linear"], ["get", colorBy], 0, scoreColor(0), 50, scoreColor(50), 100, scoreColor(100)],
                     ],
                     // Filtered out (band not active): dimmed so the filter is visible.
@@ -231,7 +231,7 @@ export function CellMap({
                   id="cells-line"
                   minzoom={H3_MAP_MIN_ZOOM}
                   type="line"
-                  paint={{ "line-color": "#6366f1", "line-width": 0.5, "line-opacity": 0.5 }}
+                  paint={{ "line-color": "#1e4d2b", "line-width": 0.5, "line-opacity": 0.35 }}
                 />,
                 <Layer
                   key="cells-forecast"
@@ -258,7 +258,7 @@ export function CellMap({
                   minzoom={H3_MAP_MIN_ZOOM}
                   type="line"
                   filter={["in", ["get", "h3"], ["literal", highlighted]]}
-                  paint={{ "line-color": "#312e81", "line-width": 2.5 }}
+                  paint={{ "line-color": "#102a17", "line-width": 2.5 }}
                 />,
               ]}
             </Source>

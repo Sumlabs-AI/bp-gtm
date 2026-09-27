@@ -76,4 +76,5 @@ Use `apiFetch<T>(path, init?)` from `@/lib/api`. It picks `API_URL` on the serve
 
 - Add components with `pnpm dlx shadcn@latest add <name> -c apps/web` (run from repo root). Style: `base-nova`, icons: `lucide-react`.
 - Use theme tokens (`bg-background`, `text-muted-foreground`, `text-destructive`, …) instead of raw colors so dark mode works.
+- Base brand (light theme, `app/globals.css`): tokens from basepowercompany.com's CSS — dark green `--base-green-90` #1e4d2b is `primary` (links, active filter pills, sidebar), lime `--base-green-20` #b2dd79 is `secondary` and the default Button (their "Get started" CTA: lime with dark green semibold text), outline Buttons are dark green outlines (their "Sign in"), warm greys for text/borders/muted, 8 px radius. The sidebar shows the Base wordmark (`components/base-logo.tsx`) with "Radar" under it. Their typeface (PP Neue Montreal) is commercial, so the app keeps Geist.
 - Merge classes with `cn()` from `@/lib/utils`.
