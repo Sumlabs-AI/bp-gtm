@@ -203,58 +203,6 @@ export function HomeProfile({ lead }: { lead: LeadDetail }) {
   )
 }
 
-function signalTalkingPoint(evidence: LeadDetail["evidence"], signal: string, prompt: string, confirmation: string): string {
-  const records = evidence.filter((item) => item.type === signal)
-  const permit = records.filter((item) => item.source.includes("permit"))
-    .sort((a, b) => (b.date ?? "").localeCompare(a.date ?? ""))[0]
-  const sources: string[] = []
-  if (permit) {
-    const date = permit.date ? new Date(`${permit.date}T00:00:00Z`).toLocaleDateString("en-US", {
-      month: "short", year: "numeric", timeZone: "UTC",
-    }) : "date unavailable"
-    sources.push(`permit ${date}`)
-  }
-  if (records.some((item) => item.source === "appraisal")) sources.push("appraisal")
-  const appraisalOnly = records.length > 0 && records.every((item) => item.source === "appraisal" && item.date === null)
-  return `${signalLabel(signal)} ${records.length ? "on record" : "signal"}${sources.length ? ` (${sources.join(" + ")})` : ""} — ${appraisalOnly ? confirmation : prompt}`
-}
-
-/** Prompts to confirm the available records with the homeowner. */
-export function talkingPoints(lead: LeadDetail): string[] {
-  const has = (key: string) => lead.drivers.some((d) => d.kind === "flag" && d.key === key && d.value === true)
-  const ownerEvidence = lead.evidence.find((item) => item.type === "new_owner" && item.date)
-  const points: string[] = []
-  if (has("solar")) points.push(signalTalkingPoint(lead.evidence, "solar",
-    "ask about backup power needs and battery pairing.",
-    "confirm whether a system is installed and ask about backup power needs and battery pairing."))
-  if (has("pool")) points.push("Pool or spa recorded — ask about equipment, usage, and backup priorities.")
-  if (has("ev_charger")) points.push(signalTalkingPoint(lead.evidence, "ev_charger",
-    "ask about charging times and backup priorities.",
-    "confirm whether a charger is installed and ask about charging times."))
-  if (has("new_owner")) points.push(ownerEvidence?.date
-    ? `Owner-change signal dated ${formatEvidenceDate(ownerEvidence.date)} — ask about move-in timing.`
-    : "Owner-change signal — ask about move-in timing.")
-  if (has("new_home")) points.push(signalTalkingPoint(lead.evidence, "new_home",
-    "ask about backup power needs and installation planning.",
-    "confirm the home's construction and occupancy status before discussing installation."))
-  if (lead.signals.includes("new_meter")) points.push("New-meter signal — ask about the service change and current power needs.")
-  return points
-}
-
-export function TalkingPoints({ points }: { points: string[] }) {
-  return (
-    <div className="px-3 text-sm">
-      {points.length ? (
-        <ul className="flex list-disc flex-col gap-2 pl-5">
-          {points.map((p) => <li key={p}>{p}</li>)}
-        </ul>
-      ) : (
-        <p className="text-xs text-muted-foreground">Review the home profile and source evidence before outreach.</p>
-      )}
-    </div>
-  )
-}
-
 export function EvidenceList({ lead }: { lead: LeadDetail }) {
   return (
     <div className="px-3">

@@ -11,7 +11,7 @@ import { PropensityBlock } from "@/components/need/propensity"
 import { Score } from "@/components/need/score-parts"
 import { WeatherBreakdown } from "@/components/need/weather-breakdown"
 import { ConsumptionCard } from "@/components/leads/consumption-card"
-import { AddressCard, EvidenceList, HomeProfile, TalkingPoints, ValueSection, talkingPoints } from "@/components/leads/lead-sections"
+import { AddressCard, EvidenceList, HomeProfile, ValueSection } from "@/components/leads/lead-sections"
 import { PanelCard, Tag } from "@/components/gtm/panel-card"
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet"
 import { apiFetch } from "@/lib/api"
@@ -52,7 +52,6 @@ export function LeadDrawer({ id, onClose }: { id: number | null; onClose: () => 
   const shownCell = shown && cell?.h3 === shown.h3_index ? cell : null
   const shownZone = shown && zone?.code === shown.load_zone ? zone : null
   const failed = error?.id === id ? error.message : null
-  const points = shown ? talkingPoints(shown) : []
 
   return (
     <Sheet open={id !== null} onOpenChange={(open) => !open && onClose()}>
@@ -88,9 +87,6 @@ export function LeadDrawer({ id, onClose }: { id: number | null; onClose: () => 
               value={<span className="tabular-nums text-muted-foreground">{[shown.heated_sqft ? `${Math.round(shown.heated_sqft).toLocaleString("en-US")} sqft` : null, shown.year_built].filter(Boolean).join(" · ") || "—"}</span>}
             >
               <HomeProfile lead={shown} />
-            </PanelCard>
-            <PanelCard title="Talking points" value={<span className="text-muted-foreground">{points.length || "—"}</span>}>
-              <TalkingPoints points={points} />
             </PanelCard>
             <PanelCard title="Evidence & sources" value={<span className="text-muted-foreground">{shown.evidence.length || "—"}</span>}>
               <EvidenceList lead={shown} />
