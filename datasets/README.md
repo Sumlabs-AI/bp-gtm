@@ -82,16 +82,16 @@ parcels and gates as `travis_parcels_installability`), keyed by `prop_id`. `has_
 `has_battery`, `has_base_power`, `has_backup_install` (any of them) and `first_*_date` come from
 City of Austin issued permits matched to the parcel; `has_base_power_2026` = Base Power permit
 issued in 2026. `n_*_events` = distinct installation events (`n_backup_events_90d` with a 90-day
-window). `match_method_best` / `match_confidence_best` describe the permit-to-parcel match.
+window). `match_confidence_best` = best permit-to-parcel link confidence (high / medium / low).
 Variants: `*_hc` = high-confidence matches only; `*_broad` = broader backup definition (adds other
 backup equipment and replacements). `in_coa_entity02` = parcel taxed by the City of Austin (the
 permit source covers City of Austin jurisdiction only, so homes outside it show no permits).
-`acs_bg_median_home_value` = ACS median home value of the parcel's block group. Totals: 5,278
-homes with a backup install, 3,179 generator, 2,166 battery, 302 Base Power 2026.
+`acs_bg_median_home_value` = ACS median home value of the parcel's block group. Totals: 5,291
+homes with a backup install, 3,190 generator, 2,172 battery, 304 Base Power 2026.
 
-**Austin backup permits** (`austin_backup_permits`): one row per permit, with the City of Austin's original fields (number, type, work class, description, dates, status, address, coordinates, `tcad_id`, contractor, valuations). `backup_category` = GENERATOR, BATTERY, BASE_POWER or OTHER_BACKUP; `install_kind` = install, support or replacement; `in_main_definition` / `in_broad_definition` = counted in the household table's main / `_broad` flags; `prop_id` = matched TCAD parcel (empty when unmatched, e.g. outside Travis); `parcel_match_confidence` = high, medium or low.
+**Austin backup permits** (`austin_backup_permits`): one row per permit, with the City of Austin's original fields (number, type, work class, description, dates, status, address, coordinates, `tcad_id`, contractor, valuations). `backup_category` = GENERATOR, BATTERY, BASE_POWER or OTHER_BACKUP; `install_kind` = install, support or replacement; `in_main_definition` / `in_broad_definition` = counted in the household table's main / `_broad` flags; `prop_id` = matched TCAD parcel (empty when unmatched, e.g. outside Travis or no location); `parcel_match_confidence` = high, medium or low. Links were revised on 2026-09-27: the parcel id filed on some permits points to the lot next door, and 217 permits now point to the correct house (8,683 permits linked).
 
-**Austin install results** (`austin_*.csv`): universes of eligible homes — `A_travis_strict` (`installable` = 1), `B_travis_relaxed` (`installable_relaxed` = 1), `C_situsAustin_strict` / `D_situsAustin_relaxed` (same, situs city = Austin), `E_suppl_CoAentity_strict` / `F_suppl_CoAentity_relaxed` (same, parcel taxed by the City of Austin). Value = TCAD market value. Rates count homes, not permits. Permits cover City of Austin jurisdiction only.
+**Austin install results** (`austin_*.csv`): universes of eligible homes — `A_travis_strict` (`installable` = 1), `B_travis_relaxed` (`installable_relaxed` = 1), `C_situsAustin_strict` / `D_situsAustin_relaxed` (same, situs city = Austin), `E_suppl_CoAentity_strict` / `F_suppl_CoAentity_relaxed` (same, parcel taxed by the City of Austin). Value = TCAD market value. Rates count homes, not permits. These tables were computed with the parcel links before the 2026-09-27 revision (13 more homes with backup after it, under 0.3%). Permits cover City of Austin jurisdiction only.
 
 **Tract medical need** (`travis_tract_medical_need`): `tract` = 11-digit tract GEOID. Prevalences (`copd`, `chd`, `stroke`, `selfcare`, `indeplive`, `disability`, `phlth`) are shares of adults (0–1) from CDC PLACES; `copd_adults_est` / `selfcare_adults_est` = estimated adults; `empower_dme_per_1k_medicare` = electricity-dependent Medicare beneficiaries per 1,000 (from the emPOWER files above); `installable_homes`, `median_value`, `backup_homes` from the Travis parcel files; `need_index` (standardized) and `need_pctile` rank tracts by medical need; `homes_x_need`, `expected_backup_buyers` and `priority` rank tracts for outreach. Area-level only: the medical data weights a tract and identifies no one.
 
