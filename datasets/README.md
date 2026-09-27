@@ -63,7 +63,7 @@ class, not the homestead exemption); `mail_matches_situs` = owner mailing addres
 address (1/0, empty when unknown). Gates: `g_sfr` (A1 or E1), `g_owner_proxy`
 (`mail_matches_situs` = 1), `g_has_structure` (building footprint or year built), `g_detached_lot`
 (lot ≥ 2,500 sq ft). `installable` = all four gates; `installable_relaxed` = all but the owner
-proxy (216,768 and 286,082 parcels). Footprint columns: `n_buildings`, `n_residential_bldg`,
+proxy (216,768 and 286,084 parcels). Footprint columns: `n_buildings`, `n_residential_bldg`,
 `fp_main_sqft`, `fp_total_sqft`, `fp_coverage`, `open_lot_sqft`. Areas in sq ft.
 
 **StratMap parcels** (`travis_parcels_clean_part*`): one row per `prop_id`; `n_accounts` = appraisal
